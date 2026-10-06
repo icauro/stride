@@ -1,0 +1,60 @@
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
+// Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
+
+shader MorphGpuCommon : ComputeShaderBase
+{
+    stage Buffer<uint> InputVertices;
+    stage StructuredBuffer<uint> PackedEntries;
+    stage StructuredBuffer<uint> VertexOffsets;
+    stage StructuredBuffer<float> Weights;
+    stage StructuredBuffer<float4> BoneRows;
+    stage RWBuffer<uint> OutputVertices;
+
+    cbuffer PerDispatch
+    {
+        stage uint VertexCount;
+        stage uint VertexStride;
+        stage uint PositionOffset;
+        stage int NormalOffset;
+        stage int TangentOffset;
+        stage int BlendIndicesOffset;
+        stage int BlendWeightsOffset;
+        stage uint BoneCount;
+        stage uint Index16;
+        stage uint TargetCount;
+        stage uint ActiveCount;
+    }
+
+    float HalfValue(uint value) { return f16tof32(value & 65535); }
+    uint Load(uint address) { return InputVertices[address / 4]; }
+    uint2 Load2(uint address) { return uint2(Load(address), Load(address + 4)); }
+    uint3 Load3(uint address) { return uint3(Load(address), Load(address + 4), Load(address + 8)); }
+    uint4 Load4(uint address) { return uint4(Load(address), Load(address + 4), Load(address + 8), Load(address + 12)); }
+    void Store3(uint address, uint3 value)
+    {
+        OutputVertices[address / 4] = value.x;
+        OutputVertices[address / 4 + 1] = value.y;
+        OutputVertices[address / 4 + 2] = value.z;
+    }
+
+    void Decode(uint entry, out uint vertex, out uint shape, out float3 p, out float3 n, out float3 t)
+    {
+        uint start = entry * 6;
+        uint a = PackedEntries[start + 1];
+        uint b = PackedEntries[start + 2];
+        uint c = PackedEntries[start + 3];
+        uint d = PackedEntries[start + 4];
+        uint e = PackedEntries[start + 5];
+        vertex = PackedEntries[start];
+        shape = a & 65535;
+        p = float3(HalfValue(a >> 16), HalfValue(b), HalfValue(b >> 16));
+        n = float3(HalfValue(c), HalfValue(c >> 16), HalfValue(d));
+        t = float3(HalfValue(d >> 16), HalfValue(e), HalfValue(e >> 16));
+    }
+
+    float3 SafeNormal(float3 value, float3 fallback)
+    {
+        float lengthSquared = dot(value, value);
+        return lengthSquared > 1e-20 ? value * rsqrt(lengthSquared) : fallback;
+    }
+};

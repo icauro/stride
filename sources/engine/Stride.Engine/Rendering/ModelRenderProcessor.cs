@@ -16,6 +16,7 @@ namespace Stride.Rendering
     public class ModelRenderProcessor : EntityProcessor<ModelComponent, RenderModel>, IEntityComponentRenderProcessor
     {
         private Material fallbackMaterial;
+        private ModelDeformationRenderer deformationRenderer;
 
         public Dictionary<ModelComponent, RenderModel> RenderModels => ComponentDatas;
 
@@ -55,6 +56,7 @@ namespace Stride.Rendering
         /// <inheritdoc />
         protected override void OnEntityComponentRemoved(Entity entity, ModelComponent component, RenderModel renderModel)
         {
+            deformationRenderer?.Remove(component);
             // Remove old meshes
             if (renderModel.Meshes != null)
             {
@@ -64,6 +66,13 @@ namespace Stride.Rendering
                     VisibilityGroup.RenderObjects.Remove(renderMesh);
                 }
             }
+        }
+
+        protected internal override void OnSystemRemove()
+        {
+            deformationRenderer?.Dispose();
+            deformationRenderer = null;
+            base.OnSystemRemove();
         }
 
         /// <inheritdoc />
@@ -80,6 +89,22 @@ namespace Stride.Rendering
                 CheckMeshes(modelComponent, renderModel);
                 UpdateRenderModel(modelComponent, renderModel);
             });
+
+            // GPU command recording is sequential, after model transforms/materials are prepared.
+            bool supported = context.GraphicsDevice.Features.HasComputeShaders && context.GraphicsDevice.Features.RequestedProfile >= GraphicsProfile.Level_11_0;
+            foreach (var item in ComponentDatas)
+            {
+                bool computeSkinning = item.Key.SkinningMode == SkinningMode.Compute && supported;
+                bool hasMorphs = item.Key.Morphs.Enabled && item.Key.Model?.Meshes.Exists(mesh => mesh.MorphTargets?.VertexCount > 0) == true;
+                bool hasSkinning = computeSkinning && item.Key.Model?.Meshes.Exists(mesh => mesh.Skinning != null) == true;
+                if (!item.Key.Enabled || item.Key.Model == null || (!hasMorphs && !hasSkinning))
+                {
+                    deformationRenderer?.Remove(item.Key);
+                    continue;
+                }
+                deformationRenderer ??= new ModelDeformationRenderer(new RenderDrawContext(Services, context, Services.GetSafeServiceAs<GraphicsContext>()));
+                deformationRenderer.Draw(item.Key, item.Value, computeSkinning);
+            }
         }
 
         private void UpdateRenderModel(ModelComponent modelComponent, RenderModel renderModel)
