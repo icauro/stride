@@ -171,6 +171,7 @@ public class VirtualNodePresenter : NodePresenterBase
         if (AssociatedNode.Node == null || AssociatedNode.Index == NodeIndex.Empty)
             return true;
 
-        return index != NodeIndex.Empty && ItemNodePresenter.IsValidChange(changeType, index, Index);
+        // Unlike item presenters, virtual rows are not rebuilt on add/remove.
+        return index != NodeIndex.Empty && Equals(index, Index);
     }
 }
