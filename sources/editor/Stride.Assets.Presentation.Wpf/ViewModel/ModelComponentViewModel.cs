@@ -63,7 +63,7 @@ namespace Stride.Assets.Presentation.ViewModel
                 materials.AddDependency(model, false);
                 var morphs = node[nameof(ModelComponent.Morphs)];
                 morphs.AddDependency(model, true);
-                morphs.IsVisible = GetReferencedModel() is ModelAsset asset && asset.MorphTargetNames.Count != 0;
+                morphs.IsVisible = GetReferencedModel() is ModelAsset asset && asset.ImportMorphTargets && asset.MorphTargetNames.Count != 0;
                 var weightsMember = entity.Editor.NodeContainer.GetNode(component.Morphs)[nameof(ModelMorphSettings.Weights)];
                 var source = ((IAssetNodePresenter)node).Factory.CreateVirtualNodePresenter(node, "MorphWeightsSource", typeof(object), null, () => component.Morphs.Weights);
                 source.IsVisible = false;

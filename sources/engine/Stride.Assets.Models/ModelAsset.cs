@@ -91,6 +91,12 @@ namespace Stride.Assets.Models
         [Category]
         public List<IModelModifier> Modifiers { get; } = new List<IModelModifier>();
 
+        /// <userdoc>
+        /// When unchecked, morph targets (blend shapes) in the source file are ignored and the model is imported without them.
+        /// </userdoc>
+        [DataMember(54), DefaultValue(true)]
+        public bool ImportMorphTargets { get; set; } = true;
+
         [DataMember(55), DefaultValue(MeshMorphLayout.SparseVertexMajor)]
         public MeshMorphLayout MorphLayout { get; set; } = MeshMorphLayout.SparseVertexMajor;
 

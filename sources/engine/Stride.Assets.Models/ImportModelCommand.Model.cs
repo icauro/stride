@@ -25,6 +25,7 @@ namespace Stride.Assets.Models
         public Vector3 PivotPosition { get; set; }
 
         public bool MergeMeshes { get; set; }
+        public bool ImportMorphTargets { get; set; } = true;
         public MeshMorphLayout MorphLayout { get; set; }
 
         public bool Allow32BitIndex { get; set; }
@@ -64,6 +65,8 @@ namespace Stride.Assets.Models
             var modelSkeleton = LoadSkeleton(commandContext, contentManager); // we get model skeleton to compare it to real skeleton we need to map to
             AdjustSkeleton(modelSkeleton);
             var model = LoadModel(commandContext, contentManager);
+            if (!ImportMorphTargets)
+                foreach (var mesh in model.Meshes) mesh.MorphTargets = null;
             if (!CheckInputSlots(commandContext, model))
             {
                 return null;
