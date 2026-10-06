@@ -1146,6 +1146,7 @@ namespace Stride.Importer.ThreeD
                 hasTangents |= tangents;
                 if (!normals || (mesh->MTangents != null && !tangents))
                     Logger.Warning($"Morph '{names[shape]}' has missing normal or tangent attributes; those deltas remain zero. Target attribute reconstruction is not implemented.");
+                int flippedTangents = 0;
                 for (uint vertex = 0; vertex < mesh->MNumVertices; vertex++)
                 {
                     var position = target->MVertices != null
@@ -1156,11 +1157,15 @@ namespace Stride.Importer.ThreeD
                     {
                         float baseSign = Vector3.Dot(Vector3.Cross(mesh->MNormals[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()), mesh->MBitangents[vertex].ToStrideVector3());
                         float targetSign = Vector3.Dot(Vector3.Cross(target->MNormals[vertex].ToStrideVector3(), target->MTangents[vertex].ToStrideVector3()), target->MBitangents[vertex].ToStrideVector3());
-                        if ((baseSign < 0) != (targetSign < 0)) throw new InvalidOperationException($"Morph '{names[shape]}' changes tangent handedness, which this format does not encode.");
+                        // Handedness is not encoded; keep the base tangent where the target frame is mirrored.
+                        // Importers often regenerate target tangents (e.g. FBX), which can flip at seams.
+                        if ((baseSign < 0) != (targetSign < 0)) { tangent = Vector3.Zero; flippedTangents++; }
                     }
                     var entry = MeshMorphEntry.Create(vertex, (ushort)shape, position, normal, tangent);
                     if (!entry.IsZero) entries.Add(entry);
                 }
+                if (flippedTangents > 0)
+                    Logger.Warning($"Morph '{names[shape]}' mirrors the tangent frame at {flippedTangents} vertices; their tangent deltas are ignored.");
             }
             return MeshMorphData.Create(checked((int)mesh->MNumVertices), names, entries, hasNormals, hasTangents);
         }
