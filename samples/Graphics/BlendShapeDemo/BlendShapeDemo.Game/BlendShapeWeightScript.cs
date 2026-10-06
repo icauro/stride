@@ -45,9 +45,8 @@ namespace BlendShapeDemo
             if (blendShapes == null)
             {
                 Log.Warning(
-                    "BlendShapeWeightScript on '{0}': no BlendShapeComponent found. " +
-                    "Make sure the model has morph targets.",
-                    Entity.Name);
+                    $"BlendShapeWeightScript on '{Entity.Name}': no BlendShapeComponent found. " +
+                    "Make sure the model has morph targets.");
             }
         }
 
