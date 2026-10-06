@@ -122,6 +122,23 @@ namespace Stride.Importer.ThreeD
                     AnimationNodes = ExtractAnimations(scene, animationNames)
                 };
 
+                entityInfo.MorphTargetNames = new List<string>();
+                var morphNames = new HashSet<string>(StringComparer.Ordinal);
+                for (uint meshIndex = 0; meshIndex < scene->MNumMeshes; meshIndex++)
+                {
+                    var mesh = scene->MMeshes[meshIndex];
+                    if (mesh->MNumAnimMeshes > 65536 || (mesh->MNumAnimMeshes != 0 && mesh->MAnimMeshes == null))
+                        throw new InvalidOperationException("Invalid morph target table.");
+                    for (int shape = 0; shape < mesh->MNumAnimMeshes; shape++)
+                    {
+                        var target = mesh->MAnimMeshes[shape];
+                        if (target == null) throw new InvalidOperationException("Missing morph target.");
+                        var name = target->MName.AsString;
+                        if (string.IsNullOrWhiteSpace(name)) name = $"Morph{shape}";
+                        if (morphNames.Add(name)) entityInfo.MorphTargetNames.Add(name);
+                    }
+                }
+
                 if (extractTextureDependencies)
                     entityInfo.TextureDependencies = ExtractTextureDependencies(scene);
 
@@ -235,6 +252,7 @@ namespace Stride.Importer.ThreeD
                         Name = meshInfo.Name,
                         MaterialIndex = meshInfo.MaterialIndex,
                         NodeIndex = nodeIndex,
+                        MorphTargets = meshInfo.MorphTargets,
                     };
 
                     if (meshInfo.Bones != null)
@@ -1100,8 +1118,62 @@ namespace Stride.Importer.ThreeD
                 MaterialIndex = (int)mesh->MMaterialIndex,
                 HasSkinningPosition = hasSkinningPosition,
                 HasSkinningNormal = hasSkinningNormal,
-                TotalClusterCount = totalClusterCount
+                TotalClusterCount = totalClusterCount,
+                MorphTargets = ProcessMorphTargets(mesh),
             };
+        }
+
+        private unsafe MeshMorphData ProcessMorphTargets(Silk.NET.Assimp.Mesh* mesh)
+        {
+            if (mesh->MNumAnimMeshes == 0) return null;
+            if (mesh->MAnimMeshes == null || mesh->MNumAnimMeshes > 65536)
+                throw new InvalidOperationException("Morph target table is missing or exceeds the 16-bit shape limit.");
+            var names = new string[mesh->MNumAnimMeshes];
+            var usedNames = new HashSet<string>(StringComparer.Ordinal);
+            var entries = new List<MeshMorphEntry>();
+            bool hasNormals = false, hasTangents = false;
+            for (int shape = 0; shape < names.Length; shape++)
+            {
+                var target = mesh->MAnimMeshes[shape];
+                if (target == null || target->MNumVertices != mesh->MNumVertices)
+                    throw new InvalidOperationException($"Morph target {shape} has incompatible vertex topology.");
+                var name = target->MName.AsString;
+                names[shape] = string.IsNullOrWhiteSpace(name) ? $"Morph{shape}" : name;
+                if (!usedNames.Add(names[shape])) throw new InvalidOperationException($"Duplicate morph target name '{names[shape]}'.");
+                bool normals = target->MNormals != null && mesh->MNormals != null;
+                bool tangents = target->MTangents != null && mesh->MTangents != null;
+                hasNormals |= normals;
+                hasTangents |= tangents;
+                if (!normals || (mesh->MTangents != null && !tangents))
+                    Logger.Warning($"Morph '{names[shape]}' has missing normal or tangent attributes; those deltas remain zero. Target attribute reconstruction is not implemented.");
+                for (uint vertex = 0; vertex < mesh->MNumVertices; vertex++)
+                {
+                    var position = target->MVertices != null
+                        ? Vector3.TransformNormal(target->MVertices[vertex].ToStrideVector3() - mesh->MVertices[vertex].ToStrideVector3(), rootTransform) : Vector3.Zero;
+                    var normal = normals ? MorphDirection(target->MNormals[vertex].ToStrideVector3(), mesh->MNormals[vertex].ToStrideVector3()) : Vector3.Zero;
+                    var tangent = tangents ? MorphDirection(target->MTangents[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()) : Vector3.Zero;
+                    if (tangents && normals && target->MBitangents != null && mesh->MBitangents != null)
+                    {
+                        float baseSign = Vector3.Dot(Vector3.Cross(mesh->MNormals[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()), mesh->MBitangents[vertex].ToStrideVector3());
+                        float targetSign = Vector3.Dot(Vector3.Cross(target->MNormals[vertex].ToStrideVector3(), target->MTangents[vertex].ToStrideVector3()), target->MBitangents[vertex].ToStrideVector3());
+                        if ((baseSign < 0) != (targetSign < 0)) throw new InvalidOperationException($"Morph '{names[shape]}' changes tangent handedness, which this format does not encode.");
+                    }
+                    var entry = MeshMorphEntry.Create(vertex, (ushort)shape, position, normal, tangent);
+                    if (!entry.IsZero) entries.Add(entry);
+                }
+            }
+            return MeshMorphData.Create(checked((int)mesh->MNumVertices), names, entries, hasNormals, hasTangents);
+        }
+
+        private Vector3 MorphDirection(Vector3 target, Vector3 basis)
+        {
+            // Match the base import's direction transform. Normalize attributes, never their delta.
+            target = Vector3.TransformNormal(target, rootTransform);
+            basis = Vector3.TransformNormal(basis, rootTransform);
+            if (!float.IsFinite(target.X) || !float.IsFinite(target.Y) || !float.IsFinite(target.Z) || !float.IsFinite(target.LengthSquared()) || target.LengthSquared() <= 0 ||
+                !float.IsFinite(basis.X) || !float.IsFinite(basis.Y) || !float.IsFinite(basis.Z) || !float.IsFinite(basis.LengthSquared()) || basis.LengthSquared() <= 0)
+                throw new InvalidOperationException("Morph direction attributes must be finite and nonzero.");
+            return Vector3.Normalize(target) - Vector3.Normalize(basis);
         }
 
         /// <summary>
@@ -1659,6 +1731,7 @@ namespace Stride.Importer.ThreeD
         public bool HasSkinningPosition = false;
         public bool HasSkinningNormal = false;
         public int TotalClusterCount = 0;
+        public MeshMorphData MorphTargets;
     }
 
     public class MaterialInstantiation

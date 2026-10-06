@@ -91,6 +91,13 @@ namespace Stride.Assets.Models
         [Category]
         public List<IModelModifier> Modifiers { get; } = new List<IModelModifier>();
 
+        [DataMember(55), DefaultValue(MeshMorphLayout.SparseVertexMajor)]
+        public MeshMorphLayout MorphLayout { get; set; } = MeshMorphLayout.SparseVertexMajor;
+
+        // Editor metadata only; packed runtime targets are built from the source mesh.
+        [DataMember(60), Display(Browsable = false)]
+        public List<string> MorphTargetNames { get; } = new();
+
         /// <inheritdoc/>
         [DataMemberIgnore]
         public override UFile MainSource => Source;
