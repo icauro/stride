@@ -9,7 +9,6 @@ using Stride.Core.Mathematics;
 using Stride.Graphics;
 using Stride.Graphics.Data;
 using Stride.Rendering;
-using Stride.Rendering.BlendShapes;
 using Stride.Rendering.ComputeEffect;
 using Buffer = Stride.Graphics.Buffer;
 

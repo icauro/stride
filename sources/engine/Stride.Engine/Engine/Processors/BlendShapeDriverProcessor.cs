@@ -72,7 +72,8 @@ namespace Stride.Engine.Processors
 
                             // Determine sign via cross product projected onto the rotation axis
                             Vector3 cross;
-                            Vector3.Cross(ref psd.RotationAxis, ref transformedAxis, out cross);
+                            var rotationAxis = psd.RotationAxis;
+                            Vector3.Cross(ref rotationAxis, ref transformedAxis, out cross);
                             float sign = Vector3.Dot(cross, psd.RotationAxis) >= 0 ? 1f : -1f;
                             float angleDeg = MathUtil.RadiansToDegrees(angleRad) * sign;
 
