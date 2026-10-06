@@ -6,30 +6,211 @@ ChildrenIds: []
 Offset: {X: 0.0, Y: 0.0, Z: 0.0}
 Hierarchy:
     RootParts:
-        - ref!! b073244e-fe6e-42c0-8f08-35c26d39720d
+        - ref!! 9c83c3bb-9df1-4c4f-a8b2-c5d8c9ef3540
+        - ref!! 9ec0acf1-b12b-4743-8ff5-8530ce680e31
+        - ref!! 4a1f47da-32e1-4912-8e4a-de3f7660f03c
+        - ref!! ce3c5d95-c6f8-4253-9f9e-30c16bb5f33f
+        - ref!! 34026ee2-6ad9-4bdd-a377-f98820b50881
+        - ref!! ca432f47-22c9-4b74-9afc-de8cb0bd391d
+        - ref!! b8ed9a24-7ca1-4ff6-ae3c-8b59a8af7999
+        - ref!! a1a3a77d-13b0-4d14-9bc1-73c1dd855f99
+        - ref!! c40b5ee8-4730-4f6f-a6ef-e223564e0747
     Parts:
-        -   Entity:
-                Id: b073244e-fe6e-42c0-8f08-35c26d39720d
-                Name: Male_Ranger
+        -   Folder: null
+            Entity:
+                Id: 34026ee2-6ad9-4bdd-a377-f98820b50881
+                Name: Point light
                 Components:
-                    ee6129b48e1a82813ffc2d6793d58c92: !TransformComponent
-                        Id: 40aa6216-db97-4cbe-949e-baf0eaac9e5c
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: f4672b4c-64f3-4039-872a-093d4bcb2e18
+                        Position: {X: 2.8418605, Y: 3.143805, Z: -11.15007}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: ad957dd5-0b65-4622-919a-77a45911b3a9
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+        -   Folder: null
+            Entity:
+                Id: 4a1f47da-32e1-4912-8e4a-de3f7660f03c
+                Name: Point light
+                Components:
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: 979ea159-358c-4343-a8eb-3a68d7a5dc00
+                        Position: {X: -0.06587148, Y: 3.143805, Z: -12.333113}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: d06021f2-7802-4023-9b61-2e5706b7a902
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+        -   Entity:
+                Id: 7b172958-e61c-42a7-92a9-e3a12f1aefee
+                Name: CharacterStressController
+                Components:
+                    8e71a9af44d5b9312c5c2bcbc13908b6: !TransformComponent
+                        Id: 7cf0cbd7-9a55-4526-b153-ed9a4af8cd25
                         Position: {X: 0.0, Y: 0.0, Z: 0.0}
                         Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
                         Scale: {X: 1.0, Y: 1.0, Z: 1.0}
                         Children: {}
-                    58511388668ebdbd02c5f607b8fe5524: !ModelComponent
-                        Id: 87dc4f06-6a1c-4518-b57e-a45376902f48
-                        Model: 52c804ff-ebda-4569-a9bf-7a578048b92b:gltf/Male_Ranger
-                        Materials:
-                            35488f86370905e63d38dc281f99fa7c~0: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            03c51e96d8000681b5ed7df90358785d~1: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            5cdb67251d041a562f2a673622341fc4~2: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            5570a02f52ce452fe2680b1a61ee4b6f~3: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            c2f58840b685328d3eb6edbdad769cc8~4: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            8dc893633024a5ae0f604f8c24debda1~5: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            138e0407144db00c1f72473753169e53~6: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                            4cbec394ae8b3b833692f6478ffe7511~7: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
-                        SkinningMode: Compute
+                    a9c83068b25e3ade53ec63d5b4b09a83: !CharacterStressController
+                        Id: 4a02c124-4294-4d50-91a0-40a2efc5a6fd
+                        FemaleModel: ee044ad0-5b44-46d9-8aaf-69e48f98a01a:fbx/Female_MorphTest
+                        MaleModel: 90d57297-65c7-40c7-9a8f-56a47ca17272:gltf/Male_MorphTest
+                        FemaleAnimations:
+                            5d057a99550caffd9131629caa2e7ec6: 2b522c44-a59b-492d-929a-b20c24cb03df:fbx/Female_MorphTest_InPlace_Idle_FoldArms_Loop
+                            30e7dd8d94e20ba909116e324e7a4b71: 0c369376-6999-4907-9bf3-0fef593398d2:fbx/Female_MorphTest_InPlace_Idle_TalkingPhone_Loop
+                        MaleAnimations:
+                            32b117d1c42f83eb6c2768420f394abc: a3ac6f47-1cb5-4573-86d1-0a87e520a32b:gltf/Male_MorphTest_InPlace_Idle_FoldArms_Loop
+                            d41c797679413ce4dae4eebc236e8d88: d3ee51ac-db8d-4117-b18b-b5e44703703b:gltf/Male_MorphTest_InPlace_Idle_TalkingPhone_Loop
+                        Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+                        MaxPairs: 256
+                        ActivePairs: 4
+                        ComputeSkinning: true
+                        ActiveMorphs: 30
+                        Spacing: 1.0
+                        Columns: 8
+        -   Entity:
+                Id: 9c83c3bb-9df1-4c4f-a8b2-c5d8c9ef3540
+                Name: Plane
+                Components:
+                    b77f426ffb3625ea40b10d691dd6c6c4: !TransformComponent
+                        Id: 838a65b4-a12d-4e52-a4e5-eca9c92b1975
+                        Position: {X: 0.0, Y: 0.0, Z: -17.196817}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 16.0, Y: 1.0, Z: 40.0}
+                        Children: {}
+                    9c36200c9817ad90ca6b7556fd1087e6: !ModelComponent
+                        Id: a32edab5-8239-43e4-bc7d-e2f4813d5751
+                        Model: 00f90d00-9e9f-4107-a949-70fe57b99c59:Plane
+                        Materials: {}
                         Morphs:
                             Weights: {}
+        -   Entity:
+                Id: 9ec0acf1-b12b-4743-8ff5-8530ce680e31
+                Name: Point light
+                Components:
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: 8140da94-d4fc-47db-9557-fdf4ed529ae9
+                        Position: {X: -2.8291898, Y: 3.143805, Z: -11.078153}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: f1078c2c-ae5f-4b9b-9968-d0a97aff3bcd
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+                        Intensity: 5.0
+        -   Entity:
+                Id: a1a3a77d-13b0-4d14-9bc1-73c1dd855f99
+                Name: Entity
+                Components:
+                    6a329ab965bda1af35fecd11782cdfa8: !TransformComponent
+                        Id: 1171508e-90ab-4300-b1f9-bc09cbfb6720
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children:
+                            8747dd6ffbab007f177545a7286449df: ref!! 7cf0cbd7-9a55-4526-b153-ed9a4af8cd25
+        -   Folder: null
+            Entity:
+                Id: b8ed9a24-7ca1-4ff6-ae3c-8b59a8af7999
+                Name: Point light
+                Components:
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: e130e1c5-d456-4217-a500-5aa2b8e262e0
+                        Position: {X: 2.553172, Y: 3.143805, Z: -7.8277044}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: 0d53b37b-3323-493a-b8cd-8b58e34d984f
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+        -   Entity:
+                Id: c40b5ee8-4730-4f6f-a6ef-e223564e0747
+                Name: Camera
+                Components:
+                    8414d1ebdf35147b6d32b10b0c8009b2: !TransformComponent
+                        Id: 5118001b-d40b-44ba-b2c5-3f9e5e6afe4f
+                        Position: {X: -0.030783202, Y: 4.5141373, Z: 1.064745}
+                        Rotation: {X: -0.2859025, Y: 0.0, Z: 0.0, W: 0.9582587}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    ce06c18c0dce00de165a3435b22d5679: !CameraComponent
+                        Id: 6e95b858-d5b5-4890-8d91-b74908b899fd
+                        Name: null
+                        Projection: Perspective
+                        VerticalFieldOfView: 120.0
+                        Slot: b0a6b286-b649-41a0-ae6a-9feddb93947f
+        -   Folder: null
+            Entity:
+                Id: ca432f47-22c9-4b74-9afc-de8cb0bd391d
+                Name: Point light
+                Components:
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: b03708a5-331c-406f-98e7-b52486b6f584
+                        Position: {X: 0.026756763, Y: 3.143805, Z: -6.5257273}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: b1b2e6bc-f6d5-4db8-a438-508ecb5efbc1
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+                        Intensity: 5.0
+        -   Folder: null
+            Entity:
+                Id: ce3c5d95-c6f8-4253-9f9e-30c16bb5f33f
+                Name: Point light
+                Components:
+                    518fd01aa91a02b52031c53f427a4716: !TransformComponent
+                        Id: a83abfa6-aa1a-494c-8e2b-86663cdb064c
+                        Position: {X: -2.794843, Y: 3.143805, Z: -7.982895}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    97eb2a6abc705f8ad35dacddd7762854: !LightComponent
+                        Id: c753f8d7-81d3-4991-ba6e-018cd156845f
+                        Type: !LightPoint
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                            Radius: 62.0
+                            Shadow:
+                                Enabled: true
+                                Size: Small
+                                BiasParameters: {}
+                        Intensity: 5.0

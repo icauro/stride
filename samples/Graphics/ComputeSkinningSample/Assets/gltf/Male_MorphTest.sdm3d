@@ -1,0 +1,51 @@
+!Model
+Id: 90d57297-65c7-40c7-9a8f-56a47ca17272
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/gltf/Male_MorphTest.gltf
+Skeleton: 312fad71-a571-47fa-9966-ea923080ffab:gltf/Male_MorphTest Skeleton
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Materials:
+    b119eba9e4712ab5f120ad26bd1f4659:
+        Name: MorphDebug
+        MaterialInstance:
+            Material: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+    3512058b0af8bcd81c21f785f3c1a1fb:
+        Name: Material
+        MaterialInstance:
+            Material: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+DeduplicateMaterials: false
+Modifiers: {}
+MorphTargetNames:
+    f1857ca4570c33abc6848f48365cc416: Localized_0000
+    4fe0ecac9e670324e1b82df9f5163943: Localized_0001
+    ddbc98ebaaab53e25a565e41f6265498: Localized_0002
+    1b702ca3b11c3ff39cc89c5855150f44: Localized_0003
+    cfc2c1e507378da2473d4ab1168d5ffb: Localized_0004
+    9becc5d8c2d98be29a6add4563e0c75c: Localized_0005
+    4d36ed9bc62af46d026071ba246f2bc3: Localized_0006
+    330979e09233ed810677ad577e00c339: Localized_0007
+    0835a147c1d05ae5a3d5f9452e2a680d: Localized_0008
+    80a1b3eff20d2e1d0ff2508ccbf3118b: Localized_0009
+    da06a07892bdb7f3a377b74d0a35a95b: Medium_0000
+    eb0cfd8d9c1ee557459ca16aa9d968a8: Medium_0001
+    3ff61320adb56fe17301ba051df60464: Medium_0002
+    d25880f8a22cafb213d9702f00308d18: Medium_0003
+    e75f8df209d770a4bfb6e81700cce9f7: Medium_0004
+    fb86d137ec8915bf254fcf40ff81a14d: Medium_0005
+    c51fc61bcfda10cc871540c4b8cda853: Medium_0006
+    bb604ea3f6d5212c35cedf832d944657: Medium_0007
+    29afba0c94a4cafb374ed88ef2420d56: Medium_0008
+    5760ec1c19f45c1156a1cb3cbf8ebab1: Medium_0009
+    fc0dcc510960951bfc28eae5dbeb8955: Global_0000
+    8236cd6d541f8bdb0e94fbf3b05808b9: Global_0001
+    d1348867569aa2918ce14d175010bcd6: Global_0002
+    be9fe62016ffa5d7c536f7cb3e11808b: Global_0003
+    84e8f7048d0884de8068e3fb7c8dbfa5: Global_0004
+    6cf36809d43864226c40af91d95835ce: Global_0005
+    6f3c983d17301bc8d94fb32a1f12658b: Global_0006
+    02ef1b2055240611bce0c9590fea8cac: Global_0007
+    84468d9ff8608e907811562dfb106982: Global_0008
+    0a05f3e7b3eda562152a003f89e07546: Global_0009
+~SourceHashes:
+    c2ef41d670af5056f899a6d64b78b691~../../Resources/gltf/Male_MorphTest.gltf: ab1757088924abd969b4d2a3e7292e2b

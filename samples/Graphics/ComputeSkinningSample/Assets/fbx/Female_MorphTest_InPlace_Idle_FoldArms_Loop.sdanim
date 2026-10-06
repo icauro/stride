@@ -1,0 +1,20 @@
+!Animation
+Id: 2b522c44-a59b-492d-929a-b20c24cb03df
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/fbx/Female_MorphTest.fbx
+AnimationStack: 0
+ClipDuration:
+    Enabled: false
+    StartAnimationTime: 0:00:00:00.0000000
+    EndAnimationTime: 0:00:30:00.0000000
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+RepeatMode: LoopInfinite
+Type: !StandardAnimationAssetType {}
+Skeleton: 11c86ebe-a5d2-476e-8e41-1f282d6e61c8:fbx/Female_MorphTest Skeleton
+RootMotion: false
+PreviewModel: ee044ad0-5b44-46d9-8aaf-69e48f98a01a:fbx/Female_MorphTest
+AnimationTimeMinimum: 0:00:00:00.0000000
+AnimationTimeMaximum: 0:00:00:02.5000000
+~SourceHashes:
+    f8e22894a2f1fe655e634b0301ab0656~../../Resources/fbx/Female_MorphTest.fbx: e11e4503c7f12184ad6c579b4eb7ed7f

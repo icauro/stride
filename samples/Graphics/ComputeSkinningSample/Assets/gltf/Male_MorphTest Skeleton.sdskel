@@ -1,0 +1,76 @@
+!Skeleton
+Id: 312fad71-a571-47fa-9966-ea923080ffab
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/gltf/Male_MorphTest.gltf
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Nodes:
+    0cbb789bec9bf2fefc340c0e5320efb8: {Name: CharacterRig, Depth: 0}
+    be0def9b98451f9352753ada1c076fef: {Name: SuperHero_Male, Depth: 1}
+    2f5b4f7f6a16cbe7c70692a3f330fc6b: {Name: root, Depth: 1}
+    ebcf2c283a6ae94cd999b60e89bd8259: {Name: pelvis, Depth: 2}
+    21dffed59b5e1ecb4fc4655fd41b9765: {Name: spine_01, Depth: 3}
+    db5d2fe22b954f5165b9a2f5476f809b: {Name: spine_02, Depth: 4}
+    2f665b1b5836dd141006d579a0af1080: {Name: spine_03, Depth: 5}
+    9f3ecdd5e6afa6d4ad43dd31b3b944ac: {Name: clavicle_l, Depth: 6}
+    7f633a742c53dc671df2aae7629813fa: {Name: upperarm_l, Depth: 7}
+    6f75f43dc79b924d408072d54d93a294: {Name: lowerarm_l, Depth: 8}
+    d97289f7c8f22706d4641aeb91f52d11: {Name: hand_l, Depth: 9}
+    b62a9f602cf15e88269ca9ff175b6b4b: {Name: index_01_l, Depth: 10}
+    a84043994d63076c75fa4aa964ef3696: {Name: index_02_l, Depth: 11}
+    c61345784362eea56b98f4db6b98c2aa: {Name: index_03_l, Depth: 12}
+    ac295fe27cac68d7113b3dad9a0985e7: {Name: index_04_leaf_l, Depth: 13}
+    e33c25bc75d14b77d5320bfb56072177: {Name: middle_01_l, Depth: 10}
+    72fb71b60bfe5414f2fc34789fd301fb: {Name: middle_02_l, Depth: 11}
+    e39055e969dfbc4ede98995ef8b27c54: {Name: middle_03_l, Depth: 12}
+    e49d7521e403918a304b82345d6f054f: {Name: middle_04_leaf_l, Depth: 13}
+    65213545ee5c89c665bcbee44addd6a7: {Name: pinky_01_l, Depth: 10}
+    f447ca1aab5dccffe2748d3470cecd5a: {Name: pinky_02_l, Depth: 11}
+    287301a9abb729b933f9629b729765a5: {Name: pinky_03_l, Depth: 12}
+    cc25e2ab78a33933594a78fbca5b39a2: {Name: pinky_04_leaf_l, Depth: 13}
+    cba816daa1291aecdc6f168a71bf9097: {Name: ring_01_l, Depth: 10}
+    3e4ada032cf172bd360f2767591f5549: {Name: ring_02_l, Depth: 11}
+    25249c556745e880b9cb1d5ad4730de9: {Name: ring_03_l, Depth: 12}
+    4b6e81780c11e2b674aa921adf877f90: {Name: ring_04_leaf_l, Depth: 13}
+    bd2a29dcbc910578c4b3dcf0fe86ba13: {Name: thumb_01_l, Depth: 10}
+    dd2e65b9329e2aac828ca590498db065: {Name: thumb_02_l, Depth: 11}
+    17421dc8b1d6b8e240555f7c23a1b2fa: {Name: thumb_03_l, Depth: 12}
+    e188d775b7eca12469e47ff972d38c11: {Name: thumb_04_leaf_l, Depth: 13}
+    a4a39798f929a21c154eeb9cff79dcdf: {Name: clavicle_r, Depth: 6}
+    107a1274b8040d666e5f621eba7da8b1: {Name: upperarm_r, Depth: 7}
+    d55dccd565980335ac997a69dc431b2c: {Name: lowerarm_r, Depth: 8}
+    f344ea3b9a196ac8776e256f70f9ad7b: {Name: hand_r, Depth: 9}
+    07b4536f8339853b77d7a871d2232151: {Name: index_01_r, Depth: 10}
+    54b53a23e2df1b067be468a2bb2ef2b1: {Name: index_02_r, Depth: 11}
+    39e3bb90761633cbe74b1b013348eb44: {Name: index_03_r, Depth: 12}
+    79c4c24961f7e856a50e08f4b3bd500c: {Name: index_04_leaf_r, Depth: 13}
+    e95b2ad63eeaebe4c7c1a4276db0c3d1: {Name: middle_01_r, Depth: 10}
+    9f2575bb9ec6afbb23ed6ee5af0a20a8: {Name: middle_02_r, Depth: 11}
+    14004371c13e0e5afea90872797bed7d: {Name: middle_03_r, Depth: 12}
+    c389b768788f30023596feaa43c07994: {Name: middle_04_leaf_r, Depth: 13}
+    a78ec735ca6324124a541ac7eb310a93: {Name: pinky_01_r, Depth: 10}
+    14510c8f39660dfc1259d3cc20242c19: {Name: pinky_02_r, Depth: 11}
+    133cf87584be8cca2dac560a180f771a: {Name: pinky_03_r, Depth: 12}
+    ce70b8bf4733001054735d0e11b5822b: {Name: pinky_04_leaf_r, Depth: 13}
+    3bba5e980e16c04fddf094365c9e10d5: {Name: ring_01_r, Depth: 10}
+    37b9838c2aff2795392718c6c88e0a78: {Name: ring_02_r, Depth: 11}
+    67f0d1e0c2c9000991c1436e528ac6b1: {Name: ring_03_r, Depth: 12}
+    7b27a519979d3240d2641edb17cb2ff8: {Name: ring_04_leaf_r, Depth: 13}
+    a314a6a039aeee0320352a82664aa277: {Name: thumb_01_r, Depth: 10}
+    8d73421c3428b322ffbceec68b843687: {Name: thumb_02_r, Depth: 11}
+    34e66ae49f17c823af637782c075c31d: {Name: thumb_03_r, Depth: 12}
+    6a2996d86366408bd16235d1b6f6eba8: {Name: thumb_04_leaf_r, Depth: 13}
+    cc697abb23983f89081a1daa2b8b7257: {Name: neck_01, Depth: 6}
+    268441958ae24d4960c2c6d4da49b376: {Name: Head, Depth: 7}
+    f1be5329d897a09c3d1f3f1cf73bb32d: {Name: thigh_l, Depth: 3}
+    f70514f6ec82202db023edcfc00874fc: {Name: calf_l, Depth: 4}
+    20c5b42942f8c155698a89cde9e201c4: {Name: foot_l, Depth: 5}
+    17173335a44035f4492b8d8a52625668: {Name: ball_l, Depth: 6}
+    456d3e892ffd2fcbddf1c04607a0a1e8: {Name: ball_leaf_l, Depth: 7}
+    eac3e447aa80038bc07564de7b2f388b: {Name: thigh_r, Depth: 3}
+    8bd753a3ffca7da7ed8bd7fde81b693a: {Name: calf_r, Depth: 4}
+    430456d02d8594534c74fb4976f2dc40: {Name: foot_r, Depth: 5}
+    b1d41ae12fedfedde45ddd938a3d33b5: {Name: ball_r, Depth: 6}
+    794f10867a59ee4d5adc45d4536537f3: {Name: ball_leaf_r, Depth: 7}
+~SourceHashes:
+    8681aa377800b4aa5ea6ac15050762d0~../../Resources/gltf/Male_MorphTest.gltf: ab1757088924abd969b4d2a3e7292e2b

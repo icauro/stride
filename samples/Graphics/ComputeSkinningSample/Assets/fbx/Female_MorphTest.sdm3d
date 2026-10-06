@@ -1,0 +1,48 @@
+!Model
+Id: ee044ad0-5b44-46d9-8aaf-69e48f98a01a
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/fbx/Female_MorphTest.fbx
+Skeleton: 11c86ebe-a5d2-476e-8e41-1f282d6e61c8:fbx/Female_MorphTest Skeleton
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Materials:
+    a75f8d8d1789364cd724128b818aad84:
+        Name: MorphDebug
+        MaterialInstance:
+            Material: c6d4799f-a5ec-4803-af53-32ec4038d6d4:Material
+DeduplicateMaterials: false
+Modifiers: {}
+MorphLayout: DenseMorphMajor
+MorphTargetNames:
+    053b897dcb85a373d72f3104528a6800: Localized_0002.Localized_0002
+    19c720b8e4752fb6552635498ac0f250: Localized_0000.Localized_0000
+    2daa316230c6a540fad9d63745aa7e02: Global_0004.Global_0004
+    67125a9c63d08bbbf495e18bfe3b697c: Localized_0009.Localized_0009
+    74d00d7f15db2f543327ad8a47f706fc: Localized_0001.Localized_0001
+    abd7573d8d220892dd312086473b3b74: Global_0007.Global_0007
+    22471dcccca3c327dc3ec78b485e506f: Localized_0003.Localized_0003
+    b6c826ef38a5f4c3815864b64ff91a58: Localized_0004.Localized_0004
+    5c8f3afee83a1935bc0d48dc3760f09d: Medium_0009.Medium_0009
+    d23ec7fec632bbaa3aebe1b78a12ee7c: Localized_0005.Localized_0005
+    9d50f318c8d92f4765155c3e81fdf383: Global_0005.Global_0005
+    9da40917088defbd321117c67065af29: Localized_0006.Localized_0006
+    6e82355690aaec5efb1b8e6644c6a156: Localized_0007.Localized_0007
+    b55fe7f35a8b0306c0fa44b894cb3552: Localized_0008.Localized_0008
+    23a26b99d6888686e62f5afc5ad4b0dc: Medium_0000.Medium_0000
+    158029a61d85ad448f70c5acd342c394: Global_0009.Global_0009
+    a84abaf974dfc99860349daf4071be55: Global_0008.Global_0008
+    e54ee86b8498c57cbc4ba30c209920c0: Medium_0001.Medium_0001
+    7b7ef6d4c818722ee78ba4a17621d7a9: Medium_0002.Medium_0002
+    3b8beb6ba4ee59f3a6d4b0222500749a: Medium_0003.Medium_0003
+    fc8ee3117c7ef2e8da043ca5311f19b1: Medium_0004.Medium_0004
+    c87e1a9e9b93e2db1332762d16321630: Medium_0007.Medium_0007
+    e51c5c382884c0df1849e314bf23fab8: Medium_0005.Medium_0005
+    9278ee1fbba8bf7793e9a8af74b34c98: Global_0001.Global_0001
+    662a4637a10a5311dd5066a1b3f128cf: Medium_0006.Medium_0006
+    2f78e3a0f9774a30618d6e69dae0f135: Medium_0008.Medium_0008
+    848c92567f7cf23690b7bc654c4410f9: Global_0000.Global_0000
+    2bb2d91dca0c8494a3c04c3046326a22: Global_0002.Global_0002
+    7b6580145eb0c7c3106312e438035647: Global_0003.Global_0003
+    15c130352129609f7d20f8fd78c79b39: Global_0006.Global_0006
+~SourceHashes:
+    8df331933b1c059dc04cd19c027e6803~../../Resources/fbx/Female_MorphTest.fbx: e11e4503c7f12184ad6c579b4eb7ed7f
