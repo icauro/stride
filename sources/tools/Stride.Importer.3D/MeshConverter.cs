@@ -247,10 +247,7 @@ namespace Stride.Importer.ThreeD
 
                     if (meshInfo.BlendShapeTargets != null)
                     {
-                        nodeMeshData.BlendShapes = new MeshBlendShapeDefinition
-                        {
-                            Targets = meshInfo.BlendShapeTargets
-                        };
+                        nodeMeshData.BlendShapes = meshInfo.BlendShapeDefinition;
                         nodeMeshData.Parameters.Set(MaterialKeys.HasBlendShapes, true);
                         nodeMeshData.Parameters.Set(MaterialKeys.BlendShapeCount, meshInfo.BlendShapeTargets.Length);
 
@@ -1216,6 +1213,7 @@ namespace Stride.Importer.ThreeD
 
             // Extract blend shape (morph target) data from Assimp AnimMeshes
             BlendShapeTarget[] blendShapeTargets = null;
+            MeshBlendShapeDefinition blendShapeDefinition = null;
             bool hasAnyBlendShapeTangent = false;
             if (mesh->MNumAnimMeshes > 0)
             {
@@ -1240,6 +1238,9 @@ namespace Stride.Importer.ThreeD
                         HasDeltaPositions = hasDeltaPositions,
                         HasDeltaNormals = hasDeltaNormals,
                         HasDeltaTangents = hasDeltaTangents,
+                        DeltaPositions = hasDeltaPositions ? new Vector3[mesh->MNumVertices] : null,
+                        DeltaNormals = hasDeltaNormals ? new Vector3[mesh->MNumVertices] : null,
+                        DeltaTangents = hasDeltaTangents ? new Vector3[mesh->MNumVertices] : null,
                     };
 
                     // Build a vertex buffer with delta position, delta normal and delta tangent for this target
@@ -1248,19 +1249,19 @@ namespace Stride.Importer.ThreeD
 
                     if (hasDeltaPositions)
                     {
-                        bsElements.Add(new VertexElement($"BLENDSHAPE_DELTA_POS{targetIdx}", 0, PixelFormat.R32G32B32_Float, bsStride));
+                        bsElements.Add(new VertexElement("BLENDSHAPE_DELTA_POS", targetIdx, PixelFormat.R32G32B32_Float, bsStride));
                         bsStride += sizeof(float) * 3;
                     }
 
                     if (hasDeltaNormals)
                     {
-                        bsElements.Add(new VertexElement($"BLENDSHAPE_DELTA_NRM{targetIdx}", 0, PixelFormat.R32G32B32_Float, bsStride));
+                        bsElements.Add(new VertexElement("BLENDSHAPE_DELTA_NRM", targetIdx, PixelFormat.R32G32B32_Float, bsStride));
                         bsStride += sizeof(float) * 3;
                     }
 
                     if (hasDeltaTangents)
                     {
-                        bsElements.Add(new VertexElement($"BLENDSHAPE_DELTA_TAN{targetIdx}", 0, PixelFormat.R32G32B32_Float, bsStride));
+                        bsElements.Add(new VertexElement("BLENDSHAPE_DELTA_TAN", targetIdx, PixelFormat.R32G32B32_Float, bsStride));
                         bsStride += sizeof(float) * 3;
                     }
 
@@ -1280,6 +1281,7 @@ namespace Stride.Importer.ThreeD
                                 var morphPos = animMesh->MVertices[vi].ToStrideVector3();
                                 var delta = morphPos - basePos;
                                 Core.Mathematics.Vector3.TransformNormal(ref delta, ref rootTransform, out delta);
+                                blendShapeTargets[targetIdx].DeltaPositions[vi] = delta;
                                 *((Core.Mathematics.Vector3*)ptr) = delta;
                                 ptr += sizeof(float) * 3;
                             }
@@ -1290,6 +1292,7 @@ namespace Stride.Importer.ThreeD
                                 var morphNrm = animMesh->MNormals[vi].ToStrideVector3();
                                 var deltaNrm = morphNrm - baseNrm;
                                 Core.Mathematics.Vector3.TransformNormal(ref deltaNrm, ref rootTransform, out deltaNrm);
+                                blendShapeTargets[targetIdx].DeltaNormals[vi] = deltaNrm;
                                 *((Core.Mathematics.Vector3*)ptr) = deltaNrm;
                                 ptr += sizeof(float) * 3;
                             }
@@ -1300,6 +1303,7 @@ namespace Stride.Importer.ThreeD
                                 var morphTan = animMesh->MTangents[vi].ToStrideVector3();
                                 var deltaTan = morphTan - baseTan;
                                 Core.Mathematics.Vector3.TransformNormal(ref deltaTan, ref rootTransform, out deltaTan);
+                                blendShapeTargets[targetIdx].DeltaTangents[vi] = deltaTan;
                                 *((Core.Mathematics.Vector3*)ptr) = deltaTan;
                                 ptr += sizeof(float) * 3;
                             }
@@ -1314,6 +1318,33 @@ namespace Stride.Importer.ThreeD
                 }
 
                 drawData.VertexBuffers = blendShapeVertexBuffers.ToArray();
+
+                // Compute/CPU deformers consume these serialized arrays rather than the extra
+                // vertex streams. Copy the final base buffer so positions and layout agree.
+                blendShapeDefinition = new MeshBlendShapeDefinition
+                {
+                    Targets = blendShapeTargets,
+                    VertexCount = (int)mesh->MNumVertices,
+                    VertexStride = vertexStride,
+                    PositionOffset = positionOffset,
+                    NormalOffset = mesh->MNormals != null ? normalOffset : -1,
+                    TangentOffset = mesh->MTangents != null ? tangentOffset : -1,
+                    BasePositions = new Vector3[mesh->MNumVertices],
+                    BaseNormals = new Vector3[mesh->MNumVertices],
+                    BaseTangents = mesh->MTangents != null ? new Vector3[mesh->MNumVertices] : null,
+                };
+                fixed (byte* basePointer = vertexBuffer)
+                {
+                    for (int vi = 0; vi < blendShapeDefinition.VertexCount; vi++)
+                    {
+                        var vertexPointer = basePointer + vi * vertexStride;
+                        blendShapeDefinition.BasePositions[vi] = *(Vector3*)(vertexPointer + positionOffset);
+                        blendShapeDefinition.BaseNormals[vi] = mesh->MNormals != null
+                            ? *(Vector3*)(vertexPointer + normalOffset) : Vector3.UnitY;
+                        if (mesh->MTangents != null)
+                            blendShapeDefinition.BaseTangents[vi] = *(Vector3*)(vertexPointer + tangentOffset);
+                    }
+                }
             }
 
             return new MeshInfo
@@ -1326,6 +1357,7 @@ namespace Stride.Importer.ThreeD
                 HasSkinningNormal = hasSkinningNormal,
                 TotalClusterCount = totalClusterCount,
                 BlendShapeTargets = blendShapeTargets,
+                BlendShapeDefinition = blendShapeDefinition,
                 HasBlendShapeTangent = hasAnyBlendShapeTangent,
             };
         }
@@ -1886,6 +1918,7 @@ namespace Stride.Importer.ThreeD
         public bool HasSkinningNormal = false;
         public int TotalClusterCount = 0;
         public BlendShapeTarget[] BlendShapeTargets;
+        public MeshBlendShapeDefinition BlendShapeDefinition;
         public bool HasBlendShapeTangent = false;
     }
 
