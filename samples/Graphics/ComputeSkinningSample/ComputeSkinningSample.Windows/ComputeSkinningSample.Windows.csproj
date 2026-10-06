@@ -1,0 +1,20 @@
+<Project>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>ComputeSkinningSample</RootNamespace>
+    <OutputPath>../Bin/Windows/$(Configuration)/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <StrideCurrentPackagePath>$(MSBuildThisFileDirectory)../ComputeSkinningSample.Game/ComputeSkinningSample.Game.sdpkg</StrideCurrentPackagePath>
+    <StridePlatform>Windows</StridePlatform>
+    <StrideRoot>$(MSBuildThisFileDirectory)../../../../</StrideRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(StrideRoot)deps/BulletPhysics/dotnet/win-x64/libbulletc.dll" Link="runtimes/win-x64/native/libbulletc.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(StrideRoot)deps/freetype/dotnet/win-x64/freetype.dll" Link="runtimes/win-x64/native/freetype.dll" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="../ComputeSkinningSample.Game/ComputeSkinningSample.Game.csproj" />
+    <PackageReference Include="Stride.AssetCompiler" Version="4.5.0-dev" IncludeAssets="build;buildTransitive" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

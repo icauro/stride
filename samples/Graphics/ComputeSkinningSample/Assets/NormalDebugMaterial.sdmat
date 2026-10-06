@@ -1,0 +1,16 @@
+!MaterialAsset
+Id: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Attributes:
+    Emissive: !MaterialEmissiveMapFeature
+        EmissiveMap: !ComputeShaderClassColor
+            MixinReference: ComputeColorNormalDebug
+            Generics: {}
+            CompositionNodes: {}
+        Intensity: !ComputeFloat
+            Value: 1.0
+        UseAlpha: false
+    Overrides:
+        UVScale: {X: 1.0, Y: 1.0}
+Layers: {}

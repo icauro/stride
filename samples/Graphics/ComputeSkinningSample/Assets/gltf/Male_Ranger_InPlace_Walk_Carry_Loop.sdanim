@@ -1,0 +1,20 @@
+!Animation
+Id: c635fbaa-819c-4186-afb8-5316411e4e8d
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Male_Ranger.gltf
+AnimationStack: 1
+ClipDuration:
+    Enabled: false
+    StartAnimationTime: 0:00:00:00.0000000
+    EndAnimationTime: 0:00:30:00.0000000
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+RepeatMode: LoopInfinite
+Type: !StandardAnimationAssetType {}
+Skeleton: c5297a3f-fdd4-48fb-9175-2c1028f15283:gltf/Male_Ranger Skeleton
+RootMotion: false
+PreviewModel: 52c804ff-ebda-4569-a9bf-7a578048b92b:gltf/Male_Ranger
+AnimationTimeMinimum: 0:00:00:00.0000000
+AnimationTimeMaximum: 0:00:00:02.0000000
+~SourceHashes:
+    d1b8a54579250f8e5aa35dbdd586d338~../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Male_Ranger.gltf: 0d100a75715473e2862df08b66657bc4

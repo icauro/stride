@@ -1,0 +1,35 @@
+!SceneAsset
+Id: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd
+SerializedVersion: {Stride: 3.1.0.1}
+Tags: []
+ChildrenIds: []
+Offset: {X: 0.0, Y: 0.0, Z: 0.0}
+Hierarchy:
+    RootParts:
+        - ref!! b073244e-fe6e-42c0-8f08-35c26d39720d
+    Parts:
+        -   Entity:
+                Id: b073244e-fe6e-42c0-8f08-35c26d39720d
+                Name: Male_Ranger
+                Components:
+                    ee6129b48e1a82813ffc2d6793d58c92: !TransformComponent
+                        Id: 40aa6216-db97-4cbe-949e-baf0eaac9e5c
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    58511388668ebdbd02c5f607b8fe5524: !ModelComponent
+                        Id: 87dc4f06-6a1c-4518-b57e-a45376902f48
+                        Model: 52c804ff-ebda-4569-a9bf-7a578048b92b:gltf/Male_Ranger
+                        Materials:
+                            35488f86370905e63d38dc281f99fa7c~0: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            03c51e96d8000681b5ed7df90358785d~1: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            5cdb67251d041a562f2a673622341fc4~2: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            5570a02f52ce452fe2680b1a61ee4b6f~3: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            c2f58840b685328d3eb6edbdad769cc8~4: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            8dc893633024a5ae0f604f8c24debda1~5: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            138e0407144db00c1f72473753169e53~6: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                            4cbec394ae8b3b833692f6478ffe7511~7: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                        SkinningMode: Compute
+                        Morphs:
+                            Weights: {}

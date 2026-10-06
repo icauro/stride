@@ -1,0 +1,37 @@
+!Model
+Id: 5583d887-27b8-49c2-91b5-abf7d70b3236
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx
+Skeleton: e54b7589-74d6-4b69-9a79-359c5d8dd4f7:fbx/Female_Ranger Skeleton
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Materials:
+    d198e15b75c305c452ef45ba179b4aa2:
+        Name: MI_Hair_2
+        MaterialInstance:
+            Material: null
+    406f0183f910357f8ab0d3c314a4bca3:
+        Name: MI_Eyes
+        MaterialInstance:
+            Material: null
+    8d940be9538cbcd122b00f984ff7da91:
+        Name: MI_Ranger
+        MaterialInstance:
+            Material: null
+    8051f0f4c23419263fd5eb537c6f882f:
+        Name: MI_Regular_Female
+        MaterialInstance:
+            Material: null
+    22fbff4471129def1ec219f2fe8948f7:
+        Name: MI_Hair_2.003
+        MaterialInstance:
+            Material: null
+    8302f92c79a59655fd485e0d109a97ff:
+        Name: MI_Superhero_Female
+        MaterialInstance:
+            Material: null
+DeduplicateMaterials: false
+Modifiers: {}
+MorphTargetNames: {}
+~SourceHashes:
+    49da3f3c4451a47a5ec3f075b1e42a64~../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx: 3911c38a1eb36bb9cd89e819373660b2

@@ -1,0 +1,12 @@
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
+// Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
+
+// Shows the world-space normal as a color (-1..1 mapped to 0..1). Used as an emissive color,
+// so morphed and skinned normals are visible without textures or lighting.
+shader ComputeColorNormalDebug : ComputeColor, NormalStream
+{
+    override float4 Compute()
+    {
+        return float4(normalize(streams.normalWS) * 0.5 + 0.5, 1);
+    }
+};

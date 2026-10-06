@@ -1,0 +1,89 @@
+!Skeleton
+Id: e54b7589-74d6-4b69-9a79-359c5d8dd4f7
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Nodes:
+    b129a844f6d27da494fbe76280eecf88: {Name: RootNode, Depth: 0}
+    865db68623026ebc8b4c391f3a6a2641: {Name: CharacterRig, Depth: 1}
+    9b6cd7c16764690554bb41d4c68129c8: {Name: root, Depth: 2}
+    23878c355a2405bfdcc0ce31823d5e39: {Name: pelvis, Depth: 3}
+    41cb75628a0c618efb2ee7fb31a0558e: {Name: spine_01, Depth: 4}
+    8cc2d703cfd4962ef98bec73cf5ca263: {Name: spine_02, Depth: 5}
+    0066cafc8161b13466d54f965da25937: {Name: spine_03, Depth: 6}
+    afc517d2e6a5a5907106fa77972acd2f: {Name: neck_01, Depth: 7}
+    6a84ac879d5263ffc8b0750c9bcf3926: {Name: Head, Depth: 8}
+    71db285906ddf40c0e97e9921fdd98fe: {Name: clavicle_l, Depth: 7}
+    7ed46c775576d0486c44fbb7f23fbcf2: {Name: upperarm_l, Depth: 8}
+    e56d0253bc93f8d24fcc694691e98319: {Name: lowerarm_l, Depth: 9}
+    57b52d681cb4cb69084321966d61faa1: {Name: hand_l, Depth: 10}
+    27be99aab4efa604eb2d507c541aae92: {Name: index_01_l, Depth: 11}
+    693cff01cf31aa8db8424f27959ef0da: {Name: index_02_l, Depth: 12}
+    606c3957e5b864748e9cb28c692a0bed: {Name: index_03_l, Depth: 13}
+    2b1ad2a14de28ac865da9b5b1db6c232: {Name: index_04_leaf_l, Depth: 14}
+    a8e0f29d8ce07e67efceac487cea0c29: {Name: middle_01_l, Depth: 11}
+    55c669bdf2a692f683a3b658791d6d7a: {Name: middle_02_l, Depth: 12}
+    5e86186e148b034f046f52a338eb1151: {Name: middle_03_l, Depth: 13}
+    fdece69a00f08e56d02906cfb736926a: {Name: middle_04_leaf_l, Depth: 14}
+    94c67e982a82f41090660ac1f0a5ecb7: {Name: pinky_01_l, Depth: 11}
+    2fdb42037954655a78f3f6a89b975c6a: {Name: pinky_02_l, Depth: 12}
+    dd14ad252dc8e86ec4636d1c93b342fb: {Name: pinky_03_l, Depth: 13}
+    f1d6d754f549f9d90905e5482116db2f: {Name: pinky_04_leaf_l, Depth: 14}
+    66fb28da8096da4d51458c139620c029: {Name: ring_01_l, Depth: 11}
+    12f52883bff6952f09df44a0d6a30cc4: {Name: ring_02_l, Depth: 12}
+    a22341345797a5b32a8640f6197b2483: {Name: ring_03_l, Depth: 13}
+    189a6db936743897958e128df2e257e3: {Name: ring_04_leaf_l, Depth: 14}
+    e41ca9c019b025a207a9e316e71c8809: {Name: thumb_01_l, Depth: 11}
+    36bc5bcc6e7a24490799b30a72f376c1: {Name: thumb_02_l, Depth: 12}
+    04910be8d72df66eaf3bba3fbf7908a0: {Name: thumb_03_l, Depth: 13}
+    7c49c7a06a9a75c31b5d4f297aeb7a96: {Name: thumb_04_leaf_l, Depth: 14}
+    45f880988fdb5c7770c1aaae802c8e87: {Name: clavicle_r, Depth: 7}
+    b39d1d113e6af3ce5bc146b1b25bc0a7: {Name: upperarm_r, Depth: 8}
+    8b937981e354e6a1dd0990c76f7256f6: {Name: lowerarm_r, Depth: 9}
+    3d7baa448f76b4e3dc9d9417ddd0bee0: {Name: hand_r, Depth: 10}
+    8b950a4232496f2080f7c2e7c6d107f2: {Name: index_01_r, Depth: 11}
+    daed856c2d6ba190c93a3330930be453: {Name: index_02_r, Depth: 12}
+    2e0e1388b29fd286102a88a763e8bdd2: {Name: index_03_r, Depth: 13}
+    632960f98deeb2d70b1c4a92a684dbf9: {Name: index_04_leaf_r, Depth: 14}
+    fa6bb00e5d56eaa3ce1d90dde2e72e25: {Name: middle_01_r, Depth: 11}
+    133bf44ef9eb00ae44b5e1544e9fd6c2: {Name: middle_02_r, Depth: 12}
+    17d42e3f3ff57958925d2977fd40cdf7: {Name: middle_03_r, Depth: 13}
+    c3bf0dfc87272af0c41fbd7c1554a7db: {Name: middle_04_leaf_r, Depth: 14}
+    217b09fcdf4370e684c07771be8bd159: {Name: pinky_01_r, Depth: 11}
+    effd5c914a982a3a092631b143b34c6e: {Name: pinky_02_r, Depth: 12}
+    869199df46b4698c0da69aa6a67bc524: {Name: pinky_03_r, Depth: 13}
+    654ea65899460af98285e4d50687a441: {Name: pinky_04_leaf_r, Depth: 14}
+    24259fe974344d074dbcf15779a30855: {Name: ring_01_r, Depth: 11}
+    f78a884e9aeaeeb0b6b7a0b4d8aa5ea7: {Name: ring_02_r, Depth: 12}
+    e93c532938157a206413f82edb9dc470: {Name: ring_03_r, Depth: 13}
+    1536e536ca103a23fc1a722b8d5442bc: {Name: ring_04_leaf_r, Depth: 14}
+    cf112f50a58e1e4f5f6489ae4a15a562: {Name: thumb_01_r, Depth: 11}
+    04cff6ee57ac2faf63cd327a520f39c9: {Name: thumb_02_r, Depth: 12}
+    5989be18b2fc2aefa4850aeb3a92eb64: {Name: thumb_03_r, Depth: 13}
+    c358bbd2e902711821ffa46765c133fd: {Name: thumb_04_leaf_r, Depth: 14}
+    02a71c54131316b92238b7b33799165d: {Name: thigh_l, Depth: 4}
+    76bc10760eae507f5a10d9c3943ab4a8: {Name: calf_l, Depth: 5}
+    a25e4625c51f4b99f8ed79f95f98d05e: {Name: foot_l, Depth: 6}
+    ee655825db2067f222ae71088b2c4c70: {Name: ball_l, Depth: 7}
+    9b9bf522141a3f3985921b56978a2bb1: {Name: ball_leaf_l, Depth: 8}
+    cbef603bdf74d713deada56fa2c37b6b: {Name: thigh_r, Depth: 4}
+    a578d6c37a1752a2e23e3c1b408946f5: {Name: calf_r, Depth: 5}
+    de2e4179897ce16952541cc0bbff7c40: {Name: foot_r, Depth: 6}
+    5ec6c34d84be81fc7022c47cd1c80322: {Name: ball_r, Depth: 7}
+    2f24a0a519a5fdf89ef43dd7806a71f8: {Name: ball_leaf_r, Depth: 8}
+    d1a70f81eb96176139cfc3cf655b8622: {Name: Eyebrows, Depth: 1}
+    4b9d814b1f948512e9273e21fdf17fcf: {Name: Eyes, Depth: 1}
+    44d8d826169be8ea3392a6c2940ec602: {Name: Female_Ranger_Acc_Pauldrons, Depth: 1}
+    dfa31c1786f5960ec9f11da6006bc99c: {Name: Female_Ranger_Arms, Depth: 1}
+    9a99bb4a32142296509a5014a18e276b: {Name: Female_Ranger_Arms_Bracer, Depth: 1}
+    52b94d172c1270b914e23ecf65a63a6e: {Name: Female_Ranger_Body, Depth: 1}
+    a0868f78510eb0c6d9529cb87a7f6f79: {Name: Female_Ranger_Body_Belt_1, Depth: 1}
+    56978081136700b8b3f6d1ee2a7af13f: {Name: Female_Ranger_Body_Belt_2, Depth: 1}
+    0a7facb1bf81408848f7d361a2f60f37: {Name: Female_Ranger_Feet, Depth: 1}
+    9f0607fad60df692bc75d856141ac51a: {Name: Female_Ranger_Head_Hood, Depth: 1}
+    7b7144937f07a528ed7313b479a29ac5: {Name: Female_Ranger_Legs, Depth: 1}
+    4501a861de4ca3dfd093d5b17a6a7bae: {Name: Hair_Long, Depth: 1}
+    9b2b541d572b0d07e59be6b51ebfd92a: {Name: Superhero_Female, Depth: 1}
+~SourceHashes:
+    946cb2765ffa1f4eeb90d6c0734364ac~../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx: 3911c38a1eb36bb9cd89e819373660b2

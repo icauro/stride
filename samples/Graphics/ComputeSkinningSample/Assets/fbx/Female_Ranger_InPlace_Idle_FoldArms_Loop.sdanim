@@ -1,0 +1,20 @@
+!Animation
+Id: c239d861-8ab6-4b2a-9564-2d3129e1c66d
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx
+AnimationStack: 0
+ClipDuration:
+    Enabled: false
+    StartAnimationTime: 0:00:00:00.0000000
+    EndAnimationTime: 0:00:30:00.0000000
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+RepeatMode: LoopInfinite
+Type: !StandardAnimationAssetType {}
+Skeleton: e54b7589-74d6-4b69-9a79-359c5d8dd4f7:fbx/Female_Ranger Skeleton
+RootMotion: false
+PreviewModel: 5583d887-27b8-49c2-91b5-abf7d70b3236:fbx/Female_Ranger
+AnimationTimeMinimum: 0:00:00:00.0000000
+AnimationTimeMaximum: 0:00:00:02.5000000
+~SourceHashes:
+    85e8c77d7177b9d814f38e7b2e0858b2~../../../../../../2026-10-06-compute-skinning/sample-3d/exports/Female_Ranger.fbx: 3911c38a1eb36bb9cd89e819373660b2
