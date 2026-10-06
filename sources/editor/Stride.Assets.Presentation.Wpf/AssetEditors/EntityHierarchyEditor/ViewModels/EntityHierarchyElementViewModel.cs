@@ -13,6 +13,7 @@ using Stride.Core.Presentation.Quantum;
 using Stride.Core.Presentation.Quantum.Presenters;
 using Stride.Core.Quantum;
 using Stride.Assets.Entities;
+using Stride.Engine;
 using Stride.Assets.Presentation.AssetEditors.AssetCompositeGameEditor.ViewModels;
 using Stride.Assets.Presentation.AssetEditors.GameEditor.Services;
 using Stride.Assets.Presentation.ViewModel;
@@ -201,7 +202,9 @@ namespace Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.ViewMode
         }
 
         /// <inheritdoc/>
-        bool IPropertyProviderViewModel.ShouldConstructMember(IMemberNode member) => ((IPropertyProviderViewModel)Asset).ShouldConstructMember(member);
+        bool IPropertyProviderViewModel.ShouldConstructMember(IMemberNode member)
+            => !(member.MemberDescriptor.DeclaringType == typeof(ModelMorphSettings) && member.Name == nameof(ModelMorphSettings.Weights))
+                && ((IPropertyProviderViewModel)Asset).ShouldConstructMember(member);
 
         /// <inheritdoc/>
         bool IPropertyProviderViewModel.ShouldConstructItem(IObjectNode collection, NodeIndex index) => ((IPropertyProviderViewModel)Asset).ShouldConstructItem(collection, index);

@@ -1,10 +1,16 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 using System.Linq;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stride.Core.Assets.Editor.Quantum.NodePresenters;
 using Stride.Core.Assets.Editor.Quantum.NodePresenters.Commands;
+using Stride.Core.Assets.Editor.Quantum.NodePresenters.Keys;
+using Stride.Core.Assets.Editor.Extensions;
+using Stride.Core;
 using Stride.Core.Assets.Quantum;
+using Stride.Core.Assets;
 using Stride.Core.Extensions;
 using Stride.Core.Serialization;
 using Stride.Core.Presentation.Quantum.Presenters;
@@ -49,12 +55,58 @@ namespace Stride.Assets.Presentation.ViewModel
 
         internal void UpdateNodePresenter(INodePresenter node)
         {
-            if (node.Value is ModelComponent && node.Parent?.Value is EntityComponentCollection)
+            if (node.Value is ModelComponent component && node.Parent?.Value is EntityComponentCollection)
             {
                 // Make sure the materials get refreshed if we change the model.
                 var materials = node[nameof(ModelComponent.Materials)];
                 var model = node[nameof(ModelComponent.Model)];
                 materials.AddDependency(model, false);
+                var morphs = node[nameof(ModelComponent.Morphs)];
+                morphs.AddDependency(model, true);
+                morphs.IsVisible = GetReferencedModel() is ModelAsset asset && asset.MorphTargetNames.Count != 0;
+                var weightsMember = entity.Editor.NodeContainer.GetNode(component.Morphs)[nameof(ModelMorphSettings.Weights)];
+                var source = ((IAssetNodePresenter)node).Factory.CreateVirtualNodePresenter(node, "MorphWeightsSource", typeof(object), null, () => component.Morphs.Weights);
+                source.IsVisible = false;
+                source.Commands.Clear();
+                source.RegisterAssociatedNode(new NodeAccessor(weightsMember, NodeIndex.Empty));
+                morphs.AddDependency(source, false);
+            }
+
+            if (node.Value is ModelMorphSettings settings)
+            {
+                var asset = GetReferencedModel() as ModelAsset;
+                if (asset == null) return;
+                // Collection edits rebuild the dictionary presenter. Keep the visible sliders
+                // under a separate category so committing one weight preserves the other rows.
+                var weights = node.CreateCategory("Weights", 30, ExpandRule.Once);
+                var weightsNode = (IAssetObjectNode)entity.Editor.NodeContainer.GetNode(settings.Weights);
+                var factory = ((IAssetNodePresenter)node).Factory;
+                var weightsMember = entity.Editor.NodeContainer.GetNode(settings)[nameof(ModelMorphSettings.Weights)];
+                // A whole-dictionary replacement is one Quantum edit. Rebind the sliders
+                // once on replacement/undo, while individual edits keep their rows intact.
+                var names = asset.MorphTargetNames.Distinct(StringComparer.Ordinal).ToArray();
+                weights.Commands.Clear();
+                weights.Commands.Add(new SyncAnonymousNodePresenterCommand("ResetAllMorphWeights", (_, _) => SetMorphWeights(weightsMember, names, 0f)));
+                weights.Commands.Add(new SyncAnonymousNodePresenterCommand("MaxAllMorphWeights", (_, _) => SetMorphWeights(weightsMember, names, 1f)));
+                weights.Commands.Add(new SyncAnonymousNodePresenterCommand("MinAllMorphWeights", (_, _) => SetMorphWeights(weightsMember, names, -1f)));
+                int order = 0;
+                foreach (var name in names)
+                {
+                    var index = new NodeIndex(name);
+                    var slider = factory.CreateVirtualNodePresenter(weights, name + "___MorphWeight", typeof(float), order++,
+                        () => weightsNode.Indices.Contains(index) ? weightsNode.Retrieve(index) : 0f,
+                        value => SetMorphWeight(weightsNode, index, (float)value),
+                        () => weightsNode.BaseNode != null,
+                        () => weightsNode.Indices.Contains(index) && weightsNode.IsItemInherited(index),
+                        () => weightsNode.Indices.Contains(index) && weightsNode.IsItemOverridden(index));
+                    slider.DisplayName = name;
+                    slider.RegisterAssociatedNode(new NodeAccessor(weightsNode, index));
+                    slider.AttachedProperties.Set(NumericData.MinimumKey, -1f);
+                    slider.AttachedProperties.Set(NumericData.MaximumKey, 1f);
+                    slider.AttachedProperties.Set(NumericData.SmallStepKey, 0.01);
+                    slider.AttachedProperties.Set(NumericData.LargeStepKey, 0.1);
+                    slider.AttachedProperties.Set(NumericData.DecimalPlacesKey, 3);
+                }
             }
 
             if (node.Value is IndexingDictionary<Material> && node.Parent?.Value is ModelComponent)
@@ -104,6 +156,24 @@ namespace Stride.Assets.Presentation.ViewModel
                     }
                 }
             }
+        }
+
+        private static void SetMorphWeight(IObjectNode node, NodeIndex index, float value)
+        {
+            if (!float.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value));
+            value = Math.Clamp(value, -1f, 1f);
+            if (node.Indices.Contains(index)) node.Update(value, index);
+            else node.Add(value, index);
+        }
+
+        private static void SetMorphWeights(IMemberNode member, string[] names, float value)
+        {
+            var current = (Dictionary<string, float>)member.Retrieve();
+            if (names.All(name => (current.TryGetValue(name, out var weight) ? weight : 0f) == value)) return;
+            // Preserve existing item IDs for asset serialization and prefab inheritance.
+            var replacement = new ModelMorphSettings { Weights = AssetCloner.Clone(current) };
+            replacement.SetAllWeights(names, value);
+            member.Update(replacement.Weights);
         }
 
         private Task FetchMaterial(IObjectNode materialsNode, NodeIndex index)
@@ -233,6 +303,9 @@ namespace Stride.Assets.Presentation.ViewModel
             {
                 var materials = GetMaterialsNode();
                 ClearMaterialList(materials);
+                var component = entity.AssetSideEntity.Get<ModelComponent>();
+                var weights = entity.Editor.NodeContainer.GetNode(component.Morphs.Weights);
+                foreach (var index in weights.Indices.ToList()) weights.Remove(weights.Retrieve(index), index);
             }
         }
     }
