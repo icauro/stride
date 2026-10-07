@@ -573,9 +573,87 @@ namespace Stride.Importer.ThreeD
                         return null;
                     }
                 }
+                // animation of morph target weights (after nodes, as they share the node's clip)
+                for (uint morphAnimId = 0; morphAnimId < aiAnim->MNumMorphMeshChannels; ++morphAnimId)
+                {
+                    ProcessMorphAnimation(animationData.AnimationClips, scene, aiAnim->MMorphMeshChannels[morphAnimId], ticksPerSec, meshIndexToNodeIndex);
+                }
             }
 
             return animationData;
+        }
+
+        private unsafe void ProcessMorphAnimation(Dictionary<string, AnimationClip> animationClips, Scene* scene, MeshMorphAnim* channel, double ticksPerSec, Dictionary<int, List<int>> meshIndexToNodeIndex)
+        {
+            // The channel names the node (glTF) or mesh that owns the morph targets; its keys index that mesh's anim meshes.
+            var channelName = channel->MName.AsString;
+            var nodeName = channelName.CleanNodeName();
+            Silk.NET.Assimp.Mesh* mesh = null;
+            foreach (var (meshIndex, nodeIndices) in meshIndexToNodeIndex)
+            {
+                if (nodeIndices.Exists(nodeIndex => nodes[nodeIndex].Name == nodeName) || scene->MMeshes[meshIndex]->MName.AsString == channelName)
+                {
+                    mesh = scene->MMeshes[meshIndex];
+                    break;
+                }
+            }
+            if (mesh == null)
+            {
+                Logger.Warning($"Morph animation channel '{channelName}' matches no mesh and will be ignored.");
+                return;
+            }
+
+            // Like node animation: one clip per node, with one channel per target ("MorphWeights[<name>]").
+            if (!animationClips.TryGetValue(nodeName, out var animationClip))
+                animationClips.Add(nodeName, animationClip = new AnimationClip());
+
+            var curves = new Dictionary<uint, AnimationCurve<float>>();
+            for (uint keyId = 0; keyId < channel->MNumKeys; keyId++)
+            {
+                var key = channel->MKeys[keyId];
+                for (uint i = 0; i < key.MNumValuesAndWeights; i++)
+                {
+                    uint target = key.MValues[i];
+                    if (target >= mesh->MNumAnimMeshes || curves.ContainsKey(target))
+                        continue;
+
+                    // Same naming as ProcessMorphTargets, so curves match the imported target names.
+                    var name = mesh->MAnimMeshes[target]->MName.AsString;
+                    if (string.IsNullOrWhiteSpace(name))
+                        name = $"Morph{target}";
+                    if (name.Contains(']'))
+                    {
+                        Logger.Warning($"Morph target '{name}' cannot be animated: ']' is not allowed in animation paths.");
+                        continue;
+                    }
+                    var curve = new AnimationCurve<float> { InterpolationType = AnimationCurveInterpolationType.Linear };
+                    curves.Add(target, curve);
+                    animationClip.AddCurve($"MorphWeights[{name}]", curve);
+                }
+            }
+
+            // Targets missing from a key have weight 0 at that key.
+            var lastKeyTime = new CompressedTimeSpan();
+            for (uint keyId = 0; keyId < channel->MNumKeys; keyId++)
+            {
+                var key = channel->MKeys[keyId];
+                lastKeyTime = Utils.AiTimeToStrideTimeSpan(key.MTime, ticksPerSec);
+                foreach (var curve in curves.Values)
+                {
+                    curve.KeyFrames.Add(new KeyFrameData<float>(lastKeyTime, 0));
+                }
+                for (uint i = 0; i < key.MNumValuesAndWeights; i++)
+                {
+                    if (!curves.TryGetValue(key.MValues[i], out var curve))
+                        continue;
+                    var weight = (float)key.MWeights[i];
+                    if (!float.IsFinite(weight))
+                        throw new InvalidOperationException($"Morph animation channel '{channelName}' has a non-finite weight.");
+                    curve.KeyFrames[^1] = new KeyFrameData<float>(lastKeyTime, weight);
+                }
+            }
+            if (channel->MNumKeys > 0 && animationClip.Duration < lastKeyTime)
+                animationClip.Duration = lastKeyTime;
         }
 
         private unsafe void ProcessNodeAnimation(Dictionary<string, AnimationClip> animationClips, NodeAnim* nodeAnim, double ticksPerSec, Dictionary<string, List<int>> duplicateNodeNameToNodeIndices, Dictionary<string, int> boneNameToNodeIndex)

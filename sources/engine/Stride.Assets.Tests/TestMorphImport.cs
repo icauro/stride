@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Stride.Animations;
 using Stride.Core.Mathematics;
 using Stride.Core.Serialization;
 using Stride.Extensions;
@@ -184,6 +185,66 @@ public class TestMorphImport
             Assert.True(Math.Abs(entry.PositionDelta.Z) > 0.99f);
             Assert.True(entry.NormalDelta.Length() > 0.2f);
             Assert.True(entry.TangentDelta.Length() > 0.2f);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ImportsAnimatedWeightsAsCurvesByTargetName()
+    {
+        var arrays = new[] {
+            new float[] { 0,0,0, 1,0,0, 0,1,0 },
+            new float[] { 0,0,1, 0,0,0, 0,0,0 },
+            new float[] { 0,1,0, 0,0,0, 0,0,0 },
+            new float[] { 0, 1 },
+            new float[] { 0.25f, 1, 0.75f, 0 } };
+        var bytes = MemoryMarshal.AsBytes(arrays.SelectMany(x => x).ToArray().AsSpan()).ToArray();
+        var views = arrays.Select((a, i) => new { buffer = 0, byteOffset = arrays.Take(i).Sum(x => x.Length) * 4, byteLength = a.Length * 4 }).ToArray();
+        var accessors = arrays.Select((a, i) => i == 3
+            ? (object)new
+            {
+                bufferView = i,
+                componentType = 5126,
+                count = a.Length,
+                type = "SCALAR",
+                min = new[] { 0f },
+                max = new[] { 1f }
+            }
+            : new
+            {
+                bufferView = i,
+                componentType = 5126,
+                count = i < 3 ? 3 : a.Length,
+                type = i < 3 ? "VEC3" : "SCALAR"
+            }).ToArray();
+        var gltf = new
+        {
+            asset = new
+            {
+                version = "2.0"
+            },
+            scene = 0,
+            scenes = new[] { new { nodes = new[] { 0 } } },
+            nodes = new[] { new { name = "Face", mesh = 0 } },
+            meshes = new[] { new { name = "Triangle", extras = new { targetNames = new[] { "Raise", "Lift" } }, primitives = new[] { new {
+                attributes = new { POSITION = 0 }, targets = new[] { new { POSITION = 1 }, new { POSITION = 2 } }, mode = 4 } } } },
+            animations = new[] { new { name = "Talk", samplers = new[] { new { input = 3, output = 4, interpolation = "LINEAR" } },
+                channels = new[] { new { sampler = 0, target = new { node = 0, path = "weights" } } } } },
+            buffers = new[] { new { byteLength = bytes.Length, uri = "data:application/octet-stream;base64," + Convert.ToBase64String(bytes) } },
+            bufferViews = views,
+            accessors
+        };
+        var path = Path.Combine(Path.GetTempPath(), $"stride-morph-animation-{Guid.NewGuid():N}.gltf");
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(gltf));
+            // Like bone animation, the curves land in the node's clip, one channel per target.
+            var clip = new MeshConverter(null).ConvertAnimation(path, path, 0).AnimationClips["Face"];
+            AnimationCurve<float> Curve(string name) => (AnimationCurve<float>)clip.Curves[clip.Channels[$"MorphWeights[{name}]"].CurveIndex];
+            Assert.Equal(new[] { "MorphWeights[Lift]", "MorphWeights[Raise]" }, clip.Channels.Keys.Order());
+            Assert.Equal(new[] { 0.25f, 0.75f }, Curve("Raise").KeyFrames.Select(key => key.Value));
+            Assert.Equal(new[] { 1f, 0f }, Curve("Lift").KeyFrames.Select(key => key.Value));
+            Assert.Equal(CompressedTimeSpan.FromSeconds(1), clip.Duration);
         }
         finally { File.Delete(path); }
     }

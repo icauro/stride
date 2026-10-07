@@ -228,6 +228,15 @@ public sealed partial class ModelComponent
         return meshWeights[mesh];
     }
 
+    internal ModelMorphLayout MorphLayout
+    {
+        get
+        {
+            SynchronizeMorphTargets();
+            return morphLayout;
+        }
+    }
+
     private void Bind()
     {
         SynchronizeMorphTargets();

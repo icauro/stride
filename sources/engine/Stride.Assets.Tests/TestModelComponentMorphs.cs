@@ -2,11 +2,14 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using Stride.Core.Assets;
 using Stride.Core.Serialization;
 using Stride.Engine;
 using Stride.Rendering;
+using Stride.Updater;
 using Xunit;
 
 namespace Stride.Assets.Tests;
@@ -119,5 +122,40 @@ public class TestModelComponentMorphs
         var restored = AssetFileSerializer.Load<Stride.Assets.Entities.SceneAsset>(stream, "scene.sdscene").Asset;
         var restoredModel = System.Linq.Enumerable.First(restored.Hierarchy.Parts).Value.Entity.Get<ModelComponent>();
         Assert.Equal(-0.25f, restoredModel.Morphs.GetWeight("Smile"));
+    }
+
+    [Fact]
+    public void AnimationPathsWriteWeightsByName()
+    {
+        var shared = new Model();
+        shared.Meshes.Add(new Mesh { MorphTargets = MeshMorphData.Create(0, new[] { "Blink", "Smile" }, Array.Empty<MeshMorphEntry>()) });
+        var other = ModelWithTargets(target: "Frown");
+        var entity = new Entity { new ModelComponent(shared) };
+        var members = new List<UpdateMemberInfo>
+        {
+            new("[ModelComponent.Key].MorphWeights[Smile]", 0),
+            new("[ModelComponent.Key].MorphWeights[Frown]", 8),
+        };
+        var update = UpdateEngine.Compile(typeof(Entity), members);
+        // Each channel is a (condition, value) pair, as written by the animation blender.
+        var data = new float[] { 1, 0.5f, 1, 0.75f };
+        Run(entity, update, data);
+        var component = entity.Get<ModelComponent>();
+        Assert.Equal(new[] { 0f, 0.5f }, component.MorphWeights.ToArray());
+
+        // The same compiled update binds to another model by name; missing targets are skipped.
+        component.Model = other;
+        Run(entity, update, data);
+        Assert.Equal(new[] { 0.75f }, component.MorphWeights.ToArray());
+    }
+
+    private static void Run(Entity entity, CompiledUpdate update, float[] data)
+    {
+        var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+        try
+        {
+            UpdateEngine.Run(entity, update, handle.AddrOfPinnedObject(), Array.Empty<UpdateObjectData>());
+        }
+        finally { handle.Free(); }
     }
 }
