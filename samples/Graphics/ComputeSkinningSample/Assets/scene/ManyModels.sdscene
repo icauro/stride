@@ -15,6 +15,7 @@ Hierarchy:
         - ref!! b8ed9a24-7ca1-4ff6-ae3c-8b59a8af7999
         - ref!! a1a3a77d-13b0-4d14-9bc1-73c1dd855f99
         - ref!! c40b5ee8-4730-4f6f-a6ef-e223564e0747
+        - ref!! fcbd4563-a447-4391-b7c8-16fd8b177da2
     Parts:
         -   Folder: null
             Entity:
@@ -36,7 +37,8 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
         -   Folder: null
             Entity:
                 Id: 4a1f47da-32e1-4912-8e4a-de3f7660f03c
@@ -57,7 +59,8 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
         -   Entity:
                 Id: 7b172958-e61c-42a7-92a9-e3a12f1aefee
                 Name: CharacterStressController
@@ -79,10 +82,10 @@ Hierarchy:
                             32b117d1c42f83eb6c2768420f394abc: a3ac6f47-1cb5-4573-86d1-0a87e520a32b:gltf/Male_MorphTest_InPlace_Idle_FoldArms_Loop
                             d41c797679413ce4dae4eebc236e8d88: d3ee51ac-db8d-4117-b18b-b5e44703703b:gltf/Male_MorphTest_InPlace_Idle_TalkingPhone_Loop
                         Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
-                        SwitchScene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:CylinderBenchmark
                         MaxPairs: 256
                         ActivePairs: 4
                         ActiveMorphs: 30
+                        ClipMorphs: false
                         Spacing: 1.0
                         Columns: 8
         -   Entity:
@@ -91,9 +94,9 @@ Hierarchy:
                 Components:
                     b77f426ffb3625ea40b10d691dd6c6c4: !TransformComponent
                         Id: 838a65b4-a12d-4e52-a4e5-eca9c92b1975
-                        Position: {X: 0.0, Y: 0.0, Z: -17.196817}
+                        Position: {X: 0.0, Y: 0.0, Z: -15.0}
                         Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
-                        Scale: {X: 16.0, Y: 1.0, Z: 40.0}
+                        Scale: {X: 16.0, Y: 1.0, Z: 44.0}
                         Children: {}
                     9c36200c9817ad90ca6b7556fd1087e6: !ModelComponent
                         Id: a32edab5-8239-43e4-bc7d-e2f4813d5751
@@ -120,7 +123,8 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
                         Intensity: 5.0
         -   Entity:
                 Id: a1a3a77d-13b0-4d14-9bc1-73c1dd855f99
@@ -153,22 +157,22 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
         -   Entity:
                 Id: c40b5ee8-4730-4f6f-a6ef-e223564e0747
                 Name: Camera
                 Components:
                     8414d1ebdf35147b6d32b10b0c8009b2: !TransformComponent
                         Id: 5118001b-d40b-44ba-b2c5-3f9e5e6afe4f
-                        Position: {X: -0.030783202, Y: 4.5141373, Z: 1.064745}
-                        Rotation: {X: -0.2859025, Y: 0.0, Z: 0.0, W: 0.9582587}
+                        Position: {X: -1.6, Y: 2.3, Z: 6.5}
+                        Rotation: {X: -0.1045285, Y: 0.0, Z: 0.0, W: 0.9945219}
                         Scale: {X: 1.0, Y: 1.0, Z: 1.0}
                         Children: {}
                     ce06c18c0dce00de165a3435b22d5679: !CameraComponent
                         Id: 6e95b858-d5b5-4890-8d91-b74908b899fd
                         Name: null
                         Projection: Perspective
-                        VerticalFieldOfView: 120.0
                         Slot: b0a6b286-b649-41a0-ae6a-9feddb93947f
         -   Folder: null
             Entity:
@@ -190,7 +194,8 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
                         Intensity: 5.0
         -   Folder: null
             Entity:
@@ -212,5 +217,26 @@ Hierarchy:
                             Shadow:
                                 Enabled: true
                                 Size: Small
-                                BiasParameters: {}
+                                BiasParameters:
+                                    DepthBias: 0.2
                         Intensity: 5.0
+        -   Entity:
+                Id: fcbd4563-a447-4391-b7c8-16fd8b177da2
+                Name: SceneMenu
+                Components:
+                    f4b66dbdd38443fb950f34640622d72d: !TransformComponent
+                        Id: fa92fbfb-8d4b-4326-b078-2862624945b8
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    a72b31ddb3f54df0a20f4e3867c94313: !SceneMenu
+                        Id: b27391d2-9cb7-4487-809d-31b6f08513fa
+                        Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+                        Scenes:
+                            b82ed3f3cd3449cb91d1827b2dec239b:
+                                Name: Characters
+                                Scene: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd:scene/ManyModels
+                            928f294eaf74487789c7fa167df9e0e0:
+                                Name: Cylinder benchmark
+                                Scene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:scene/CylinderBenchmark

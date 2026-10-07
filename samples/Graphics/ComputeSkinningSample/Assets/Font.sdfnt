@@ -7,3 +7,4 @@ FontSource: !SystemFontProvider
     Style: Regular
 FontType: !RuntimeRasterizedSpriteFontType
     Size: 18.0
+    AntiAlias: Aliased

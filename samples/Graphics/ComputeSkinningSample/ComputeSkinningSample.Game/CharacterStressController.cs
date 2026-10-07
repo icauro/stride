@@ -1,11 +1,9 @@
 using Stride.Animations;
 using Stride.Core;
 using Stride.Core.Mathematics;
-using Stride.Core.Serialization;
 using Stride.Engine;
 using Stride.Graphics;
 using Stride.Rendering;
-using Stride.Rendering.Sprites;
 using Stride.UI;
 using Stride.UI.Controls;
 using Stride.UI.Panels;
@@ -20,11 +18,12 @@ public sealed class CharacterStressController : SyncScript
     public List<AnimationClip> FemaleAnimations { get; } = new();
     public List<AnimationClip> MaleAnimations { get; } = new();
     public SpriteFont Font { get; set; }
-    public UrlReference<Scene> SwitchScene { get; set; }
 
     public int MaxPairs { get; set; } = 32;
     public int ActivePairs { get; set; } = 4;
     public int ActiveMorphs { get; set; } = 30;
+    /// <summary>Drive morph weights from the clips' weight channels instead of the script's sine waves.</summary>
+    public bool ClipMorphs { get; set; }
     public float Spacing { get; set; } = 1.5f;
     public int Columns { get; set; } = 8;
 
@@ -35,12 +34,15 @@ public sealed class CharacterStressController : SyncScript
     private int[][] morphSlots = Array.Empty<int[]>();
     private int appliedPairs = -1;
     private int appliedMorphs = -1;
-    private TextBlock pairsLabel, morphsLabel, statsLabel;
-    private ISpriteProvider buttonSprite, buttonPressedSprite;
+    private TextBlock pairsLabel, morphsLabel;
+    private TextBlock[] stats;
     private FrameTimings timings;
 
     public override void Start()
     {
+        // Benchmark scenes present without vsync so frame times are not capped at the refresh rate.
+        // Each scene sets its own interval, because during a switch the next scene starts before the previous one stops.
+        GraphicsDevice.Presenter.PresentInterval = PresentInterval.Immediate;
         if (FemaleModel == null || MaleModel == null)
             throw new InvalidOperationException("Assign FemaleModel and MaleModel on the CharacterStressController.");
 
@@ -53,7 +55,9 @@ public sealed class CharacterStressController : SyncScript
 
         for (int i = 0; i < MaxPairs; i++)
         {
-            int row = i / Columns, column = i % Columns;
+            // Fill each row from the middle outwards, so a few pairs stay centred in front of the camera.
+            int row = i / Columns, slot = i % Columns;
+            int column = Columns / 2 + (slot % 2 == 0 ? slot / 2 : -(slot + 1) / 2);
             var origin = new Vector3((column - (Columns - 1) * 0.5f) * Spacing * 2, 0, -row * Spacing);
             var female = CreateCharacter($"Female {i}", FemaleModel, FemaleAnimations, origin + new Vector3(-Spacing * 0.5f, 0, 0), i * 2);
             var male = CreateCharacter($"Male {i}", MaleModel, MaleAnimations, origin + new Vector3(Spacing * 0.5f, 0, 0), i * 2 + 1);
@@ -88,6 +92,13 @@ public sealed class CharacterStressController : SyncScript
             morphsLabel.Text = $"Active morphs: {ActiveMorphs} / {morphNames.Length}";
         }
 
+        // Clip mode: the animation processor writes weights from the clips' MorphWeights[...] channels.
+        if (ClipMorphs)
+        {
+            timings.Report(stats);
+            return;
+        }
+
         float time = (float)Game.UpdateTime.Total.TotalSeconds;
         int activeModels = ActivePairs * 2;
         for (int i = 0; i < activeModels; i++)
@@ -98,7 +109,7 @@ public sealed class CharacterStressController : SyncScript
                 if (slots[m] >= 0) weights[slots[m]] = MathF.Sin(time * (0.7f + m * 0.13f) + i * 0.9f + m);
         }
 
-        statsLabel.Text = timings.Report();
+        timings.Report(stats);
     }
 
     private Entity CreateCharacter(string name, Model model, List<AnimationClip> clips, Vector3 position, int index)
@@ -122,97 +133,21 @@ public sealed class CharacterStressController : SyncScript
 
     public override void Cancel() => timings?.Dispose();
 
-    private Button ToggleButton(TextBlock label, Action click)
-    {
-        var button = new Button
-        {
-            Content = label,
-            NotPressedImage = buttonSprite,
-            MouseOverImage = buttonSprite,
-            PressedImage = buttonPressedSprite,
-            Padding = new Thickness(10, 6, 10, 6),
-            Margin = new Thickness(0, 8, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        button.Click += (_, _) => click();
-        return button;
-    }
-
     private void CreateUI()
     {
-        var track = SolidSprite(new Color(60, 60, 60), 64, 8);
-        var fill = SolidSprite(new Color(70, 140, 220), 64, 8);
-        var thumb = SolidSprite(new Color(230, 230, 230), 12, 24);
-        buttonSprite = SolidSprite(new Color(55, 55, 55), 16, 16);
-        buttonPressedSprite = SolidSprite(new Color(70, 140, 220), 16, 16);
+        var ui = new SampleUI(this, Font);
+        var panel = new StackPanel { Orientation = Orientation.Vertical, Width = 340 };
+        panel.Children.Add(ui.Heading("Character stress test"));
+        stats = ui.Table(panel, FrameTimings.Rows);
 
-        var panel = new StackPanel { Orientation = Orientation.Vertical };
+        panel.Children.Add(ui.Section("Workload"));
+        panel.Children.Add(pairsLabel = ui.Label());
+        panel.Children.Add(ui.IntegerSlider(0, MaxPairs, ActivePairs, value => ActivePairs = value));
+        panel.Children.Add(morphsLabel = ui.Label());
+        panel.Children.Add(ui.IntegerSlider(0, morphNames.Length, ActiveMorphs, value => ActiveMorphs = value));
+        ui.RadioGroup(panel, "Morph weights", ["Script sine waves", "Animation clips"], ClipMorphs ? 1 : 0, index => { ClipMorphs = index == 1; appliedMorphs = -1; });
 
-        statsLabel = Label();
-        panel.Children.Add(statsLabel);
-
-        pairsLabel = Label();
-        panel.Children.Add(pairsLabel);
-        panel.Children.Add(IntegerSlider(0, MaxPairs, ActivePairs, track, fill, thumb, value => ActivePairs = value));
-
-        morphsLabel = Label();
-        panel.Children.Add(morphsLabel);
-        panel.Children.Add(IntegerSlider(0, morphNames.Length, ActiveMorphs, track, fill, thumb, value => ActiveMorphs = value));
-
-        new DeformationControls(this).AddTo(panel, Label, ToggleButton, (minimum, maximum, value, changed) => IntegerSlider(minimum, maximum, value, track, fill, thumb, changed));
-
-        if (SwitchScene != null)
-        {
-            var switchLabel = Label();
-            switchLabel.Text = "Open cylinder benchmark scene";
-            panel.Children.Add(ToggleButton(switchLabel, () => SceneSwitch.Load(this, SwitchScene)));
-        }
-
-        var root = new Border
-        {
-            Content = panel,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(16, 16, 0, 0),
-            Padding = new Thickness(12, 12, 12, 12),
-            BackgroundColor = new Color(0, 0, 0, 160),
-        };
-        Entity.Add(new UIComponent { Page = new UIPage { RootElement = root } });
-    }
-
-    private TextBlock Label() => new TextBlock
-    {
-        Font = Font,
-        TextSize = 18,
-        TextColor = Color.White,
-        Margin = new Thickness(0, 6, 0, 2),
-    };
-
-    private static Slider IntegerSlider(int minimum, int maximum, int value, ISpriteProvider track, ISpriteProvider fill, ISpriteProvider thumb, Action<int> changed)
-    {
-        var slider = new Slider
-        {
-            Minimum = minimum,
-            Maximum = Math.Max(minimum + 1, maximum),
-            TickFrequency = Math.Max(1, maximum - minimum),
-            ShouldSnapToTicks = true,
-            Step = 1,
-            Width = 320,
-            Height = 24,
-            TrackBackgroundImage = track,
-            TrackForegroundImage = fill,
-            ThumbImage = thumb,
-            MouseOverThumbImage = thumb,
-        };
-        slider.Value = value;
-        slider.ValueChanged += (_, _) => changed((int)MathF.Round(slider.Value));
-        return slider;
-    }
-
-    private ISpriteProvider SolidSprite(Color color, int width, int height)
-    {
-        var pixels = Enumerable.Repeat(color, width * height).ToArray();
-        var texture = Texture.New2D(GraphicsDevice, width, height, PixelFormat.R8G8B8A8_UNorm, pixels);
-        return new SpriteFromTexture { Texture = texture };
+        new DeformationControls(this).AddTo(panel, ui);
+        SampleUI.Show(this, ui.Panel(panel, HorizontalAlignment.Left));
     }
 }

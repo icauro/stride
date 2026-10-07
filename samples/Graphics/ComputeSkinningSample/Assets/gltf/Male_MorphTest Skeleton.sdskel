@@ -73,4 +73,4 @@ Nodes:
     b1d41ae12fedfedde45ddd938a3d33b5: {Name: ball_r, Depth: 6}
     794f10867a59ee4d5adc45d4536537f3: {Name: ball_leaf_r, Depth: 7}
 ~SourceHashes:
-    8681aa377800b4aa5ea6ac15050762d0~../../Resources/gltf/Male_MorphTest.gltf: ab1757088924abd969b4d2a3e7292e2b
+    8681aa377800b4aa5ea6ac15050762d0~../../Resources/gltf/Male_MorphTest.gltf: df173a07c4304a04959d816b34329f42

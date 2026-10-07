@@ -9,7 +9,7 @@ Materials:
     a75f8d8d1789364cd724128b818aad84:
         Name: MorphDebug
         MaterialInstance:
-            Material: c6d4799f-a5ec-4803-af53-32ec4038d6d4:Material
+            Material: c6d4799f-a5ec-4803-af53-32ec4038d6d4:ground_mat
 DeduplicateMaterials: false
 Modifiers: {}
 MorphLayout: DenseMorphMajor

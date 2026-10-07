@@ -1,6 +1,7 @@
 using Stride.Engine;
 using Stride.Engine.Design;
 using Stride.Rendering;
+using Stride.UI;
 using Stride.UI.Controls;
 using Stride.UI.Panels;
 
@@ -10,7 +11,7 @@ namespace ComputeSkinningSample;
 sealed class DeformationControls
 {
     private readonly MeshDeformationSettings settings;
-    private TextBlock modeLabel, batchSizeLabel, groupLabel;
+    private TextBlock modeHint, batchSizeLabel;
 
     public DeformationControls(ScriptComponent script)
     {
@@ -21,30 +22,27 @@ sealed class DeformationControls
         foreach (var processor in script.SceneSystem.SceneInstance.Processors.OfType<ModelRenderProcessor>()) processor.DeformationSettings = settings;
     }
 
-    public void AddTo(StackPanel panel, Func<TextBlock> label, Func<TextBlock, Action, Button> toggle, Func<int, int, int, Action<int>, Slider> slider)
+    public void AddTo(StackPanel panel, SampleUI ui)
     {
-        panel.Children.Add(toggle(modeLabel = label(), () => { settings.Mode = Next(settings.Mode); Refresh(); }));
-        panel.Children.Add(batchSizeLabel = label());
-        panel.Children.Add(slider(1, 64, settings.BatchSize, value => { settings.BatchSize = value; Refresh(); }));
-        panel.Children.Add(toggle(groupLabel = label(), () => { settings.ThreadGroup = Next(settings.ThreadGroup); Refresh(); }));
+        panel.Children.Add(ui.Section("Deformation (all scenes)"));
+        var modes = Enum.GetValues<MeshDeformationMode>();
+        ui.RadioGroup(panel, "Mode", ["Auto", "Morph", "Morph + skin"], Array.IndexOf(modes, settings.Mode), index => { settings.Mode = modes[index]; Refresh(); });
+        panel.Children.Add(modeHint = ui.Text("", 13, SampleUI.Muted, new Thickness(0, 2, 0, 0)));
+        panel.Children.Add(batchSizeLabel = ui.Label());
+        panel.Children.Add(ui.IntegerSlider(1, 64, settings.BatchSize, value => { settings.BatchSize = value; Refresh(); }));
+        var groups = Enum.GetValues<DeformationThreadGroup>();
+        ui.RadioGroup(panel, "Thread group", groups.Select(group => group.ToString()).ToArray(), Array.IndexOf(groups, settings.ThreadGroup), index => settings.ThreadGroup = groups[index]);
         Refresh();
-    }
-
-    private static T Next<T>(T value) where T : struct, Enum
-    {
-        var values = Enum.GetValues<T>();
-        return values[(Array.IndexOf(values, value) + 1) % values.Length];
     }
 
     private void Refresh()
     {
-        modeLabel.Text = settings.Mode switch
+        modeHint.Text = settings.Mode switch
         {
-            MeshDeformationMode.Auto => "Deformation: Auto (compute skinning for shadow casters)",
-            MeshDeformationMode.ComputeMorph => "Deformation: Compute morph + vertex-shader skinning",
-            _ => "Deformation: Compute morph + skinning",
+            MeshDeformationMode.Auto => "Compute skinning for shadow casters only",
+            MeshDeformationMode.ComputeMorph => "Compute morphs; skinning stays in the vertex shader",
+            _ => "Morphs and skinning both in compute",
         };
         batchSizeLabel.Text = settings.BatchSize == 1 ? "Batch size: 1 (one dispatch per instance)" : $"Batch size: {settings.BatchSize}";
-        groupLabel.Text = $"Thread group: {settings.ThreadGroup}";
     }
 }

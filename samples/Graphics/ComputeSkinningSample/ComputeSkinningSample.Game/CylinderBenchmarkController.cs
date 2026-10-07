@@ -1,10 +1,8 @@
 using Stride.Core;
 using Stride.Core.Mathematics;
-using Stride.Core.Serialization;
 using Stride.Engine;
 using Stride.Graphics;
 using Stride.Rendering;
-using Stride.Rendering.Sprites;
 using Stride.UI;
 using Stride.UI.Controls;
 using Stride.UI.Panels;
@@ -16,7 +14,6 @@ namespace ComputeSkinningSample;
 public sealed class CylinderBenchmarkController : SyncScript
 {
     public SpriteFont Font { get; set; }
-    public UrlReference<Scene> SwitchScene { get; set; }
     public Material Material { get; set; }
 
     public int MeshCount { get; set; } = 2;
@@ -31,38 +28,74 @@ public sealed class CylinderBenchmarkController : SyncScript
 
     private readonly List<Entity> entities = new();
     private readonly List<ModelComponent> models = new();
-    private readonly List<int[]> mappings = new();
+    private readonly List<Model> meshModels = new();
+    private int[] mapping;
     private MorphWorkload workload;
     private int[] previous;
     private int[] animatedNodes;
     private Quaternion[] bindRotations;
-    private int frame, appliedInstances = -1;
-    private TextBlock statsLabel, instancesLabel, morphLabel;
-    private ISpriteProvider buttonSprite, buttonPressedSprite;
+    private int frame, appliedInstances = -1, appliedMeshes, appliedPerMesh;
+    private TextBlock instancesLabel, meshesLabel, perMeshLabel;
+    private Slider instancesSlider;
+    private TextBlock[] stats;
     private FrameTimings timings;
+
+    public const int MaxInstancesPerMesh = 64;
+    // A dense mesh holds 600 x 61k morph entries (about 880 MB on the GPU), so dense allows fewer meshes.
+    private int MaxMeshes => Dense ? 4 : 16;
+    // Weight streams are precomputed per instance, so instances beyond this reuse them cyclically.
+    private const int WorkloadInstances = 64;
 
     public override void Start()
     {
-        MeshCount = Math.Max(1, MeshCount);
-        InstancesPerMesh = Math.Max(1, InstancesPerMesh);
+        // Benchmark scenes present without vsync so frame times are not capped at the refresh rate.
+        // Each scene sets its own interval, because during a switch the next scene starts before the previous one stops.
+        GraphicsDevice.Presenter.PresentInterval = PresentInterval.Immediate;
+
+        // Generating a 600-target cylinder is the slow part, so it happens once; other meshes are copies of it.
+        var template = ProceduralCylinder.Create(GraphicsDevice, Dense ? MeshMorphLayout.DenseMorphMajor : MeshMorphLayout.SparseVertexMajor);
+        var mesh = template.Meshes[0];
+        mesh.BoundingBox = new BoundingBox(new Vector3(-ProceduralCylinder.Radius - 0.2f, -ProceduralCylinder.Height / 2 - 0.2f, -ProceduralCylinder.Radius - 0.2f),
+            new Vector3(ProceduralCylinder.Radius + 0.2f, ProceduralCylinder.Height / 2 + 0.2f, ProceduralCylinder.Radius + 0.2f));
+        mesh.BoundingSphere = BoundingSphere.FromBox(mesh.BoundingBox);
+        template.BoundingBox = mesh.BoundingBox;
+        template.BoundingSphere = mesh.BoundingSphere;
+        if (Material != null) template.Materials.Add(Material);
+        meshModels.Add(template);
+
+        workload = new MorphWorkload(Scenario, WorkloadInstances);
+        mapping = workload.MapTargets(mesh.MorphTargets.TargetNames);
+        animatedNodes = mesh.Skinning.Bones.Select(bone => bone.NodeIndex).ToArray();
+        bindRotations = animatedNodes.Select(node => template.Skeleton.Nodes[node].Transform.Rotation).ToArray();
+
+        MeshCount = Math.Clamp(MeshCount, 1, MaxMeshes);
+        InstancesPerMesh = Math.Clamp(InstancesPerMesh, 1, MaxInstancesPerMesh);
+        CreateUI();
+        timings = new FrameTimings(this);
+        Rebuild();
+    }
+
+    /// <summary>
+    /// Recreates the instances for the current mesh count. Each extra mesh is a shallow copy of the template:
+    /// it reuses the template's buffers and morph data, but the deformation renderer keys shared data by mesh,
+    /// so every copy gets its own GPU morph buffers and batches, like a distinct asset.
+    /// </summary>
+    private void Rebuild()
+    {
+        foreach (var entity in entities) Entity.RemoveChild(entity);
+        entities.Clear();
+        models.Clear();
+
         int total = MeshCount * InstancesPerMesh;
-        ActiveInstances = Math.Clamp(ActiveInstances, 0, total);
-        workload = new MorphWorkload(Scenario, total);
+        bool wasFull = ActiveInstances >= appliedMeshes * appliedPerMesh;
+        ActiveInstances = wasFull ? total : Math.Clamp(ActiveInstances, 0, total);
         previous = Enumerable.Repeat(-1, total).ToArray();
 
         int columns = (int)Math.Ceiling(Math.Sqrt(total));
         for (int meshIndex = 0; meshIndex < MeshCount; meshIndex++)
         {
-            var model = ProceduralCylinder.Create(GraphicsDevice, Dense ? MeshMorphLayout.DenseMorphMajor : MeshMorphLayout.SparseVertexMajor, seed: MorphWorkload.DefaultSeed + meshIndex);
-            foreach (var mesh in model.Meshes)
-            {
-                mesh.BoundingBox = new BoundingBox(new Vector3(-ProceduralCylinder.Radius - 0.2f, -ProceduralCylinder.Height / 2 - 0.2f, -ProceduralCylinder.Radius - 0.2f),
-                    new Vector3(ProceduralCylinder.Radius + 0.2f, ProceduralCylinder.Height / 2 + 0.2f, ProceduralCylinder.Radius + 0.2f));
-                mesh.BoundingSphere = BoundingSphere.FromBox(mesh.BoundingBox);
-            }
-            model.BoundingBox = model.Meshes[0].BoundingBox;
-            model.BoundingSphere = model.Meshes[0].BoundingSphere;
-            if (Material != null) model.Materials.Add(Material);
+            while (meshModels.Count <= meshIndex) meshModels.Add(Copy(meshModels[0]));
+            var model = meshModels[meshIndex];
             for (int i = 0; i < InstancesPerMesh; i++)
             {
                 int index = meshIndex * InstancesPerMesh + i;
@@ -73,123 +106,80 @@ public sealed class CylinderBenchmarkController : SyncScript
                 Entity.AddChild(entity);
                 entities.Add(entity);
                 models.Add(component);
-                mappings.Add(workload.MapTargets(model.Meshes[0].MorphTargets.TargetNames));
             }
         }
-        var skeleton = models[0].Model.Skeleton;
-        animatedNodes = models[0].Model.Meshes[0].Skinning.Bones.Select(bone => bone.NodeIndex).ToArray();
-        bindRotations = animatedNodes.Select(node => skeleton.Nodes[node].Transform.Rotation).ToArray();
 
-        CreateUI();
-        timings = new FrameTimings(this);
-        UpdateLabels();
+        appliedMeshes = MeshCount;
+        appliedPerMesh = InstancesPerMesh;
+        appliedInstances = -1;
+        // Lowering the maximum clamps the slider and raises ValueChanged, so restore the count afterwards.
+        int active = ActiveInstances;
+        instancesSlider.Maximum = Math.Max(1, total);
+        instancesSlider.TickFrequency = Math.Max(1, total);
+        instancesSlider.Value = active;
+        ActiveInstances = active;
+        long morphBytes = (long)meshModels[0].Meshes[0].MorphTargets.Entries.Length * MeshMorphEntry.SizeInBytes * MeshCount;
+        meshesLabel.Text = $"Shared meshes: {MeshCount} ({morphBytes / (1024.0 * 1024 * 1024):0.0} GB morph data)";
+        perMeshLabel.Text = $"Instances per mesh: {InstancesPerMesh}";
+    }
+
+    private static Model Copy(Model source)
+    {
+        var copy = new Model { Skeleton = source.Skeleton, BoundingBox = source.BoundingBox, BoundingSphere = source.BoundingSphere };
+        foreach (var mesh in source.Meshes) copy.Meshes.Add(new Mesh(mesh));
+        foreach (var material in source.Materials) copy.Materials.Add(material);
+        return copy;
     }
 
     public override void Update()
     {
+        if (appliedMeshes != MeshCount || appliedPerMesh != InstancesPerMesh)
+            Rebuild();
         if (appliedInstances != ActiveInstances)
         {
             for (int i = 0; i < entities.Count; i++) entities[i].EnableAll(i < ActiveInstances, true);
             appliedInstances = ActiveInstances;
-            instancesLabel.Text = $"Active instances: {ActiveInstances} / {entities.Count} ({MeshCount} shared meshes)";
+            instancesLabel.Text = $"Active instances: {ActiveInstances} / {entities.Count}";
         }
         for (int i = 0; i < ActiveInstances; i++)
         {
             var model = models[i];
-            var mapping = mappings[i];
-            if (AnimateMorphs) workload.ApplyFrame(frame, i, ref previous[i], (target, weight) => model.SetMorphWeight(0, mapping[target], weight));
+            if (AnimateMorphs) workload.ApplyFrame(frame, i % WorkloadInstances, ref previous[i], (target, weight) => model.SetMorphWeight(0, mapping[target], weight));
             if (AnimateSkinning && model.Skeleton != null)
                 for (int bone = 0; bone < animatedNodes.Length; bone++)
                     model.Skeleton.NodeTransformations[animatedNodes[bone]].Transform.Rotation = bindRotations[bone] * Quaternion.RotationZ((float)Math.Sin(frame / 60.0 + bone * 0.7) * 0.18f);
         }
         if (++frame == workload.FrameCount) { frame = 0; Array.Fill(previous, -1); }
-        statsLabel.Text = timings.Report();
+        timings.Report(stats);
     }
 
     public override void Cancel() => timings?.Dispose();
 
-    private void UpdateLabels()
-    {
-        if (morphLabel == null) return;
-        morphLabel.Text = $"Morphs: {(AnimateMorphs ? "animated" : "frozen")}, {(Dense ? "dense" : "sparse")}, {MorphWorkload.TargetCount} targets";
-    }
-
     private void CreateUI()
     {
-        var track = SolidSprite(new Color(60, 60, 60), 64, 8);
-        var fill = SolidSprite(new Color(70, 140, 220), 64, 8);
-        var thumb = SolidSprite(new Color(230, 230, 230), 12, 24);
-        buttonSprite = SolidSprite(new Color(55, 55, 55), 16, 16);
-        buttonPressedSprite = SolidSprite(new Color(70, 140, 220), 16, 16);
+        var ui = new SampleUI(this, Font);
+        var panel = new StackPanel { Orientation = Orientation.Vertical, Width = 340 };
+        panel.Children.Add(ui.Heading("Cylinder benchmark"));
+        stats = ui.Table(panel, FrameTimings.Rows);
 
-        var panel = new StackPanel { Orientation = Orientation.Vertical };
-        panel.Children.Add(statsLabel = Label());
-        panel.Children.Add(instancesLabel = Label());
-        panel.Children.Add(IntegerSlider(0, MeshCount * InstancesPerMesh, ActiveInstances, track, fill, thumb, value => ActiveInstances = value));
-        panel.Children.Add(ToggleButton(morphLabel = Label(), () => { AnimateMorphs = !AnimateMorphs; UpdateLabels(); }));
-        new DeformationControls(this).AddTo(panel, Label, ToggleButton, (minimum, maximum, value, changed) => IntegerSlider(minimum, maximum, value, track, fill, thumb, changed));
-
-        if (SwitchScene != null)
+        panel.Children.Add(ui.Section("Workload"));
+        panel.Children.Add(meshesLabel = ui.Label());
+        panel.Children.Add(ui.IntegerSlider(1, MaxMeshes, MeshCount, value => MeshCount = Math.Max(1, value)));
+        panel.Children.Add(perMeshLabel = ui.Label());
+        panel.Children.Add(ui.IntegerSlider(1, MaxInstancesPerMesh, InstancesPerMesh, value => InstancesPerMesh = Math.Max(1, value)));
+        panel.Children.Add(instancesLabel = ui.Label());
+        panel.Children.Add(instancesSlider = ui.IntegerSlider(0, MeshCount * InstancesPerMesh, ActiveInstances, value => ActiveInstances = value));
+        panel.Children.Add(ui.Text($"{(Dense ? "Dense" : "Sparse")} morph layout, {MorphWorkload.TargetCount} targets per mesh", 13, SampleUI.Muted, new Thickness(0, 6, 0, 0)));
+        ui.RadioGroup(panel, "Morphs", ["Animated", "Frozen"], AnimateMorphs ? 0 : 1, index => AnimateMorphs = index == 0);
+        ui.RadioGroup(panel, "Weight scenario", ["All changing", "Mixed 200/200/200"], Math.Max(0, Array.IndexOf(MorphWorkload.Scenarios, Scenario)), index =>
         {
-            var switchLabel = Label();
-            switchLabel.Text = "Open character scene";
-            panel.Children.Add(ToggleButton(switchLabel, () => SceneSwitch.Load(this, SwitchScene)));
-        }
+            Scenario = MorphWorkload.Scenarios[index];
+            workload = new MorphWorkload(Scenario, WorkloadInstances);
+            frame = 0;
+            Array.Fill(previous, -1);
+        });
 
-        var root = new Border
-        {
-            Content = panel,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(16, 16, 0, 0),
-            Padding = new Thickness(12, 12, 12, 12),
-            BackgroundColor = new Color(0, 0, 0, 160),
-        };
-        Entity.Add(new UIComponent { Page = new UIPage { RootElement = root } });
-    }
-
-    private Button ToggleButton(TextBlock label, Action click)
-    {
-        var button = new Button
-        {
-            Content = label,
-            NotPressedImage = buttonSprite,
-            MouseOverImage = buttonSprite,
-            PressedImage = buttonPressedSprite,
-            Padding = new Thickness(10, 6, 10, 6),
-            Margin = new Thickness(0, 8, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        button.Click += (_, _) => click();
-        return button;
-    }
-
-    private TextBlock Label() => new TextBlock { Font = Font, TextSize = 18, TextColor = Color.White, Margin = new Thickness(0, 6, 0, 2) };
-
-    private static Slider IntegerSlider(int minimum, int maximum, int value, ISpriteProvider track, ISpriteProvider fill, ISpriteProvider thumb, Action<int> changed)
-    {
-        var slider = new Slider
-        {
-            Minimum = minimum,
-            Maximum = Math.Max(minimum + 1, maximum),
-            TickFrequency = Math.Max(1, maximum - minimum),
-            ShouldSnapToTicks = true,
-            Step = 1,
-            Width = 320,
-            Height = 24,
-            TrackBackgroundImage = track,
-            TrackForegroundImage = fill,
-            ThumbImage = thumb,
-            MouseOverThumbImage = thumb,
-        };
-        slider.Value = value;
-        slider.ValueChanged += (_, _) => changed((int)MathF.Round(slider.Value));
-        return slider;
-    }
-
-    private ISpriteProvider SolidSprite(Color color, int width, int height)
-    {
-        var pixels = Enumerable.Repeat(color, width * height).ToArray();
-        return new SpriteFromTexture { Texture = Texture.New2D(GraphicsDevice, width, height, PixelFormat.R8G8B8A8_UNorm, pixels) };
+        new DeformationControls(this).AddTo(panel, ui);
+        SampleUI.Show(this, ui.Panel(panel, HorizontalAlignment.Left));
     }
 }

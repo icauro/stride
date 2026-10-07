@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Reflection;
-using System.Text;
 using Stride.Engine;
 using Stride.Graphics;
 using Stride.Rendering;
 using Stride.Rendering.Compositing;
+using Stride.UI.Controls;
 
 namespace ComputeSkinningSample;
 
@@ -31,6 +31,7 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
     private readonly TimedSceneRenderer sceneRenderer;
     private readonly ISceneRenderer originalRenderer;
     private int slot = -1, next;
+    private bool disposed;
     private long deformationCpuStart;
 
     public FrameTimings(ScriptComponent owner)
@@ -38,6 +39,8 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
         this.owner = owner;
         commandList = owner.Game.GraphicsContext.CommandList;
         for (int i = 0; i < Slots; i++) { pools[i] = QueryPool.New(owner.GraphicsDevice, QueryType.Timestamp, Capacity); regions[i] = new(); }
+        // During a scene switch the previous scene's timings are still alive until its script is cancelled.
+        owner.Services.RemoveService<IGpuTimestampRecorder>();
         owner.Services.AddService<IGpuTimestampRecorder>(this);
         // Bracket the model processors' GPU recording, where deformation is dispatched.
         begin = new BoundaryProcessor(this, true, -1);
@@ -46,12 +49,14 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
         owner.SceneSystem.SceneInstance.Processors.Add(end);
         var compositor = owner.SceneSystem.GraphicsCompositor;
         originalRenderer = compositor.Game;
+        while (originalRenderer is TimedSceneRenderer timed)
+            originalRenderer = timed.Child;
         compositor.Game = sceneRenderer = new TimedSceneRenderer { Child = originalRenderer, Timings = this };
     }
 
     public IDisposable BeginRegion(string name)
     {
-        if (slot < 0 || used[slot] + 2 > Capacity) return null;
+        if (disposed || slot < 0 || used[slot] + 2 > Capacity) return null;
         int start = used[slot]++;
         commandList.WriteTimestamp(pools[slot], start);
         return new Region(this, name, slot, start);
@@ -59,6 +64,7 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
 
     private void BeginFrame()
     {
+        if (disposed) return;
         Poll();
         slot = -1;
         if (pending[next]) return; // GPU is far behind; skip timing this frame rather than stall.
@@ -74,7 +80,7 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
 
     private void EndFrame()
     {
-        if (slot < 0) return;
+        if (disposed || slot < 0) return;
         frameRegion?.Dispose();
         frameRegion = null;
         // Vulkan only reports a pool once every query in it has been written.
@@ -106,29 +112,36 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
     }
 
     private static string Format(Dictionary<string, Queue<double>> samples, string name)
-        => samples.TryGetValue(name, out var queue) && queue.Count > 0 ? $"{queue.Average(),6:0.00} ms" : "     -   ";
+        => samples.TryGetValue(name, out var queue) && queue.Count > 0 ? $"{queue.Average():0.00} ms" : "-";
 
-    /// <summary>Call once per frame from the owning script's Update.</summary>
-    public string Report()
+    /// <summary>Row names for <see cref="Report"/>; indented rows are breakdowns of the row above.</summary>
+    public static readonly string[] Rows =
+    [
+        "Frame rate", "CPU frame", "CPU deformation", "CPU scene draw",
+        "GPU frame", "GPU deformation", "   upload", "   dense dispatch", "   sparse dispatch", "GPU scene",
+    ];
+
+    /// <summary>Call once per frame from the owning script's Update; fills one value per <see cref="Rows"/> entry.</summary>
+    public void Report(TextBlock[] values)
     {
         Add(cpu, "Frame", owner.Game.UpdateTime.Elapsed.TotalMilliseconds);
-        var text = new StringBuilder();
-        text.Append($"{owner.Game.UpdateTime.FramePerSecond:0} FPS\n");
-        text.Append($"CPU frame         {Format(cpu, "Frame")}\n");
-        text.Append($"CPU deformation   {Format(cpu, "Deformation")}\n");
-        text.Append($"CPU scene draw    {Format(cpu, "Scene")}\n");
-        text.Append($"GPU frame         {Format(gpu, "Frame")}\n");
-        text.Append($"GPU deformation   {Format(gpu, "Deformation")}\n");
-        text.Append($"  upload          {Format(gpu, "ControlUpload")}\n");
-        text.Append($"  dense dispatch  {Format(gpu, "DenseSkinning")}\n");
-        text.Append($"  sparse dispatch {Format(gpu, "SparseSkinning")}\n");
-        text.Append($"GPU scene         {Format(gpu, "Scene")}");
-        return text.ToString();
+        values[0].Text = $"{owner.Game.UpdateTime.FramePerSecond:0} FPS";
+        values[1].Text = Format(cpu, "Frame");
+        values[2].Text = Format(cpu, "Deformation");
+        values[3].Text = Format(cpu, "Scene");
+        values[4].Text = Format(gpu, "Frame");
+        values[5].Text = Format(gpu, "Deformation");
+        values[6].Text = Format(gpu, "ControlUpload");
+        values[7].Text = Format(gpu, "DenseSkinning");
+        values[8].Text = Format(gpu, "SparseSkinning");
+        values[9].Text = Format(gpu, "Scene");
     }
 
     public void Dispose()
     {
-        owner.Services.RemoveService<IGpuTimestampRecorder>();
+        disposed = true;
+        if (owner.Services.GetService<IGpuTimestampRecorder>() == this)
+            owner.Services.RemoveService<IGpuTimestampRecorder>();
         owner.SceneSystem.SceneInstance?.Processors.Remove(begin);
         owner.SceneSystem.SceneInstance?.Processors.Remove(end);
         var compositor = owner.SceneSystem.GraphicsCompositor;
@@ -140,7 +153,7 @@ public sealed class FrameTimings : IGpuTimestampRecorder, IDisposable
     {
         public void Dispose()
         {
-            if (timings.slot != slot || timings.used[slot] >= Capacity) return;
+            if (timings.disposed || timings.slot != slot || timings.used[slot] >= Capacity) return;
             int stop = timings.used[slot]++;
             timings.commandList.WriteTimestamp(timings.pools[slot], stop);
             timings.regions[slot].Add((name, start, stop));
