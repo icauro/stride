@@ -22,6 +22,8 @@ namespace Stride.Editor.Engine
             GraphicsDeviceManager.DeviceCreationFlags = StrideConfig.GraphicsDebugMode ? DeviceCreationFlags.Debug : DeviceCreationFlags.None;
 
             AutoLoadDefaultSettings = false;
+            // Property-grid edits change authored morph weight items in place.
+            ModelMorphSettings.ApplyAuthoredWeightsEveryFrame = true;
         }
 
         /// <inheritdoc />
