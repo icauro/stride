@@ -1217,7 +1217,7 @@ namespace Stride.Importer.ThreeD
             bool hasAnyBlendShapeTangent = false;
             if (mesh->MNumAnimMeshes > 0)
             {
-                var maxTargets = Math.Min((int)mesh->MNumAnimMeshes, 8);
+                var maxTargets = (int)mesh->MNumAnimMeshes;
                 blendShapeTargets = new BlendShapeTarget[maxTargets];
 
                 var blendShapeVertexBuffers = new List<VertexBufferBinding> { vertexBufferBinding };

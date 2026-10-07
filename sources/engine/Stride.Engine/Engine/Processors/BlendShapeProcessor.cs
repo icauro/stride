@@ -253,6 +253,8 @@ namespace Stride.Engine.Processors
                     }
                 }
             }
+            // Release compute UAV bindings before render-time vertex fetch.
+            commandList?.ClearState();
         }
 
         /// <summary>

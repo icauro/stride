@@ -187,10 +187,12 @@ namespace Stride.Engine.Processors
             {
                 var paddedWeights = new float[targetCount];
                 Array.Copy(weights, paddedWeights, weights.Length);
+                using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
                 meshInfo.GpuAllWeightsBuffer.SetData(commandList, new ReadOnlySpan<float>(paddedWeights));
             }
             else
             {
+                using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
                 meshInfo.GpuAllWeightsBuffer.SetData(commandList, new ReadOnlySpan<float>(weights, 0, targetCount));
             }
 
@@ -514,7 +516,9 @@ namespace Stride.Engine.Processors
                 }
             }
 
+            using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
             meshInfo.GpuActiveIndicesBuffer.SetData(commandList, new ReadOnlySpan<uint>(cpuActiveIndices, 0, targetCount));
+            using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
             meshInfo.GpuActiveWeightsBuffer.SetData(commandList, new ReadOnlySpan<float>(cpuActiveWeights, 0, targetCount));
 
             var outputBuffer = meshInfo.ClonedMeshDraw.VertexBuffers[0].Buffer;
@@ -616,7 +620,9 @@ namespace Stride.Engine.Processors
             }
 
             // Upload active target data to pre-allocated GPU buffers
+            using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
             meshInfo.GpuActiveIndicesBuffer.SetData(commandList, new ReadOnlySpan<uint>(cpuActiveIndices, 0, targetCount));
+            using (services.GetService<IGpuTimestampRecorder>()?.BeginRegion("ControlUpload"))
             meshInfo.GpuActiveWeightsBuffer.SetData(commandList, new ReadOnlySpan<float>(cpuActiveWeights, 0, targetCount));
 
             // Get the output vertex buffer (VB[0] of the cloned MeshDraw)
