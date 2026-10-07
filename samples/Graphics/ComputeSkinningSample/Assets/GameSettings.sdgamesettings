@@ -19,6 +19,10 @@ Defaults:
     - !Stride.Streaming.StreamingSettings,Stride.Rendering
         ManagerUpdatesInterval: 0:00:00:00.0330000
         ResourceLiveTimeout: 0:00:00:08.0000000
+    - !Stride.Rendering.MeshDeformationSettings,Stride.Engine
+        Mode: Auto
+        BatchSize: 32
+        ThreadGroup: X32Y16
     - !Stride.Assets.Textures.TextureSettings,Stride.Assets
         TextureQuality: Fast
 SplashScreenTexture: d26edb11-10bd-403c-b3c2-9c7fcccf25e5:/Stride.Engine/StrideDefaultSplashScreen

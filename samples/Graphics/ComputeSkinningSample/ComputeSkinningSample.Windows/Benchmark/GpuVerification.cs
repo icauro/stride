@@ -1,4 +1,3 @@
-#if !NALA
 using System.Runtime.InteropServices;
 using Stride.Core.Mathematics;
 using Stride.Graphics;
@@ -6,7 +5,7 @@ using Stride.Graphics.Data;
 using Stride.Rendering;
 using Stride.Engine;
 
-sealed partial class ComputeSkinningSample
+sealed partial class BenchmarkGame
 {
     private readonly Dictionary<Stride.Graphics.Buffer, byte[]> referenceVertices = new();
     private readonly Stride.Graphics.Buffer[] lastOutputs;
@@ -14,11 +13,12 @@ sealed partial class ComputeSkinningSample
     private void VerifyGpuOutput()
     {
         var processors = SceneSystem.SceneInstance.Processors.OfType<ModelRenderProcessor>().ToArray();
+        var readbacks = new Dictionary<Stride.Graphics.Buffer, byte[]>();
         for (int instance = 0; instance < InstanceCount; instance++)
         {
             var processor = processors.First(x => x.RenderModels.ContainsKey(models[instance]));
             var rendered = processor.RenderModels[models[instance]];
-            for (int meshIndex = 0; meshIndex < sharedModel.Meshes.Count; meshIndex++)
+            for (int meshIndex = 0; meshIndex < models[instance].Model.Meshes.Count; meshIndex++)
             {
                 var mesh = models[instance].Model.Meshes[meshIndex];
                 var vb = mesh.Draw.VertexBuffers[0];
@@ -27,22 +27,23 @@ sealed partial class ComputeSkinningSample
                 var outputBinding = renderMesh.Mesh.Draw.VertexBuffers[0];
                 if (ReferenceEquals(outputBinding.Buffer, vb.Buffer))
                 {
-                    if (models[instance].SkinningMode != SkinningMode.VertexShader || data != null && models[instance].Morphs.Enabled)
+                    if (ComputeSkinning(models[instance]) || data != null && models[instance].Morphs.Enabled)
                         throw new Exception("Compute output was not installed on the render mesh.");
                     if (renderMesh.Mesh.Skinning == null || renderMesh.BlendMatrices == null)
                         throw new Exception("Skinning-only VS fallback was not restored.");
                     continue;
                 }
                 lastOutputs[instance] = outputBinding.Buffer;
-                byte[] actual = outputBinding.Buffer.GetData<byte>(GraphicsContext.CommandList);
+                if (!readbacks.TryGetValue(outputBinding.Buffer, out var actual))
+                    readbacks[outputBinding.Buffer] = actual = outputBinding.Buffer.GetData<byte>(GraphicsContext.CommandList);
                 if (!referenceVertices.TryGetValue(vb.Buffer, out var source))
                     referenceVertices[vb.Buffer] = source = vb.Buffer.GetSerializationData()?.Content ?? vb.Buffer.GetData<byte>(GraphicsContext.CommandList);
                 int Offset(string name) => vb.Declaration.EnumerateWithOffsets().First(x => x.VertexElement.SemanticName == name).Offset;
                 Vector3 Read(byte[] bytes, int address) => MemoryMarshal.Read<Vector3>(bytes.AsSpan(address, 12));
                 int pOffset = Offset("POSITION"), nOffset = Offset("NORMAL"), tOffset = Offset("TANGENT");
-                var bones = mesh.Skinning == null || models[instance].SkinningMode != SkinningMode.Compute ? Array.Empty<Matrix>() : models[instance].MeshInfos[meshIndex].BlendMatrices;
+                var bones = mesh.Skinning == null || !ComputeSkinning(models[instance]) ? Array.Empty<Matrix>() : models[instance].MeshInfos[meshIndex].BlendMatrices;
                 bool morphEnabled = models[instance].Morphs.Enabled;
-                if (mesh.Skinning != null && models[instance].SkinningMode == SkinningMode.VertexShader && (renderMesh.Mesh.Skinning == null || renderMesh.BlendMatrices == null))
+                if (mesh.Skinning != null && !ComputeSkinning(models[instance]) && (renderMesh.Mesh.Skinning == null || renderMesh.BlendMatrices == null))
                     throw new Exception("Vertex-shader skinning was not retained after morph compute.");
                 var inverse = Matrix.Invert(renderMesh.World);
                 for (int sample = 0; sample < 12; sample++)
@@ -91,7 +92,7 @@ sealed partial class ComputeSkinningSample
             }
         }
         gpuVerified = true;
-        Console.WriteLine($"PASS GPU/CPU {mode}, frame {frame}: position, normal, tangent, preserved attributes; {InstanceCount} independent instances.");
+        Console.WriteLine($"PASS GPU/CPU {mode}, frame {frame}: position, normal, tangent, preserved attributes; {InstanceCount} independent instances in {lastOutputs.Where(x => x != null).Distinct().Count()} output buffers.");
     }
     private bool zeroWeightsThisFrame;
 
@@ -99,8 +100,8 @@ sealed partial class ComputeSkinningSample
     {
         if (frame == 12 && !SkinningOnly) zeroWeightsThisFrame = true;
         if (frame == 13) previous[0] = -1;
-        if (frame == 16) models[0].SkinningMode = SkinningMode.VertexShader;
-        if (frame == 20) models[0].SkinningMode = SkinningMode.Compute;
+        if (frame == 16) deformationSettings.Mode = MeshDeformationMode.ComputeMorph;
+        if (frame == 20) deformationSettings.Mode = MeshDeformationMode.Compute;
         if (frame == 30) models[0].Morphs.Enabled = false;
         if (frame == 34) models[0].Morphs.Enabled = true;
         if (frame == 36) models[0].Morphs.Enabled = false;
@@ -125,8 +126,8 @@ sealed partial class ComputeSkinningSample
 
     private void VerifyModelOutputReleased()
     {
+        if (DeformationBatchSize > 1) { Console.WriteLine($"SKIP output release check at frame {frame}: batched instances share output buffers."); return; }
         if (removedOutput == null || !removedOutput.IsDisposed) throw new Exception("Model removal/disable did not release its output buffer.");
         Console.WriteLine($"PASS model output released at frame {frame}.");
     }
 }
-#endif

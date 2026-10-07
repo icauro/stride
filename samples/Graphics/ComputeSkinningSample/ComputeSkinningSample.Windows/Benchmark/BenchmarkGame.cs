@@ -1,13 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
-using MorphBenchmark;
+using ComputeSkinningSample;
 using Stride.Core.Mathematics;
 using Stride.Engine;
 using Stride.Games;
 using Stride.Graphics;
 using Stride.Graphics.Data;
 using Stride.Graphics.Semantics;
-using Stride.Importer.ThreeD;
 using Stride.Rendering;
 using Stride.Rendering.Compositing;
 using Stride.Rendering.Lights;
@@ -15,65 +14,55 @@ using Stride.Rendering.Materials;
 using Stride.Rendering.Materials.ComputeColors;
 using Stride.Shaders.Compiler;
 using Buffer = Stride.Graphics.Buffer;
-#if NALA
-using WeightComponent = Stride.Engine.BlendShapeComponent;
-#else
-using WeightComponent = Stride.Engine.ModelComponent;
-#endif
 
-string Value(string option, string fallback)
+// Automated timed runs: launch the Windows app with --benchmark [options].
+static class BenchmarkRunner
 {
-    int index = Array.IndexOf(args, option);
-    return index < 0 ? fallback : index + 1 < args.Length ? args[index + 1] : throw new ArgumentException($"Missing {option} value.");
-}
-string FindBenchmarkWorkspace()
-{
-    for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
+    public static readonly Stopwatch Startup = Stopwatch.StartNew();
+    public static string Elapsed => $"[{Startup.Elapsed.TotalSeconds:F1}s]";
+
+    public static void Run(string[] args)
     {
-        foreach (string candidate in new[] { directory.FullName, Path.Combine(directory.FullName, "2026-10-06-compute-skinning/morph-benchmark") })
-            if (File.Exists(Path.Combine(candidate, "workloads-16/workloads.json"))) return candidate;
+        string Value(string option, string fallback)
+        {
+            int index = Array.IndexOf(args, option);
+            return index < 0 ? fallback : index + 1 < args.Length ? args[index + 1] : throw new ArgumentException($"Missing {option} value.");
+        }
+        string scenario = Value("--scenario", "both");
+        if (scenario is not ("both" or "all-changing" or "mixed-200-200-200")) throw new ArgumentException("Unknown scenario.");
+        BenchmarkGame.MeasuredFrameLimit = int.Parse(Value("--measured-frames", "128"));
+        BenchmarkGame.MeshCount = int.Parse(Value("--meshes", "2"));
+        BenchmarkGame.InstancesPerMesh = int.Parse(Value("--instances-per-mesh", "32"));
+        using var game = new BenchmarkGame(scenario, Value("--output", Path.Combine(AppContext.BaseDirectory, "results")), args.Contains("--preview"), Value("--mode", "sparse"), !args.Contains("--morph-only"), args.Contains("--debug-gpu"), args.Contains("--verify-lifecycle"), args.Contains("--frustum-culling"));
+        game.RenderDocCapture = args.Contains("--renderdoc-capture");
+        game.SkinningOnly = args.Contains("--skinning-only");
+        game.VertexShaderSkinning = args.Contains("--vertex-skinning");
+        game.ZeroMorphs = args.Contains("--zero-morphs");
+        game.PointShadows = args.Contains("--point-shadows");
+        game.DirectionalShadows = args.Contains("--directional-shadows");
+        game.PointLights = game.PointShadows || args.Contains("--point-lights");
+        game.DeformationBatchSize = int.Parse(Value("--batch", "32"));
+        game.DeformationThreadGroup = Value("--thread-group", "X32Y16");
+        game.Run();
     }
-    throw new DirectoryNotFoundException("Cannot locate the sample workload. Supply --workload and --asset paths.");
 }
-string configuredManifest = Value("--workload", null);
-string root = configuredManifest != null
-    ? Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configuredManifest)), ".."))
-    : FindBenchmarkWorkspace();
-string manifest = Value("--workload", Path.Combine(root, "workloads-16/workloads.json"));
-string asset = Value("--asset", Path.Combine(root, "../morph-generator/generated/Icosphere.glb"));
-string scenario = Value("--scenario", "both");
-if (scenario is not ("both" or "all-changing" or "mixed-200-200-200")) throw new ArgumentException("Unknown scenario.");
-using var game = new ComputeSkinningSample(manifest, asset, scenario, Value("--output", Path.Combine(root, "results")), args.Contains("--preview"), Value("--mode", "sparse"), !args.Contains("--morph-only"), args.Contains("--debug-gpu"), args.Contains("--verify-lifecycle"), args.Contains("--frustum-culling"));
-game.RenderDocCapture = args.Contains("--renderdoc-capture");
-game.SkinningOnly = args.Contains("--skinning-only");
-game.VertexShaderSkinning = args.Contains("--vertex-skinning");
-game.ZeroMorphs = args.Contains("--zero-morphs");
-game.PointShadows = args.Contains("--point-shadows");
-game.DirectionalShadows = args.Contains("--directional-shadows");
-game.PointLights = game.PointShadows || args.Contains("--point-lights");
-#if NALA
-if (game.SkinningOnly || game.VertexShaderSkinning) throw new ArgumentException("These diagnostics target Our model deformation path.");
-#endif
-game.Run();
 
-sealed partial class ComputeSkinningSample : Game
+sealed partial class BenchmarkGame : Game
 {
     public bool RenderDocCapture { get; set; }
     public bool SkinningOnly { get; set; }
     public bool VertexShaderSkinning { get; set; }
+    public static int MeasuredFrameLimit { get; set; } = 128;
+    public static int MeshCount { get; set; } = 2;
+    public static int InstancesPerMesh { get; set; } = 32;
+    public int DeformationBatchSize { get; set; } = 32;
+    public string DeformationThreadGroup { get; set; } = "X32Y16";
     public bool ZeroMorphs { get; set; }
     public bool PointShadows { get; set; }
     public bool DirectionalShadows { get; set; }
     public bool PointLights { get; set; }
     private TimedShadowMapRenderer timedShadows;
-#if NALA
-    private const string Implementation = "Nala";
-    private const bool DeformationAvailable = true;
-#else
-    private const string Implementation = "Our";
-    private const bool DeformationAvailable = true;
-#endif
-    private readonly string manifest, asset, output;
+    private readonly string output;
     private readonly bool preview;
     private readonly bool animateSkinning;
     private readonly string mode;
@@ -84,7 +73,6 @@ sealed partial class ComputeSkinningSample : Game
     private readonly bool verifyLifecycle;
     private readonly Entity[] entities;
     private readonly MorphWorkload[] workloads;
-    private readonly WeightComponent[] components;
     private readonly Action<int, float>[] setters;
     private readonly int[] previous;
     private readonly int InstanceCount;
@@ -92,33 +80,30 @@ sealed partial class ComputeSkinningSample : Game
     private readonly List<double> updateMs = [], drawMs = [];
     private int caseIndex, frame = -1;
     private Model sharedModel;
+    private Model[] sharedModels;
     private GpuTimers gpuTimers;
     private bool waitingForGpu;
     private long gpuDrainStarted;
     private readonly bool frustumCulling;
     private BenchmarkCameraRenderer benchmarkCamera;
 
-    public ComputeSkinningSample(string manifest, string asset, string scenario, string output, bool preview, string mode, bool animateSkinning, bool debugGpu, bool verifyLifecycle, bool frustumCulling)
+    public BenchmarkGame(string scenario, string output, bool preview, string mode, bool animateSkinning, bool debugGpu, bool verifyLifecycle, bool frustumCulling)
     {
         if (mode is not ("dense" or "sparse")) throw new ArgumentException("Mode must be dense or sparse.");
         this.mode = mode;
         this.animateSkinning = animateSkinning;
         this.verifyLifecycle = verifyLifecycle;
         this.frustumCulling = frustumCulling;
-        this.manifest = manifest;
-        this.asset = asset;
         this.output = output;
         this.preview = preview;
-        MorphWorkload.VerifyAsset(manifest, asset);
-        workloads = (scenario == "both" ? new[] { "all-changing", "mixed-200-200-200" } : new[] { scenario })
-            .Select(name => new MorphWorkload(manifest, name)).ToArray();
+        workloads = (scenario == "both" ? MorphWorkload.Scenarios : new[] { scenario })
+            .Select(name => new MorphWorkload(name, MeshCount * InstancesPerMesh)).ToArray();
+        foreach (var workload in workloads) workload.LimitMeasuredFrames(MeasuredFrameLimit);
         InstanceCount = workloads[0].InstanceCount;
         models = new ModelComponent[InstanceCount]; entities = new Entity[InstanceCount];
-        components = new WeightComponent[InstanceCount]; setters = new Action<int, float>[InstanceCount];
+        setters = new Action<int, float>[InstanceCount];
         previous = Enumerable.Repeat(-1, InstanceCount).ToArray();
-#if !NALA
         lastOutputs = new Stride.Graphics.Buffer[InstanceCount];
-#endif
         IsFixedTimeStep = false;
         AutoLoadDefaultSettings = false;
         GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
@@ -131,54 +116,26 @@ sealed partial class ComputeSkinningSample : Game
 
     protected override Task LoadContent()
     {
+#if !VULKAN
         GraphicsDevice.DeviceInfoQueueMessage += (ref readonly Silk.NET.Direct3D11.Message message, string description) => Console.WriteLine("GPU: " + description);
+#endif
         // Standalone scene has no compiled asset package; use the matching branch's
         // shader sources copied beside the executable, with the normal effect cache.
         var compiler = new EffectCompiler(Content.FileProvider) { UseFileSystem = true };
         compiler.SourceDirectories.Add(Path.Combine(AppContext.BaseDirectory, "shaders"));
         EffectSystem.Compiler = new EffectCompilerCache(compiler, Content.FileProvider as Stride.Core.IO.DatabaseFileProvider);
-        Console.WriteLine($"Loading {asset}; {Implementation}, GPU morph ready: {DeformationAvailable}");
-        sharedModel = new MeshConverter(null).Convert(asset, asset, false);
-        if (animateSkinning) sharedModel.Skeleton = new MeshConverter(null).ConvertSkeleton(asset, asset);
-        if (sharedModel == null || sharedModel.Meshes.Count == 0) throw new InvalidDataException("Mesh import failed.");
-#if NALA
-        if (mode == "dense")
-        {
-            long deltaBytes = sharedModel.Meshes.Sum(mesh => (long)mesh.BlendShapes.VertexCount * mesh.BlendShapes.Targets.Length * 12 *
-                (mesh.BlendShapes.TangentOffset >= 0 && mesh.BlendShapes.BaseTangents != null ? 3 : 2)) * InstanceCount;
-            ulong dedicated = GraphicsDevice.Adapter.DedicatedVideoMemory;
-            if ((ulong)deltaBytes > dedicated)
-            {
-                Directory.CreateDirectory(output);
-                foreach (var workload in workloads)
-                {
-                    string result = Path.Combine(output, $"{Implementation}-{mode}-skinned-{workload.Name}.json");
-                    File.WriteAllText(result, JsonSerializer.Serialize(new { implementation = Implementation, evaluationMode = mode,
-                        instanceCount = InstanceCount, scenario = workload.Name, status = "over-memory-budget",
-                        reason = "Per-instance dense delta buffers exceed dedicated GPU memory; paging is excluded from this GPU comparison.",
-                        estimatedDeltaBytes = deltaBytes, dedicatedVideoMemoryBytes = dedicated }, new JsonSerializerOptions { WriteIndented = true }));
-                }
-                Console.WriteLine($"Not run: Nala dense needs {deltaBytes / 1073741824.0:F2} GiB of delta buffers; dedicated GPU memory {dedicated / 1073741824.0:F2} GiB.");
-                Exit(); return Task.CompletedTask;
-            }
-        }
-#endif
+        Console.WriteLine($"{BenchmarkRunner.Elapsed} LoadContent");
+        var generation = Stopwatch.StartNew();
+        // Each model gets its own seed, so their morph bands differ.
+        sharedModels = Enumerable.Range(0, MeshCount).Select(index => ProceduralCylinder.Create(GraphicsDevice, mode == "dense" ? MeshMorphLayout.DenseMorphMajor : MeshMorphLayout.SparseVertexMajor, seed: MorphWorkload.DefaultSeed + index)).ToArray();
+        sharedModel = sharedModels[0];
+        Console.WriteLine($"{BenchmarkRunner.Elapsed} Generated {MeshCount} procedural cylinders in {generation.Elapsed.TotalSeconds:F1} s.");
         Vector3 min = new(float.MaxValue), max = new(float.MinValue);
-        var uploaded = new Dictionary<Buffer, Buffer>();
-        Buffer Upload(Buffer source, int elementSize, BufferFlags flags)
-        {
-            if (uploaded.TryGetValue(source, out var existing)) return existing;
-            var data = source.GetSerializationData() ?? throw new InvalidDataException("Missing imported buffer bytes.");
-            var gpu = Buffer.New(GraphicsDevice, data.Content.AsSpan(), elementSize, flags);
-            // Nala's processor needs retained CPU bytes when preparing instance vertex buffers.
-            gpu.SetSerializationData(data);
-            buffers.Add(gpu);
-            uploaded.Add(source, gpu);
-            return gpu;
-        }
-        foreach (var mesh in sharedModel.Meshes)
+        foreach (var mesh in sharedModels.SelectMany(model => model.Meshes))
         {
             var binding = mesh.Draw.VertexBuffers[0];
+            buffers.Add(binding.Buffer);
+            buffers.Add(mesh.Draw.IndexBuffer.Buffer);
             var positions = new Vector3[binding.Count];
             var reader = new VertexBufferHelper(binding, binding.Buffer.GetSerializationData().Content, out _);
             reader.Copy<PositionSemantic, Vector3>(positions);
@@ -187,37 +144,23 @@ sealed partial class ComputeSkinningSample : Game
             mesh.BoundingBox = new BoundingBox(meshMin, meshMax);
             mesh.BoundingSphere = BoundingSphere.FromBox(mesh.BoundingBox);
             min = Vector3.Min(min, meshMin); max = Vector3.Max(max, meshMax);
-#if NALA
-            if (mesh.BlendShapes == null) throw new InvalidDataException("Imported mesh has no blend shapes.");
-            if (mode == "sparse") mesh.BlendShapes.Cook();
-            else mesh.BlendShapes.CookedData = null;
-            // Compute deformation consumes its serialized arrays. Legacy per-target
-            // vertex streams are not used by this benchmark's compute-render path.
-            mesh.Draw.VertexBuffers = [mesh.Draw.VertexBuffers[0]];
-#else
-            if (mesh.MorphTargets != null) mesh.MorphTargets = mesh.MorphTargets.WithLayout(mode == "dense" ? MeshMorphLayout.DenseMorphMajor : MeshMorphLayout.SparseVertexMajor);
-            mesh.MorphTargets?.Validate();
-            if (mesh.MorphTargets == null) throw new InvalidDataException("Imported mesh has no morph targets.");
-#endif
             if (!animateSkinning) { mesh.Skinning = null; mesh.NodeIndex = 0; }
-            for (int index = 0; index < mesh.Draw.VertexBuffers.Length; index++)
-            {
-                var vb = mesh.Draw.VertexBuffers[index];
-                mesh.Draw.VertexBuffers[index] = new VertexBufferBinding(Upload(vb.Buffer, vb.Stride, BufferFlags.VertexBuffer), vb.Declaration, vb.Count, vb.Stride, vb.Offset);
-            }
-            var ib = mesh.Draw.IndexBuffer;
-            if (ib != null) mesh.Draw.IndexBuffer = new IndexBufferBinding(Upload(ib.Buffer, ib.Is32Bit ? 4 : 2, BufferFlags.IndexBuffer), ib.Is32Bit, ib.Count, ib.Offset);
             mesh.MaterialIndex = 0;
         }
-        if (!animateSkinning) sharedModel.Skeleton = null;
+        if (!animateSkinning) foreach (var model in sharedModels) model.Skeleton = null;
         animatedNodes = sharedModel.Meshes.SelectMany(mesh => mesh.Skinning?.Bones.Select(bone => bone.NodeIndex) ?? Enumerable.Empty<int>()).Where(node => node != 0).Distinct().ToArray();
-        if (animateSkinning && animatedNodes.Length == 0) throw new InvalidDataException("The benchmark mesh has no imported skeleton/bones.");
+        if (animateSkinning && animatedNodes.Length == 0) throw new InvalidDataException("The benchmark mesh has no skeleton/bones.");
         bindRotations = animatedNodes.Select(node => sharedModel.Skeleton.Nodes[node].Transform.Rotation).ToArray();
-        sharedModel.BoundingBox = new BoundingBox(min, max);
-        sharedModel.BoundingSphere = BoundingSphere.FromBox(sharedModel.BoundingBox);
-        sharedModel.Materials.Clear();
-        sharedModel.Materials.Add(Material.New(GraphicsDevice, new MaterialDescriptor {
-            Attributes = { Diffuse = new MaterialDiffuseMapFeature(new ComputeColor(new Color4(0.3f, 0.65f, 0.9f, 1))), DiffuseModel = new MaterialDiffuseLambertModelFeature() } }));
+        Color4[] colors = [new(0.3f, 0.65f, 0.9f, 1), new(0.9f, 0.55f, 0.3f, 1), new(0.45f, 0.85f, 0.4f, 1), new(0.8f, 0.4f, 0.85f, 1)];
+        for (int index = 0; index < sharedModels.Length; index++)
+        {
+            var model = sharedModels[index];
+            model.BoundingBox = new BoundingBox(min, max);
+            model.BoundingSphere = BoundingSphere.FromBox(model.BoundingBox);
+            model.Materials.Clear();
+            model.Materials.Add(Material.New(GraphicsDevice, new MaterialDescriptor {
+                Attributes = { Diffuse = new MaterialDiffuseMapFeature(new ComputeColor(colors[index % colors.Length])), DiffuseModel = new MaterialDiffuseLambertModelFeature() } }));
+        }
 
         var scene = SceneSystem.SceneInstance.RootScene;
         Vector3 center = (min + max) * 0.5f;
@@ -225,38 +168,19 @@ sealed partial class ComputeSkinningSample : Game
         int gridSize = (int)Math.Ceiling(Math.Sqrt(InstanceCount));
         for (int instance = 0; instance < InstanceCount; instance++)
         {
-            var modelComponent = new ModelComponent(sharedModel) { IsShadowCaster = PointShadows || DirectionalShadows };
-#if !NALA
-            modelComponent.SkinningMode = VertexShaderSkinning ? SkinningMode.VertexShader : SkinningMode.Compute;
-#endif
+            var instanceModel = sharedModels[instance / InstancesPerMesh];
+            var modelComponent = new ModelComponent(instanceModel) { IsShadowCaster = PointShadows || DirectionalShadows };
             models[instance] = modelComponent;
-#if NALA
-            var morph = new WeightComponent();
-            morph.UseFusedSkinning = false;
-#else
-            var morph = modelComponent;
-#endif
-            components[instance] = morph;
             var entity = new Entity($"Morph benchmark {instance}") { modelComponent };
-#if NALA
-            entity.Add(morph);
-#endif
             entities[instance] = entity;
             entity.Transform.Position = -center + new Vector3((instance % gridSize - (gridSize - 1) * 0.5f) * extent * 1.5f, (instance / gridSize - (gridSize - 1) * 0.5f) * extent * 1.5f, 0);
             scene.Entities.Add(entity);
-#if NALA
-            morph.InitializeFromModel(modelComponent);
-            workloads[0].MapTargets(morph.TargetNames);
-            setters[instance] = (target, weight) => morph.SetWeight(workloads[caseIndex].TargetNames[target], weight);
-#else
-            var mappings = sharedModel.Meshes.Select(mesh => workloads[0].MapTargets(mesh.MorphTargets.TargetNames)).ToArray();
+            var mappings = instanceModel.Meshes.Select(mesh => workloads[0].MapTargets(mesh.MorphTargets.TargetNames)).ToArray();
             setters[instance] = (target, weight) => {
-                for (int mesh = 0; mesh < mappings.Length; mesh++) morph.SetMorphWeight(mesh, mappings[mesh][target], weight);
+                for (int mesh = 0; mesh < mappings.Length; mesh++) modelComponent.SetMorphWeight(mesh, mappings[mesh][target], weight);
             };
-#endif
-            if (!ReferenceEquals(modelComponent.Model, sharedModel)) throw new InvalidOperationException("Model is not shared.");
+            if (!ReferenceEquals(modelComponent.Model, instanceModel)) throw new InvalidOperationException("Model is not shared.");
         }
-#if !NALA
         if (ZeroMorphs)
             for (int instance = 0; instance < InstanceCount; instance++)
             {
@@ -266,14 +190,13 @@ sealed partial class ComputeSkinningSample : Game
             }
         if (SkinningOnly)
         {
-            foreach (var mesh in sharedModel.Meshes) mesh.MorphTargets = null;
+            foreach (var mesh in sharedModels.SelectMany(model => model.Meshes)) mesh.MorphTargets = null;
             for (int instance = 0; instance < InstanceCount; instance++)
             {
                 models[instance].Morphs.Enabled = false;
                 setters[instance] = (_, _) => { };
             }
         }
-#endif
         var camera = new CameraComponent { NearClipPlane = extent * 0.01f, FarClipPlane = extent * 100 };
         var cameraEntity = new Entity("Benchmark camera") { camera };
         cameraEntity.Transform.Position = new Vector3(0, 0, extent * 2.5f * (float)Math.Ceiling(Math.Sqrt(InstanceCount)));
@@ -296,19 +219,16 @@ sealed partial class ComputeSkinningSample : Game
         var previousCamera = (SceneCameraRenderer)SceneSystem.GraphicsCompositor.Game;
         benchmarkCamera = new BenchmarkCameraRenderer(!frustumCulling) { Camera = previousCamera.Camera, Child = previousCamera.Child, RenderMask = previousCamera.RenderMask };
         SceneSystem.GraphicsCompositor.Game = benchmarkCamera;
-        gpuTimers = new GpuTimers(GraphicsDevice, mode);
+        gpuTimers = new GpuTimers(GraphicsDevice, GraphicsContext, mode);
         var lighting = SceneSystem.GraphicsCompositor.RenderSystem.RenderFeatures.OfType<MeshRenderFeature>().Single().RenderFeatures.OfType<ForwardLightingRenderFeature>().Single();
         timedShadows = new TimedShadowMapRenderer(lighting.ShadowMapRenderer, gpuTimers);
         lighting.ShadowMapRenderer = timedShadows;
         Services.AddService<IGpuTimestampRecorder>(gpuTimers);
-#if !NALA
         const int deformationOrder = 0;
-#else
-        const int deformationOrder = -50;
-#endif
         SceneSystem.SceneInstance.Processors.Add(new GpuTimingBoundaryProcessor(gpuTimers, true, deformationOrder - 1));
         SceneSystem.SceneInstance.Processors.Add(new GpuTimingBoundaryProcessor(gpuTimers, false, deformationOrder + 1));
-        Console.WriteLine($"Scene ready: {InstanceCount} entities, shared model, {sharedModel.Meshes.Sum(mesh => mesh.Draw.VertexBuffers[0].Count)} imported vertices, 600 targets each.");
+        Console.WriteLine($"Deformation: batch size {DeformationBatchSize}, thread group {DeformationThreadGroup}.");
+        Console.WriteLine($"{BenchmarkRunner.Elapsed} Scene ready: {InstanceCount} entities, {MeshCount} shared models x {InstancesPerMesh}, {sharedModel.Meshes.Sum(mesh => mesh.Draw.VertexBuffers[0].Count)} vertices per model, {MorphWorkload.TargetCount} targets each.");
         return Task.CompletedTask;
     }
 
@@ -318,19 +238,16 @@ sealed partial class ComputeSkinningSample : Game
         if (waitingForGpu) { base.Update(gameTime); return; }
         var workload = workloads[caseIndex];
         frame++;
-#if !NALA
+        ApplyDeformationSettings();
         if (verifyLifecycle) ApplyLifecycleChanges();
-#endif
         long start = Stopwatch.GetTimestamp();
         for (int instance = 0; instance < InstanceCount; instance++)
             if (entities[instance].Get<ModelComponent>() == models[instance]) workload.ApplyFrame(frame, instance, ref previous[instance], setters[instance]);
-#if !NALA
         if (zeroWeightsThisFrame)
         {
-            foreach (var name in models[0].Morphs.Weights.Keys.ToArray()) models[0].Morphs.Weights[name] = 0;
+            models[0].SetAllMorphWeights(0);
             zeroWeightsThisFrame = false;
         }
-#endif
         if (animateSkinning)
             for (int instance = 0; instance < InstanceCount; instance++)
                 for (int bone = 0; bone < animatedNodes.Length; bone++)
@@ -338,7 +255,7 @@ sealed partial class ComputeSkinningSample : Game
         // Apply before engine update so processors see this frame's weights.
         base.Update(gameTime);
         if (frame >= workload.WarmupFrames) updateMs.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-        if (frame % 60 == 0) Window.Title = $"{Implementation} {mode} | {workload.Name} | {InstanceCount} entities | {frame + 1}/{workload.FrameCount} | {(animateSkinning ? "fused morph + skinning" : "morph only")}";
+        if (frame % 10 == 0) Window.Title = $"{mode} | {workload.Name} | {InstanceCount} entities | {frame + 1}/{workload.FrameCount} | {(animateSkinning ? "fused morph + skinning" : "morph only")}";
     }
 
     protected override void Draw(GameTime gameTime)
@@ -369,10 +286,9 @@ sealed partial class ComputeSkinningSample : Game
         if (frame >= workload.WarmupFrames) drawMs.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         if (frame == Math.Max(workload.WarmupFrames - 1, 0) || frame + 1 == workload.FrameCount)
         {
-            Console.WriteLine($"Visible entities: {benchmarkCamera.VisibleEntities}/{InstanceCount}; culled: {string.Join(", ", benchmarkCamera.CulledEntities)}");
+            Console.WriteLine($"{BenchmarkRunner.Elapsed} Visible entities: {benchmarkCamera.VisibleEntities}/{InstanceCount}; culled: {string.Join(", ", benchmarkCamera.CulledEntities)}");
             if (!frustumCulling && benchmarkCamera.VisibleEntities != InstanceCount) throw new Exception("Benchmark did not render all configured entities.");
         }
-#if !NALA
         if (verifyLifecycle)
         {
             if (frame is 12 or 18 or 21 or 25 or 29 or 32 or 35 or 38 or 41 or 45 or 49 or 57) VerifyGpuOutput();
@@ -382,16 +298,41 @@ sealed partial class ComputeSkinningSample : Game
         }
         if (frame == Math.Max(workload.WarmupFrames - 1, 0) || frame + 1 == workload.FrameCount)
             VerifyGpuOutput(); // Readback is excluded from the timing interval.
-#else
-        if (frame == Math.Max(workload.WarmupFrames - 1, 0) || frame + 1 == workload.FrameCount)
-            VerifyNalaGpuOutput();
-#endif
         if (frame + 1 < workload.FrameCount) return;
         waitingForGpu = true;
         gpuDrainStarted = Stopwatch.GetTimestamp();
         gpuTimers.Poll(drain: true);
         if (!gpuTimers.HasPending(caseIndex)) FinishScenario();
     }
+
+    // The scene creates its ModelRenderProcessor only after the first update, so settings cannot be applied in LoadContent.
+    private void ApplyDeformationSettings()
+    {
+        var processors = SceneSystem.SceneInstance.Processors.OfType<ModelRenderProcessor>().ToArray();
+        if (processors.Length == 0)
+        {
+            if (frame > 0) throw new InvalidOperationException("ModelRenderProcessor was never created; deformation settings not applied.");
+            return;
+        }
+        deformationSettings ??= new MeshDeformationSettings
+        {
+            Mode = VertexShaderSkinning ? MeshDeformationMode.ComputeMorph : MeshDeformationMode.Compute,
+            BatchSize = DeformationBatchSize,
+            ThreadGroup = Enum.Parse<DeformationThreadGroup>(DeformationThreadGroup),
+        };
+        foreach (var processor in processors)
+        {
+            if (processor.DeformationSettings == deformationSettings) continue;
+            processor.DeformationSettings = deformationSettings;
+            Console.WriteLine($"{BenchmarkRunner.Elapsed} Applied deformation settings at frame {frame}: {deformationSettings.Mode}, batch size {DeformationBatchSize}, thread group {deformationSettings.ThreadGroup}.");
+        }
+    }
+
+    private MeshDeformationSettings deformationSettings;
+
+    // Mirrors ModelRenderProcessor's per-instance choice for the active mode.
+    private bool ComputeSkinning(ModelComponent model)
+        => deformationSettings != null && (deformationSettings.Mode == MeshDeformationMode.Compute || deformationSettings.Mode == MeshDeformationMode.Auto && model.IsShadowCaster);
 
     private void FinishScenario()
     {
@@ -417,11 +358,12 @@ sealed partial class ComputeSkinningSample : Game
             return new { samples = sorted.Length, meanMs = sorted.Average(), medianMs = sorted[sorted.Length / 2], p95Ms = sorted[(int)((sorted.Length - 1) * 0.95)] };
         }
         Directory.CreateDirectory(output);
-        string path = Path.Combine(output, $"{Implementation}-{mode}-{(animateSkinning ? "skinned" : "morph")}-{workload.Name}.json");
+        string path = Path.Combine(output, $"{mode}-{(animateSkinning ? "skinned" : "morph")}-{workload.Name}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(new {
-            implementation = Implementation, scenario = workload.Name, instanceCount = InstanceCount, sharedModel = true,
-            deformationAvailable = DeformationAvailable, comparableMorphPerformance = DeformationAvailable,
-            evaluationMode = mode, skinning = animateSkinning ? (Implementation == "Nala" || VertexShaderSkinning ? "animated-vertex-shader" : "animated-fused") : "disabled-bind-pose", gpuVerified, skinningOnly = SkinningOnly,
+            scenario = workload.Name, instanceCount = InstanceCount, sharedModels = MeshCount, instancesPerMesh = InstancesPerMesh,
+            mesh = "procedural open cylinder", vertexCount = sharedModel.Meshes.Sum(mesh => mesh.Draw.VertexBuffers[0].Count), targetCount = MorphWorkload.TargetCount,
+            evaluationMode = mode, skinning = animateSkinning ? (VertexShaderSkinning ? "animated-vertex-shader" : "animated-fused") : "disabled-bind-pose", gpuVerified, skinningOnly = SkinningOnly,
+            batchSize = DeformationBatchSize, threadGroup = DeformationThreadGroup,
             frustumCulling, visibleEntities = benchmarkCamera.VisibleEntities,
             animation = "fixed-frame bone Z rotations, amplitude 0.18 radians; identical across instances", shadows = PointShadows || DirectionalShadows, directionalShadows = DirectionalShadows, pointLights = PointLights ? 4 : 0, pointLightRadius = PointLights ? 12f : 0f, zeroMorphs = ZeroMorphs, shadowViews = timedShadows.ViewCount, shadowMeshSubmissions = timedShadows.MeshSubmissions, postEffects = false, vsync = false,
             warmupFrames = workload.WarmupFrames, measuredFrames = workload.MeasuredFrames,
@@ -429,9 +371,8 @@ sealed partial class ComputeSkinningSample : Game
             gpu = gpuTimers.Report(caseIndex),
             timingNote = "GPU timestamp intervals; stage values sum all configured entities. Deformation includes uploads/state/barriers; Scene excludes present, correctness readback and screenshot. CPU draw submission is measured separately.",
             engineVersion = typeof(Game).Assembly.FullName, adapter = GraphicsDevice.Adapter.Description,
-            manifest = Path.GetFullPath(manifest), asset = Path.GetFullPath(asset),
         }, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine($"Completed {workload.Name}: {path}");
+        Console.WriteLine($"{BenchmarkRunner.Elapsed} Completed {workload.Name}: {path}");
         // Capture outside the measured interval; readback waits for the GPU.
         using var screenshot = File.Create(Path.ChangeExtension(path, ".png"));
         GraphicsDevice.Presenter.BackBuffer.Save(GraphicsContext.CommandList, screenshot, ImageFileType.Png);

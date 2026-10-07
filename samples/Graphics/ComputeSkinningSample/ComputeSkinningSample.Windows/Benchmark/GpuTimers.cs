@@ -1,18 +1,18 @@
 using System.Diagnostics;
+#if !VULKAN
 using Silk.NET.Core.Native;
 using Silk.NET.Direct3D11;
+#endif
 using Stride.Engine;
 using Stride.Graphics;
 using Stride.Rendering;
 
-// D3D11 benchmark adapter: per-frame disjoint intervals work on either engine branch.
-// Native device/context handles are borrowed from Stride; only queries are owned here.
-sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
+// Per-frame GPU timestamp intervals; the query backend depends on the graphics API.
+sealed class GpuTimers : IDisposable, IGpuTimestampRecorder
 {
-    private const int QueryCapacity = 128;
+    private const int QueryCapacity = 512;
     private const int RingCapacity = 12;
-    private readonly ComPtr<ID3D11Device> device;
-    private readonly ComPtr<ID3D11DeviceContext> context;
+    private readonly ITimestampBackend backend;
     private readonly Slot[] ring = new Slot[RingCapacity];
     private readonly Dictionary<int, CaseResults> cases = new();
     private readonly string[] expectedRegions;
@@ -24,35 +24,16 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
     private int cursor;
     private bool disposed;
 
-    public GpuTimers(GraphicsDevice graphics, string mode)
+    public GpuTimers(GraphicsDevice graphics, GraphicsContext graphicsContext, string mode)
     {
-        device = GraphicsMarshal.GetNativeDevice(graphics);
-        context = GraphicsMarshal.GetNativeDeviceContext(graphics);
-#if NALA
-        expectedRegions = ["Scene", "Deformation"];
-#else
         expectedRegions = ["Scene", "Deformation", mode == "dense" ? "DenseSkinning" : "SparseSkinning"];
-#endif
         expectedRegions = [.. expectedRegions, "ControlUpload", "ShadowMaps"];
-        try
-        {
-            for (int slot = 0; slot < ring.Length; slot++)
-            {
-                ring[slot] = new Slot();
-                ring[slot].Disjoint = CreateQuery(Query.TimestampDisjoint);
-                for (int query = 0; query < QueryCapacity; query++) ring[slot].Queries[query] = CreateQuery(Query.Timestamp);
-            }
-        }
-        catch { Dispose(); throw; }
-    }
-
-    private ComPtr<ID3D11Query> CreateQuery(Query kind)
-    {
-        var description = new QueryDesc { Query = kind };
-        ComPtr<ID3D11Query> query = default;
-        HResult result = device.CreateQuery(in description, ref query);
-        if (result.IsFailure) result.Throw();
-        return query;
+#if VULKAN
+        backend = new StrideTimestampBackend(graphics, graphicsContext, RingCapacity, QueryCapacity);
+#else
+        backend = new D3D11TimestampBackend(graphics, RingCapacity, QueryCapacity);
+#endif
+        for (int slot = 0; slot < ring.Length; slot++) ring[slot] = new Slot { Index = slot };
     }
 
     public void BeginFrame(int caseId, int frame, bool measured)
@@ -69,7 +50,7 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
             current = slot;
             slot.CaseId = caseId; slot.Frame = frame; slot.Measured = measured; slot.Sequence = sequence;
             slot.Used = 0; slot.Regions.Clear();
-            context.Begin(slot.Disjoint);
+            backend.Begin(slot.Index);
             BeginRegion("Scene");
             return;
         }
@@ -89,7 +70,7 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
     private int WriteTimestamp()
     {
         int index = current.Used++;
-        context.End(current.Queries[index]);
+        backend.Write(current.Index, index);
         return index;
     }
 
@@ -113,7 +94,7 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
             var scope = scopes.Peek();
             EndRegion(current.Sequence, scope.Name, scope.Start);
         }
-        context.End(current.Disjoint);
+        backend.End(current.Index, current.Used);
         current.Pending = true;
         current = null;
     }
@@ -123,25 +104,13 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
         foreach (var slot in ring)
         {
             if (slot == null || !slot.Pending || !drain && sequence - slot.Sequence < 3) continue;
-            QueryDataTimestampDisjoint interval = default;
-            HResult ready = context.GetData(slot.Disjoint, ref interval, (uint)sizeof(QueryDataTimestampDisjoint), (uint)AsyncGetdataFlag.Donotflush);
-            if (ready.IsFailure) ready.Throw();
-            if (ready != 0) continue;
-            if ((bool)interval.Disjoint || interval.Frequency == 0 || interval.Frequency > long.MaxValue)
+            if (!backend.TryRead(slot.Index, slot.Used, slot.Values, out ulong frequency)) continue;
+            slot.Pending = false;
+            if (frequency == 0 || frequency > long.MaxValue)
             {
                 if (slot.Measured) Results(slot.CaseId).InvalidFrames++;
-                slot.Pending = false;
                 continue;
             }
-            bool complete = true;
-            for (int query = 0; query < slot.Used; query++)
-            {
-                HResult result = context.GetData(slot.Queries[query], ref slot.Values[query], sizeof(long), (uint)AsyncGetdataFlag.Donotflush);
-                if (result.IsFailure) result.Throw();
-                if (result != 0) { complete = false; break; }
-            }
-            if (!complete) continue;
-            slot.Pending = false;
             if (!slot.Measured) continue;
             var totals = expectedRegions.ToDictionary(name => name, _ => 0.0);
             bool valid = true;
@@ -149,11 +118,11 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
             {
                 long start = slot.Values[region.Start], end = slot.Values[region.End];
                 if (end < start) { valid = false; break; }
-                totals[region.Name] += (end - start) * 1000.0 / interval.Frequency;
+                totals[region.Name] += (end - start) * 1000.0 / frequency;
             }
             if (!valid) { Results(slot.CaseId).InvalidFrames++; continue; }
             var results = Results(slot.CaseId);
-            results.Frequency = interval.Frequency;
+            results.Frequency = frequency;
             results.ValidFrames++;
             foreach (var pair in totals) results.Values[pair.Key].Add(pair.Value);
             results.FrameIds.Add(slot.Frame);
@@ -174,7 +143,7 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
         if (results.RequestedFrames != results.ValidFrames + results.InvalidFrames + results.DroppedBusyFrames || HasPending(caseId))
             throw new InvalidOperationException("GPU sample accounting incomplete.");
         return new {
-            backend = "Direct3D11 timestamp queries", asynchronous = true, queryRingCapacity = RingCapacity,
+            backend = backend.Name, asynchronous = true, queryRingCapacity = RingCapacity,
             requestedFrames = results.RequestedFrames, validFrames = results.ValidFrames,
             invalidFrames = results.InvalidFrames, droppedBusyFrames = results.DroppedBusyFrames,
             timestampFrequencyHz = results.Frequency,
@@ -202,18 +171,12 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
     {
         if (disposed) return;
         disposed = true;
-        foreach (var slot in ring)
-        {
-            if (slot == null) continue;
-            for (int index = 0; index < slot.Queries.Length; index++) slot.Queries[index].Dispose();
-            slot.Disjoint.Dispose();
-        }
+        backend.Dispose();
     }
 
     private sealed class Slot
     {
-        public ComPtr<ID3D11Query> Disjoint;
-        public readonly ComPtr<ID3D11Query>[] Queries = new ComPtr<ID3D11Query>[QueryCapacity];
+        public int Index;
         public readonly long[] Values = new long[QueryCapacity];
         public readonly List<Region> Regions = new(QueryCapacity / 2);
         public int CaseId, Frame, Used;
@@ -240,6 +203,113 @@ sealed unsafe class GpuTimers : IDisposable, IGpuTimestampRecorder
         public void Dispose() { }
     }
 }
+
+interface ITimestampBackend : IDisposable
+{
+    string Name { get; }
+    void Begin(int slot);
+    void Write(int slot, int index);
+    void End(int slot, int used);
+    // False until ready. A zero frequency marks an invalid (disjoint) interval.
+    bool TryRead(int slot, int used, long[] values, out ulong frequency);
+}
+
+#if VULKAN
+// Stride query pools. Vulkan reports a pool only once every query in it was written.
+sealed class StrideTimestampBackend : ITimestampBackend
+{
+    private readonly GraphicsDevice device;
+    private readonly GraphicsContext context;
+    private readonly QueryPool[] pools;
+    private readonly int capacity;
+
+    public StrideTimestampBackend(GraphicsDevice device, GraphicsContext context, int slots, int capacity)
+    {
+        this.device = device; this.context = context; this.capacity = capacity;
+        pools = new QueryPool[slots];
+        for (int slot = 0; slot < slots; slot++) pools[slot] = QueryPool.New(device, QueryType.Timestamp, capacity);
+    }
+
+    public string Name => "Vulkan timestamp queries";
+    public void Begin(int slot) => context.CommandList.ResetQueryPool(pools[slot]);
+    public void Write(int slot, int index) => context.CommandList.WriteTimestamp(pools[slot], index);
+    public void End(int slot, int used) { for (int index = used; index < capacity; index++) Write(slot, index); }
+
+    public bool TryRead(int slot, int used, long[] values, out ulong frequency)
+    {
+        frequency = 0;
+        if (!pools[slot].TryGetData(values)) return false;
+        frequency = (ulong)device.TimestampFrequency;
+        return true;
+    }
+
+    public void Dispose() { foreach (var pool in pools) pool?.Dispose(); }
+}
+#else
+// Native device/context handles are borrowed from Stride; only queries are owned here.
+sealed unsafe class D3D11TimestampBackend : ITimestampBackend
+{
+    private readonly ComPtr<ID3D11Device> device;
+    private readonly ComPtr<ID3D11DeviceContext> context;
+    private readonly ComPtr<ID3D11Query>[] disjoint;
+    private readonly ComPtr<ID3D11Query>[][] queries;
+
+    public D3D11TimestampBackend(GraphicsDevice graphics, int slots, int capacity)
+    {
+        device = GraphicsMarshal.GetNativeDevice(graphics);
+        context = GraphicsMarshal.GetNativeDeviceContext(graphics);
+        disjoint = new ComPtr<ID3D11Query>[slots];
+        queries = new ComPtr<ID3D11Query>[slots][];
+        try
+        {
+            for (int slot = 0; slot < slots; slot++)
+            {
+                disjoint[slot] = CreateQuery(Query.TimestampDisjoint);
+                queries[slot] = new ComPtr<ID3D11Query>[capacity];
+                for (int query = 0; query < capacity; query++) queries[slot][query] = CreateQuery(Query.Timestamp);
+            }
+        }
+        catch { Dispose(); throw; }
+    }
+
+    private ComPtr<ID3D11Query> CreateQuery(Query kind)
+    {
+        var description = new QueryDesc { Query = kind };
+        ComPtr<ID3D11Query> query = default;
+        HResult result = device.CreateQuery(in description, ref query);
+        if (result.IsFailure) result.Throw();
+        return query;
+    }
+
+    public string Name => "Direct3D11 timestamp queries";
+    public void Begin(int slot) => context.Begin(disjoint[slot]);
+    public void Write(int slot, int index) => context.End(queries[slot][index]);
+    public void End(int slot, int used) => context.End(disjoint[slot]);
+
+    public bool TryRead(int slot, int used, long[] values, out ulong frequency)
+    {
+        frequency = 0;
+        QueryDataTimestampDisjoint interval = default;
+        HResult ready = context.GetData(disjoint[slot], ref interval, (uint)sizeof(QueryDataTimestampDisjoint), (uint)AsyncGetdataFlag.Donotflush);
+        if (ready.IsFailure) ready.Throw();
+        if (ready != 0) return false;
+        for (int query = 0; query < used; query++)
+        {
+            HResult result = context.GetData(queries[slot][query], ref values[query], sizeof(long), (uint)AsyncGetdataFlag.Donotflush);
+            if (result.IsFailure) result.Throw();
+            if (result != 0) return false;
+        }
+        if (!(bool)interval.Disjoint) frequency = interval.Frequency;
+        return true;
+    }
+
+    public void Dispose()
+    {
+        foreach (var slot in queries) if (slot != null) foreach (var query in slot) query.Dispose();
+        if (disjoint != null) foreach (var query in disjoint) query.Dispose();
+    }
+}
+#endif
 
 sealed class GpuTimingBoundaryProcessor : EntityProcessor<ModelComponent, ModelComponent>
 {

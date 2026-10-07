@@ -1,6 +1,7 @@
 using Stride.Animations;
 using Stride.Core;
 using Stride.Core.Mathematics;
+using Stride.Core.Serialization;
 using Stride.Engine;
 using Stride.Graphics;
 using Stride.Rendering;
@@ -19,10 +20,10 @@ public sealed class CharacterStressController : SyncScript
     public List<AnimationClip> FemaleAnimations { get; } = new();
     public List<AnimationClip> MaleAnimations { get; } = new();
     public SpriteFont Font { get; set; }
+    public UrlReference<Scene> SwitchScene { get; set; }
 
     public int MaxPairs { get; set; } = 32;
     public int ActivePairs { get; set; } = 4;
-    public bool ComputeSkinning { get; set; } = true;
     public int ActiveMorphs { get; set; } = 30;
     public float Spacing { get; set; } = 1.5f;
     public int Columns { get; set; } = 8;
@@ -30,12 +31,13 @@ public sealed class CharacterStressController : SyncScript
     private readonly List<(Entity Female, Entity Male)> pairs = new();
     private readonly List<ModelComponent> models = new();
     private string[] morphNames = Array.Empty<string>();
+    // Per model: morph slot of each name in morphNames, or -1 when that model lacks it.
+    private int[][] morphSlots = Array.Empty<int[]>();
     private int appliedPairs = -1;
     private int appliedMorphs = -1;
     private TextBlock pairsLabel, morphsLabel, statsLabel;
-    private Button skinningButton;
-    private TextBlock skinningLabel;
     private ISpriteProvider buttonSprite, buttonPressedSprite;
+    private FrameTimings timings;
 
     public override void Start()
     {
@@ -58,8 +60,9 @@ public sealed class CharacterStressController : SyncScript
             pairs.Add((female, male));
         }
 
+        morphSlots = models.Select(model => morphNames.Select(model.FindMorphTarget).ToArray()).ToArray();
         CreateUI();
-        ApplySkinning();
+        timings = new FrameTimings(this);
     }
 
     public override void Update()
@@ -78,9 +81,9 @@ public sealed class CharacterStressController : SyncScript
 
         if (appliedMorphs != ActiveMorphs)
         {
-            foreach (var model in models)
+            for (int i = 0; i < models.Count; i++)
                 for (int m = ActiveMorphs; m < morphNames.Length; m++)
-                    model.Morphs.SetWeight(morphNames[m], 0);
+                    if (morphSlots[i][m] >= 0) models[i].SetMorphWeight(morphSlots[i][m], 0);
             appliedMorphs = ActiveMorphs;
             morphsLabel.Text = $"Active morphs: {ActiveMorphs} / {morphNames.Length}";
         }
@@ -89,12 +92,13 @@ public sealed class CharacterStressController : SyncScript
         int activeModels = ActivePairs * 2;
         for (int i = 0; i < activeModels; i++)
         {
-            var morphs = models[i].Morphs;
+            var slots = morphSlots[i];
+            var weights = models[i].WriteMorphWeights();
             for (int m = 0; m < ActiveMorphs; m++)
-                morphs.SetWeight(morphNames[m], MathF.Sin(time * (0.7f + m * 0.13f) + i * 0.9f + m));
+                if (slots[m] >= 0) weights[slots[m]] = MathF.Sin(time * (0.7f + m * 0.13f) + i * 0.9f + m);
         }
 
-        statsLabel.Text = $"{Game.UpdateTime.FramePerSecond:0} FPS  {Game.DrawTime.TimePerFrame.TotalMilliseconds:0.00} ms";
+        statsLabel.Text = timings.Report();
     }
 
     private Entity CreateCharacter(string name, Model model, List<AnimationClip> clips, Vector3 position, int index)
@@ -116,12 +120,22 @@ public sealed class CharacterStressController : SyncScript
         return entity;
     }
 
-    private void ApplySkinning()
+    public override void Cancel() => timings?.Dispose();
+
+    private Button ToggleButton(TextBlock label, Action click)
     {
-        var mode = ComputeSkinning ? SkinningMode.Compute : SkinningMode.VertexShader;
-        foreach (var model in models)
-            model.SkinningMode = mode;
-        skinningLabel.Text = ComputeSkinning ? "Skinning: Compute" : "Skinning: Vertex shader";
+        var button = new Button
+        {
+            Content = label,
+            NotPressedImage = buttonSprite,
+            MouseOverImage = buttonSprite,
+            PressedImage = buttonPressedSprite,
+            Padding = new Thickness(10, 6, 10, 6),
+            Margin = new Thickness(0, 8, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        button.Click += (_, _) => click();
+        return button;
     }
 
     private void CreateUI()
@@ -145,19 +159,14 @@ public sealed class CharacterStressController : SyncScript
         panel.Children.Add(morphsLabel);
         panel.Children.Add(IntegerSlider(0, morphNames.Length, ActiveMorphs, track, fill, thumb, value => ActiveMorphs = value));
 
-        skinningLabel = Label();
-        skinningButton = new Button
+        new DeformationControls(this).AddTo(panel, Label, ToggleButton, (minimum, maximum, value, changed) => IntegerSlider(minimum, maximum, value, track, fill, thumb, changed));
+
+        if (SwitchScene != null)
         {
-            Content = skinningLabel,
-            NotPressedImage = buttonSprite,
-            MouseOverImage = buttonSprite,
-            PressedImage = buttonPressedSprite,
-            Padding = new Thickness(10, 6, 10, 6),
-            Margin = new Thickness(0, 8, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        skinningButton.Click += (_, _) => { ComputeSkinning = !ComputeSkinning; ApplySkinning(); };
-        panel.Children.Add(skinningButton);
+            var switchLabel = Label();
+            switchLabel.Text = "Open cylinder benchmark scene";
+            panel.Children.Add(ToggleButton(switchLabel, () => SceneSwitch.Load(this, SwitchScene)));
+        }
 
         var root = new Border
         {

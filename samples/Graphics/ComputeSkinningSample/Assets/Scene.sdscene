@@ -79,9 +79,9 @@ Hierarchy:
                             32b117d1c42f83eb6c2768420f394abc: a3ac6f47-1cb5-4573-86d1-0a87e520a32b:gltf/Male_MorphTest_InPlace_Idle_FoldArms_Loop
                             d41c797679413ce4dae4eebc236e8d88: d3ee51ac-db8d-4117-b18b-b5e44703703b:gltf/Male_MorphTest_InPlace_Idle_TalkingPhone_Loop
                         Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+                        SwitchScene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:CylinderBenchmark
                         MaxPairs: 256
                         ActivePairs: 4
-                        ComputeSkinning: true
                         ActiveMorphs: 30
                         Spacing: 1.0
                         Columns: 8

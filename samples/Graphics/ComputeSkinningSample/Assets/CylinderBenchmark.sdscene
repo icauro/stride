@@ -1,0 +1,79 @@
+!SceneAsset
+Id: b5a8abbf-d74f-494d-b90d-52ae42579fa9
+SerializedVersion: {Stride: 3.1.0.1}
+Tags: []
+ChildrenIds: []
+Offset: {X: 0.0, Y: 0.0, Z: 0.0}
+Hierarchy:
+    RootParts:
+        - ref!! 13a66c61-3679-418c-8205-3e7f3fa9483f
+        - ref!! 99d32a91-b12e-4d39-beca-a1a040779715
+        - ref!! 0d140024-ca12-4cc4-979b-74ba2312be03
+        - ref!! 6eb7f3b2-86fc-4bab-88d1-da20d615b1d5
+    Parts:
+        -   Entity:
+                Id: 13a66c61-3679-418c-8205-3e7f3fa9483f
+                Name: Camera
+                Components:
+                    c11bbd637cd7492a9800c628d276d159: !TransformComponent
+                        Id: d5971378-ab71-41db-a478-4673b8dd9f0c
+                        Position: {X: 0.0, Y: 7.5, Z: 24.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    822fe483778541298a1df97483e4873a: !CameraComponent
+                        Id: cb8f9d42-7ab2-4367-ba83-dd1adfe1691d
+                        Name: null
+                        Projection: Perspective
+                        Slot: b0a6b286-b649-41a0-ae6a-9feddb93947f
+        -   Entity:
+                Id: 99d32a91-b12e-4d39-beca-a1a040779715
+                Name: Directional light
+                Components:
+                    c11bbd637cd7492a9800c628d276d159: !TransformComponent
+                        Id: 3adee418-8d9d-461e-9d1f-cb10c881524e
+                        Position: {X: 0.0, Y: 10.0, Z: 10.0}
+                        Rotation: {X: -0.3826834, Y: 0.0, Z: 0.0, W: 0.9238795}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    027058f7baed4135a35d759e2264d710: !LightComponent
+                        Id: 1542cfea-0792-4c16-bfe6-16a99d20e792
+                        Type: !LightDirectional
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                        Intensity: 1.0
+        -   Entity:
+                Id: 0d140024-ca12-4cc4-979b-74ba2312be03
+                Name: Ambient light
+                Components:
+                    c11bbd637cd7492a9800c628d276d159: !TransformComponent
+                        Id: 4f0c8a2e-91d3-4b6e-a5c7-2e8f1d0b3a64
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    027058f7baed4135a35d759e2264d710: !LightComponent
+                        Id: 7a1e5c39-2d84-4f6b-b0e3-9c5d2a8f1e47
+                        Type: !LightAmbient
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                        Intensity: 0.3
+        -   Entity:
+                Id: 6eb7f3b2-86fc-4bab-88d1-da20d615b1d5
+                Name: CylinderBenchmarkController
+                Components:
+                    c11bbd637cd7492a9800c628d276d159: !TransformComponent
+                        Id: 8b3d6f1a-4c2e-4a9d-b7f5-1e6c3a9d2b80
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    6bf3e83883594aa6b06362469e375ddf: !CylinderBenchmarkController
+                        Id: 2c7e9a41-5b3f-4d8e-a6c2-9f1b4e7d3a05
+                        Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+                        SwitchScene: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd:Scene
+                        Material: 5b0e4c1e-7a39-4f0e-9c52-3d8f1a6b2e71:NormalDebugMaterial
+                        MeshCount: 2
+                        InstancesPerMesh: 32
+                        ActiveInstances: 64
+                        Dense: true

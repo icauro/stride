@@ -1,64 +1,65 @@
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text.Json;
+namespace ComputeSkinningSample;
 
-namespace MorphBenchmark;
-
-// No engine dependency: both branches read these exact Float32 frames.
+// No engine dependency: weights are generated from a seed, so every run replays identical frames.
 public sealed class MorphWorkload
 {
+    public const int TargetCount = 600;
+    public const int DefaultSeed = 12345;
+    public static readonly string[] Scenarios = ["all-changing", "mixed-200-200-200"];
+    public static readonly (string Name, int Count)[] TargetGroups = [("Localized", 200), ("Medium", 200), ("Global", 200)];
+    public static readonly string[] DefaultTargetNames = TargetGroups.SelectMany(group => Enumerable.Range(0, group.Count).Select(index => $"{group.Name}_{index:D4}")).ToArray();
+
     private readonly float[] weights;
     private readonly int[] changingTargets;
     public string Name { get; }
-    public string[] TargetNames { get; }
-    public int FrameCount { get; }
+    public string[] TargetNames => DefaultTargetNames;
+    public int FrameCount { get; private set; }
     public int InstanceCount { get; }
     public int WarmupFrames { get; }
     public int MeasuredFrames => FrameCount - WarmupFrames;
 
-    public MorphWorkload(string manifestPath, string caseName)
+    public void LimitMeasuredFrames(int count)
     {
-        if (!BitConverter.IsLittleEndian) throw new PlatformNotSupportedException("Little endian required.");
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        var root = manifest.RootElement;
-        if (root.GetProperty("version").GetInt32() != 2 || root.GetProperty("weightEncoding").GetString() != "little-endian-float32-frame-instance-target")
-            throw new InvalidDataException("Unsupported workload format.");
-        InstanceCount = root.GetProperty("instanceCount").GetInt32();
-        if (InstanceCount < 1 || InstanceCount > 16 || root.GetProperty("meshSharing").GetString() != "one-model-shared-by-all-entities")
-            throw new InvalidDataException("Expected 1 to 16 entities sharing one model.");
+        if (count > 0 && count < MeasuredFrames) FrameCount = WarmupFrames + count;
+    }
+
+    public MorphWorkload(string caseName, int instanceCount = 16, int warmupFrames = 64, int measuredFrames = 128, int seed = DefaultSeed)
+    {
+        int caseIndex = Array.IndexOf(Scenarios, caseName);
+        if (caseIndex < 0) throw new ArgumentException($"Unknown scenario {caseName}.");
+        if (instanceCount < 1 || warmupFrames < 0 || measuredFrames < 1) throw new ArgumentOutOfRangeException(nameof(instanceCount));
         Name = caseName;
-        TargetNames = root.GetProperty("targetNames").EnumerateArray().Select(x => x.GetString()!).ToArray();
-        if (TargetNames.Length != 600 || root.GetProperty("targetCount").GetInt32() != 600 || TargetNames.Any(string.IsNullOrWhiteSpace) || TargetNames.Distinct().Count() != 600)
-            throw new InvalidDataException("Expected 600 unique target names.");
-        FrameCount = root.GetProperty("frameCount").GetInt32();
-        WarmupFrames = root.GetProperty("warmupFrames").GetInt32();
-        if (FrameCount <= WarmupFrames || WarmupFrames < 0 || root.GetProperty("measuredFrames").GetInt32() != MeasuredFrames)
-            throw new InvalidDataException("Invalid frame counts.");
-        var selected = root.GetProperty("cases").EnumerateArray().Single(x => x.GetProperty("name").GetString() == caseName);
-        changingTargets = selected.GetProperty("changingTargets").EnumerateArray().Select(x => x.GetInt32()).ToArray();
-        var fixedTargets = selected.GetProperty("staticTargets").EnumerateArray().Select(x => x.GetInt32()).ToArray();
-        var zeroTargets = selected.GetProperty("zeroTargets").EnumerateArray().Select(x => x.GetInt32()).ToArray();
-        if (!fixedTargets.Concat(changingTargets).Concat(zeroTargets).Order().SequenceEqual(Enumerable.Range(0, 600)))
-            throw new InvalidDataException("Invalid target partition.");
-        string directory = Path.GetDirectoryName(Path.GetFullPath(manifestPath))!;
-        string file = selected.GetProperty("weightsFile").GetString()!;
-        if (Path.GetFileName(file) != file) throw new InvalidDataException("Weight file must be beside the manifest.");
-        byte[] bytes = File.ReadAllBytes(Path.Combine(directory, file));
-        if (bytes.LongLength != (long)FrameCount * InstanceCount * 600 * sizeof(float) ||
-            !Convert.ToHexString(SHA256.HashData(bytes)).Equals(selected.GetProperty("weightsSha256").GetString(), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Weight file length or checksum mismatch.");
-        weights = MemoryMarshal.Cast<byte, float>(bytes).ToArray();
-        if (weights.Any(x => !float.IsFinite(x) || x < 0 || x > 1)) throw new InvalidDataException("Invalid weight value.");
-        for (int frame = 0; frame < FrameCount; frame++)
-        for (int instance = 0; instance < InstanceCount; instance++)
+        InstanceCount = instanceCount;
+        WarmupFrames = warmupFrames;
+        FrameCount = warmupFrames + measuredFrames;
+
+        var shuffled = Enumerable.Range(0, TargetCount).ToArray();
+        var random = new Random32((uint)seed);
+        for (int i = TargetCount - 1; i > 0; i--)
         {
-            var row = GetFrame(frame, instance);
-            foreach (int target in zeroTargets) if (row[target] != 0) throw new InvalidDataException("Zero target changed.");
-            foreach (int target in fixedTargets)
-                if (row[target] <= 0 || row[target] != GetFrame(0, instance)[target]) throw new InvalidDataException("Invalid static target.");
-            foreach (int target in changingTargets)
-                if (row[target] <= 0 || frame > 0 && row[target] == GetFrame(frame - 1, instance)[target]) throw new InvalidDataException("Invalid changing target.");
+            int j = (int)(random.Next() % (uint)(i + 1));
+            (shuffled[i], shuffled[j]) = (shuffled[j], shuffled[i]);
         }
+        int[] Slice(int start) => shuffled.Skip(start).Take(200).Order().ToArray();
+        int[] fixedTargets = caseIndex == 0 ? [] : Slice(0);
+        changingTargets = caseIndex == 0 ? Enumerable.Range(0, TargetCount).ToArray() : Slice(200);
+
+        var generators = Enumerable.Range(0, instanceCount)
+            .Select(instance => new Random32((uint)seed ^ (0x9e3779b9u * (uint)(caseIndex + 1)) ^ (0x85ebca6bu * (uint)instance))).ToArray();
+        var rows = new float[instanceCount][];
+        for (int instance = 0; instance < instanceCount; instance++)
+        {
+            rows[instance] = new float[TargetCount];
+            foreach (int target in fixedTargets) rows[instance][target] = generators[instance].Weight(0);
+        }
+        weights = new float[(long)FrameCount * instanceCount * TargetCount];
+        for (int frame = 0; frame < FrameCount; frame++)
+            for (int instance = 0; instance < instanceCount; instance++)
+            {
+                var row = rows[instance];
+                foreach (int target in changingTargets) row[target] = generators[instance].Weight(row[target]);
+                row.CopyTo(weights.AsSpan((frame * instanceCount + instance) * TargetCount, TargetCount));
+            }
     }
 
     // Resolve these names to each implementation's target indices once, before timing.
@@ -72,7 +73,7 @@ public sealed class MorphWorkload
     {
         if ((uint)frame >= (uint)FrameCount) throw new ArgumentOutOfRangeException(nameof(frame));
         if ((uint)instance >= (uint)InstanceCount) throw new ArgumentOutOfRangeException(nameof(instance));
-        return weights.AsSpan((frame * InstanceCount + instance) * 600, 600);
+        return weights.AsSpan((frame * InstanceCount + instance) * TargetCount, TargetCount);
     }
 
     // Call once per simulated frame. First/reset frames write all weights; subsequent
@@ -82,17 +83,32 @@ public sealed class MorphWorkload
     {
         var row = GetFrame(frame, instance);
         if (frame != previousFrame + 1 || previousFrame < 0 || frame == 0)
-            for (int target = 0; target < 600; target++) setWeight(target, row[target]);
+            for (int target = 0; target < TargetCount; target++) setWeight(target, row[target]);
         else
             foreach (int target in changingTargets) setWeight(target, row[target]);
         previousFrame = frame;
     }
 
-    public static void VerifyAsset(string manifestPath, string assetPath)
+    // Explicit xorshift32; does not depend on the .NET random implementation.
+    public struct Random32(uint seed)
     {
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        using var stream = File.OpenRead(assetPath);
-        if (!Convert.ToHexString(SHA256.HashData(stream)).Equals(manifest.RootElement.GetProperty("assetSha256").GetString(), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Benchmark mesh differs from the fixture.");
+        private uint state = seed == 0 ? 1 : seed;
+
+        public uint Next()
+        {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            return state;
+        }
+
+        public float NextFloat() => Next() / 4294967296f;
+
+        // Exactly representable values in (0, 1], guaranteed to change.
+        public float Weight(float previous)
+        {
+            float value = ((Next() & 0x7fffff) + 1) / 8388608f;
+            return value != previous ? value : value == 1 ? 1 / 8388608f : value + 1 / 8388608f;
+        }
     }
 }

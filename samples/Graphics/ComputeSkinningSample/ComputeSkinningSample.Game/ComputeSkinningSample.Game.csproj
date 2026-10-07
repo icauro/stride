@@ -6,14 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <StrideRoot>$(MSBuildThisFileDirectory)../../../../</StrideRoot>
     <StrideContainsAssetTypes>true</StrideContainsAssetTypes>
-    <SampleDataRoot>$(MSBuildThisFileDirectory)../../../../../2026-10-06-compute-skinning/</SampleDataRoot>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Stride.Engine" Version="4.5.0-dev" />
     <PackageReference Include="Stride.UI" Version="4.5.0-dev" />
     <PackageReference Include="Stride.Particles" Version="4.5.0-dev" />
-    <ProjectReference Include="../Playback/MorphWorkload.csproj" />
-    <Content Include="$(SampleDataRoot)morph-benchmark/workloads-16/*.json;$(SampleDataRoot)morph-benchmark/workloads-16/*.f32" Link="Workloads/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>
