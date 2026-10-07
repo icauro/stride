@@ -14,6 +14,7 @@ using Stride.Extensions;
 using Stride.Graphics;
 using Stride.Graphics.Data;
 using Stride.Graphics.Semantics;
+using Stride.Importer.Common;
 using Stride.Rendering;
 
 namespace Stride.Assets.Models
@@ -27,6 +28,8 @@ namespace Stride.Assets.Models
         public bool MergeMeshes { get; set; }
         public bool ImportMorphTargets { get; set; } = true;
         public MeshMorphLayout MorphLayout { get; set; }
+        public MorphDeltaSource MorphNormals { get; set; }
+        public MorphDeltaSource MorphTangents { get; set; }
 
         public bool Allow32BitIndex { get; set; }
         public int MaxInputSlots { get; set; }

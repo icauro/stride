@@ -40,6 +40,16 @@ namespace Stride.Importer.ThreeD
 
         public Logger Logger { get; set; }
 
+        /// <summary>
+        /// Where morph target normal deltas come from.
+        /// </summary>
+        public MorphDeltaSource MorphNormals { get; set; }
+
+        /// <summary>
+        /// Where morph target tangent deltas come from.
+        /// </summary>
+        public MorphDeltaSource MorphTangents { get; set; }
+
         private readonly Assimp assimp = CreateAssimpApi();
 
         private static Assimp CreateAssimpApi()
@@ -573,6 +583,7 @@ namespace Stride.Importer.ThreeD
                         return null;
                     }
                 }
+
                 // animation of morph target weights (after nodes, as they share the node's clip)
                 for (uint morphAnimId = 0; morphAnimId < aiAnim->MNumMorphMeshChannels; ++morphAnimId)
                 {
@@ -1208,8 +1219,9 @@ namespace Stride.Importer.ThreeD
                 throw new InvalidOperationException("Morph target table is missing or exceeds the 16-bit shape limit.");
             var names = new string[mesh->MNumAnimMeshes];
             var usedNames = new HashSet<string>(StringComparer.Ordinal);
-            var entries = new List<MeshMorphEntry>();
-            bool hasNormals = false, hasTangents = false;
+            var vertexCount = (int)mesh->MNumVertices;
+            var generator = CreateMorphFrameGenerator(mesh);
+            var shapes = new MorphShapeImport[names.Length];
             for (int shape = 0; shape < names.Length; shape++)
             {
                 var target = mesh->MAnimMeshes[shape];
@@ -1218,34 +1230,137 @@ namespace Stride.Importer.ThreeD
                 var name = target->MName.AsString;
                 names[shape] = string.IsNullOrWhiteSpace(name) ? $"Morph{shape}" : name;
                 if (!usedNames.Add(names[shape])) throw new InvalidOperationException($"Duplicate morph target name '{names[shape]}'.");
-                bool normals = target->MNormals != null && mesh->MNormals != null;
-                bool tangents = target->MTangents != null && mesh->MTangents != null;
-                hasNormals |= normals;
-                hasTangents |= tangents;
-                if (!normals || (mesh->MTangents != null && !tangents))
-                    Logger.Warning($"Morph '{names[shape]}' has missing normal or tangent attributes; those deltas remain zero. Target attribute reconstruction is not implemented.");
-                int flippedTangents = 0;
-                for (uint vertex = 0; vertex < mesh->MNumVertices; vertex++)
+
+                bool fileNormals = target->MNormals != null && mesh->MNormals != null;
+                bool fileTangents = target->MTangents != null && mesh->MTangents != null;
+                bool generateNormals = MorphNormals == MorphDeltaSource.Generate || (MorphNormals == MorphDeltaSource.ImportOrGenerate && !fileNormals);
+                bool generateTangents = mesh->MTangents != null && (MorphTangents == MorphDeltaSource.Generate || (MorphTangents == MorphDeltaSource.ImportOrGenerate && !fileTangents));
+                if ((generateNormals && generator == null) || (generateTangents && generator?.CanGenerateTangents != true))
+                    Logger.Warning($"Morph '{names[shape]}': normal or tangent deltas cannot be generated (missing triangles, normals or UVs); those deltas remain zero.");
+                if ((MorphNormals == MorphDeltaSource.Import && !fileNormals) || (MorphTangents == MorphDeltaSource.Import && mesh->MTangents != null && !fileTangents))
+                    Logger.Warning($"Morph '{names[shape]}' has missing normal or tangent attributes; those deltas remain zero.");
+                shapes[shape] = new MorphShapeImport
                 {
-                    var position = target->MVertices != null
-                        ? Vector3.TransformNormal(target->MVertices[vertex].ToStrideVector3() - mesh->MVertices[vertex].ToStrideVector3(), rootTransform) : Vector3.Zero;
-                    var normal = normals ? MorphDirection(target->MNormals[vertex].ToStrideVector3(), mesh->MNormals[vertex].ToStrideVector3()) : Vector3.Zero;
-                    var tangent = tangents ? MorphDirection(target->MTangents[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()) : Vector3.Zero;
-                    if (tangents && normals && target->MBitangents != null && mesh->MBitangents != null)
-                    {
-                        float baseSign = Vector3.Dot(Vector3.Cross(mesh->MNormals[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()), mesh->MBitangents[vertex].ToStrideVector3());
-                        float targetSign = Vector3.Dot(Vector3.Cross(target->MNormals[vertex].ToStrideVector3(), target->MTangents[vertex].ToStrideVector3()), target->MBitangents[vertex].ToStrideVector3());
-                        // Handedness is not encoded; keep the base tangent where the target frame is mirrored.
-                        // Importers often regenerate target tangents (e.g. FBX), which can flip at seams.
-                        if ((baseSign < 0) != (targetSign < 0)) { tangent = Vector3.Zero; flippedTangents++; }
-                    }
-                    var entry = MeshMorphEntry.Create(vertex, (ushort)shape, position, normal, tangent);
-                    if (!entry.IsZero) entries.Add(entry);
-                }
-                if (flippedTangents > 0)
-                    Logger.Warning($"Morph '{names[shape]}' mirrors the tangent frame at {flippedTangents} vertices; their tangent deltas are ignored.");
+                    ImportNormals = fileNormals && MorphNormals is MorphDeltaSource.Import or MorphDeltaSource.ImportOrGenerate,
+                    ImportTangents = fileTangents && MorphTangents is MorphDeltaSource.Import or MorphDeltaSource.ImportOrGenerate,
+                    GenerateNormals = generateNormals && generator != null,
+                    GenerateTangents = generateTangents && generator?.CanGenerateTangents == true,
+                };
             }
-            return MeshMorphData.Create(checked((int)mesh->MNumVertices), names, entries, hasNormals, hasTangents);
+
+            // Targets are independent: convert them in parallel, each thread with its own generator scratch memory.
+            var meshPointer = (nint)mesh;
+            System.Threading.Tasks.Parallel.For(0, names.Length, () => generator?.CreateScratch(), (shape, _, scratch) =>
+            {
+                ProcessMorphTarget((Silk.NET.Assimp.Mesh*)meshPointer, shape, shapes[shape], generator, scratch);
+                return scratch;
+            }, _ => { });
+
+            var entries = new List<MeshMorphEntry>();
+            bool hasNormals = false, hasTangents = false;
+            for (int shape = 0; shape < names.Length; shape++)
+            {
+                entries.AddRange(shapes[shape].Entries);
+                hasNormals |= shapes[shape].ImportNormals || shapes[shape].GenerateNormals;
+                hasTangents |= shapes[shape].ImportTangents || shapes[shape].GenerateTangents;
+                if (shapes[shape].FlippedTangents > 0)
+                    Logger.Warning($"Morph '{names[shape]}' mirrors the tangent frame at {shapes[shape].FlippedTangents} vertices; their tangent deltas are ignored.");
+            }
+            return MeshMorphData.Create(vertexCount, names, entries, hasNormals, hasTangents);
+        }
+
+        private sealed class MorphShapeImport
+        {
+            public bool ImportNormals, ImportTangents, GenerateNormals, GenerateTangents;
+            public List<MeshMorphEntry> Entries;
+            public int FlippedTangents;
+        }
+
+        private unsafe void ProcessMorphTarget(Silk.NET.Assimp.Mesh* mesh, int shape, MorphShapeImport import, MorphFrameGenerator generator, MorphFrameGenerator.Scratch scratch)
+        {
+            var target = mesh->MAnimMeshes[shape];
+            var vertexCount = (int)mesh->MNumVertices;
+            var movedVertices = new List<int>();
+            if (target->MVertices != null)
+            {
+                for (int vertex = 0; vertex < vertexCount; vertex++)
+                {
+                    if (target->MVertices[vertex] != mesh->MVertices[vertex])
+                        movedVertices.Add(vertex);
+                }
+            }
+
+            bool generate = import.GenerateNormals || import.GenerateTangents;
+            if (generate)
+            {
+                var positions = target->MVertices != null ? target->MVertices : mesh->MVertices;
+                generator.Generate(new ReadOnlySpan<Vector3>(positions, vertexCount), movedVertices, import.GenerateTangents, scratch);
+            }
+
+            import.Entries = new List<MeshMorphEntry>();
+            for (int vertex = 0; vertex < vertexCount; vertex++)
+            {
+                var position = target->MVertices != null
+                    ? Vector3.TransformNormal(target->MVertices[vertex].ToStrideVector3() - mesh->MVertices[vertex].ToStrideVector3(), rootTransform) : Vector3.Zero;
+                bool generated = generate && scratch.Contains(vertex);
+                var normal = import.ImportNormals ? MorphDirection(target->MNormals[vertex].ToStrideVector3(), mesh->MNormals[vertex].ToStrideVector3())
+                    : import.GenerateNormals && generated ? GeneratedMorphDirection(scratch.Normals[vertex], generator.BaseNormals[vertex]) : Vector3.Zero;
+                var tangent = import.ImportTangents ? MorphDirection(target->MTangents[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3())
+                    : import.GenerateTangents && generated ? GeneratedMorphDirection(scratch.Tangents[vertex], generator.BaseTangents[vertex]) : Vector3.Zero;
+                if (import.ImportTangents && import.ImportNormals && target->MBitangents != null && mesh->MBitangents != null)
+                {
+                    float baseSign = Vector3.Dot(Vector3.Cross(mesh->MNormals[vertex].ToStrideVector3(), mesh->MTangents[vertex].ToStrideVector3()), mesh->MBitangents[vertex].ToStrideVector3());
+                    float targetSign = Vector3.Dot(Vector3.Cross(target->MNormals[vertex].ToStrideVector3(), target->MTangents[vertex].ToStrideVector3()), target->MBitangents[vertex].ToStrideVector3());
+                    // Handedness is not encoded; keep the base tangent where the target frame is mirrored.
+                    // Importers often regenerate target tangents (e.g. FBX), which can flip at seams.
+                    if ((baseSign < 0) != (targetSign < 0)) { tangent = Vector3.Zero; import.FlippedTangents++; }
+                }
+                var entry = MeshMorphEntry.Create((uint)vertex, (ushort)shape, position, normal, tangent);
+                if (!entry.IsZero) import.Entries.Add(entry);
+            }
+        }
+
+        private unsafe MorphFrameGenerator CreateMorphFrameGenerator(Silk.NET.Assimp.Mesh* mesh)
+        {
+            bool needed = MorphNormals is MorphDeltaSource.ImportOrGenerate or MorphDeltaSource.Generate
+                || MorphTangents is MorphDeltaSource.ImportOrGenerate or MorphDeltaSource.Generate;
+            if (!needed || mesh->MNormals == null || mesh->MFaces == null)
+                return null;
+
+            var vertexCount = (int)mesh->MNumVertices;
+            var positions = new Vector3[vertexCount];
+            var normals = new Vector3[vertexCount];
+            for (int vertex = 0; vertex < vertexCount; vertex++)
+            {
+                positions[vertex] = mesh->MVertices[vertex].ToStrideVector3();
+                normals[vertex] = mesh->MNormals[vertex].ToStrideVector3();
+            }
+
+            Vector2[] uvs = null;
+            if (mesh->MTextureCoords[0] != null && mesh->MTangents != null)
+            {
+                uvs = new Vector2[vertexCount];
+                for (int vertex = 0; vertex < vertexCount; vertex++)
+                    uvs[vertex] = new Vector2(mesh->MTextureCoords[0][vertex].X, mesh->MTextureCoords[0][vertex].Y);
+            }
+
+            var triangles = new List<int>((int)mesh->MNumFaces * 3);
+            for (int face = 0; face < mesh->MNumFaces; face++)
+            {
+                if (mesh->MFaces[face].MNumIndices != 3)
+                    continue;
+                for (int corner = 0; corner < 3; corner++)
+                    triangles.Add((int)mesh->MFaces[face].MIndices[corner]);
+            }
+            return triangles.Count == 0 ? null : new MorphFrameGenerator(positions, normals, uvs, triangles.ToArray());
+        }
+
+        private Vector3 GeneratedMorphDirection(Vector3 target, Vector3 basis)
+        {
+            // Degenerate geometry has no computed direction; that vertex keeps a zero delta.
+            if (target == Vector3.Zero || basis == Vector3.Zero)
+                return Vector3.Zero;
+            return MorphDirection(target, basis);
         }
 
         private Vector3 MorphDirection(Vector3 target, Vector3 basis)

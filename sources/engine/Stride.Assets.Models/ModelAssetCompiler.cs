@@ -67,6 +67,8 @@ namespace Stride.Assets.Models
             importModelCommand.MergeMeshes = asset.MergeMeshes;
             importModelCommand.ImportMorphTargets = asset.ImportMorphTargets;
             importModelCommand.MorphLayout = asset.MorphLayout;
+            importModelCommand.MorphNormals = asset.MorphNormals;
+            importModelCommand.MorphTangents = asset.MorphTangents;
             importModelCommand.DeduplicateMaterials = asset.DeduplicateMaterials;
             importModelCommand.ModelModifiers = asset.Modifiers;
 

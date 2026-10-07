@@ -12,6 +12,7 @@ using Stride.Core.Serialization;
 using Stride.Extensions;
 using Stride.Graphics;
 using Stride.Graphics.Data;
+using Stride.Importer.Common;
 using Stride.Importer.ThreeD;
 using Stride.Rendering;
 using Xunit;
@@ -185,6 +186,65 @@ public class TestMorphImport
             Assert.True(Math.Abs(entry.PositionDelta.Z) > 0.99f);
             Assert.True(entry.NormalDelta.Length() > 0.2f);
             Assert.True(entry.TangentDelta.Length() > 0.2f);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(MorphDeltaSource.ImportOrGenerate, true)]
+    [InlineData(MorphDeltaSource.Generate, true)]
+    [InlineData(MorphDeltaSource.Import, false)]
+    [InlineData(MorphDeltaSource.None, false)]
+    public void GeneratesMissingNormalAndTangentDeltas(MorphDeltaSource source, bool generated)
+    {
+        // A unit square of two triangles; the target raises corner (1,1) by 0.5 without normal or tangent targets.
+        var arrays = new[] {
+            new float[] { 0,0,0, 1,0,0, 1,1,0, 0,0,0, 1,1,0, 0,1,0 },
+            new float[] { 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1 },
+            new float[] { 0,0, 1,0, 1,1, 0,0, 1,1, 0,1 },
+            new float[] { 0,0,0, 0,0,0, 0,0,0.5f, 0,0,0, 0,0,0.5f, 0,0,0 } };
+        var bytes = MemoryMarshal.AsBytes(arrays.SelectMany(x => x).ToArray().AsSpan()).ToArray();
+        var views = arrays.Select((a, i) => new { buffer = 0, byteOffset = arrays.Take(i).Sum(x => x.Length) * 4, byteLength = a.Length * 4 }).ToArray();
+        var accessors = arrays.Select((a, i) => new { bufferView = i, componentType = 5126, count = 6, type = i == 2 ? "VEC2" : "VEC3" }).ToArray();
+        var gltf = new
+        {
+            asset = new
+            {
+                version = "2.0"
+            },
+            scene = 0,
+            scenes = new[] { new { nodes = new[] { 0 } } },
+            nodes = new[] { new { mesh = 0 } },
+            meshes = new[]
+            {
+                new
+                {
+                    name = "Square",
+                    extras = new { targetNames = new[] { "Raise" } },
+                    primitives = new[] { new { attributes = new { POSITION = 0, NORMAL = 1, TEXCOORD_0 = 2 }, targets = new[] { new { POSITION = 3 } }, mode = 4 } }
+                }
+            },
+            buffers = new[] { new { byteLength = bytes.Length, uri = "data:application/octet-stream;base64," + Convert.ToBase64String(bytes) } },
+            bufferViews = views,
+            accessors
+        };
+        var path = Path.Combine(Path.GetTempPath(), $"stride-generated-morph-{Guid.NewGuid():N}.gltf");
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(gltf));
+            var converter = new MeshConverter(null) { MorphNormals = source, MorphTangents = source };
+            var data = Assert.Single(converter.Convert(path, path, false).Meshes).MorphTargets;
+            data.Validate();
+            Assert.Equal(generated, data.HasNormalDeltas);
+            Assert.Equal(generated, data.HasTangentDeltas);
+            Assert.All(data.Entries, entry => Assert.Equal(generated, entry.NormalDelta != Vector3.Zero));
+            if (generated)
+            {
+                // Corners in one triangle tilt to (0,-1,2)/sqrt(5); the shared corners average both faces.
+                var expected = new[] { 0.338f, 0.4597f };
+                Assert.All(data.Entries, entry => Assert.Contains(expected, length => Math.Abs(entry.NormalDelta.Length() - length) < 0.01f));
+                Assert.Contains(data.Entries, entry => entry.TangentDelta != Vector3.Zero);
+            }
         }
         finally { File.Delete(path); }
     }

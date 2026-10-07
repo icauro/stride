@@ -8,6 +8,7 @@ using Stride.Core;
 using Stride.Core.Annotations;
 using Stride.Core.IO;
 using Stride.Core.Mathematics;
+using Stride.Importer.Common;
 using Stride.Rendering;
 
 namespace Stride.Assets.Models
@@ -99,6 +100,18 @@ namespace Stride.Assets.Models
 
         [DataMember(55), DefaultValue(MeshMorphLayout.SparseVertexMajor)]
         public MeshMorphLayout MorphLayout { get; set; } = MeshMorphLayout.SparseVertexMajor;
+
+        /// <userdoc>
+        /// Where the normal deltas of morph targets come from: the source file, generated from the target shapes, or both.
+        /// </userdoc>
+        [DataMember(56), DefaultValue(MorphDeltaSource.ImportOrGenerate)]
+        public MorphDeltaSource MorphNormals { get; set; } = MorphDeltaSource.ImportOrGenerate;
+
+        /// <userdoc>
+        /// Where the tangent deltas of morph targets come from: the source file, generated from the target shapes, or both.
+        /// </userdoc>
+        [DataMember(57), DefaultValue(MorphDeltaSource.ImportOrGenerate)]
+        public MorphDeltaSource MorphTangents { get; set; } = MorphDeltaSource.ImportOrGenerate;
 
         // Editor metadata only; packed runtime targets are built from the source mesh.
         [DataMember(60), Display(Browsable = false)]
