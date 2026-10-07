@@ -7,6 +7,7 @@ using Stride.Core.Extensions;
 using Stride.Core.Mathematics;
 using Stride.Core.Threading;
 using Stride.Engine;
+using Stride.Engine.Design;
 using Stride.Graphics;
 using Stride.Rendering.Materials;
 using Stride.Rendering.Materials.ComputeColors;
@@ -20,6 +21,11 @@ namespace Stride.Rendering
 
         public Dictionary<ModelComponent, RenderModel> RenderModels => ComponentDatas;
 
+        /// <summary>
+        /// Mesh deformation settings read every frame. Defaults to the game settings instance, so runtime changes to that instance apply globally.
+        /// </summary>
+        public MeshDeformationSettings DeformationSettings { get; set; }
+
         public VisibilityGroup VisibilityGroup { get; set; }
 
         public ModelRenderProcessor() : base(typeof(TransformComponent))
@@ -30,6 +36,7 @@ namespace Stride.Rendering
         protected internal override void OnSystemAdd()
         {
             var graphicsDevice = Services.GetSafeServiceAs<IGraphicsDeviceService>().GraphicsDevice;
+            DeformationSettings ??= Services.GetService<IGameSettingsService>()?.Settings?.GetOrCreateConfiguration<MeshDeformationSettings>() ?? new MeshDeformationSettings();
 
             fallbackMaterial = Material.New(graphicsDevice, new MaterialDescriptor
             {
@@ -92,9 +99,12 @@ namespace Stride.Rendering
 
             // GPU command recording is sequential, after model transforms/materials are prepared.
             bool supported = context.GraphicsDevice.Features.HasComputeShaders && context.GraphicsDevice.Features.RequestedProfile >= GraphicsProfile.Level_11_0;
+            var settings = DeformationSettings ??= new MeshDeformationSettings();
+            deformationRenderer?.Configure(settings.BatchSize, settings.ThreadGroup);
             foreach (var item in ComponentDatas)
             {
-                bool computeSkinning = item.Key.SkinningMode == SkinningMode.Compute && supported;
+                // Auto: shadow casters are drawn in several passes, so skinning once in compute pays off.
+                bool computeSkinning = supported && (settings.Mode == MeshDeformationMode.Compute || settings.Mode == MeshDeformationMode.Auto && item.Key.IsShadowCaster);
                 bool hasMorphs = item.Key.Morphs.Enabled && item.Key.Model?.Meshes.Exists(mesh => mesh.MorphTargets?.VertexCount > 0) == true;
                 bool hasSkinning = computeSkinning && item.Key.Model?.Meshes.Exists(mesh => mesh.Skinning != null) == true;
                 if (!item.Key.Enabled || item.Key.Model == null || (!hasMorphs && !hasSkinning))
@@ -102,9 +112,14 @@ namespace Stride.Rendering
                     deformationRenderer?.Remove(item.Key);
                     continue;
                 }
-                deformationRenderer ??= new ModelDeformationRenderer(new RenderDrawContext(Services, context, Services.GetSafeServiceAs<GraphicsContext>()));
+                if (deformationRenderer == null)
+                {
+                    deformationRenderer = new ModelDeformationRenderer(new RenderDrawContext(Services, context, Services.GetSafeServiceAs<GraphicsContext>()));
+                    deformationRenderer.Configure(settings.BatchSize, settings.ThreadGroup);
+                }
                 deformationRenderer.Draw(item.Key, item.Value, computeSkinning);
             }
+            deformationRenderer?.Flush();
         }
 
         private void UpdateRenderModel(ModelComponent modelComponent, RenderModel renderModel)

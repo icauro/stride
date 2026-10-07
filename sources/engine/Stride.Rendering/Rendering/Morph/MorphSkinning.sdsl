@@ -5,10 +5,17 @@ shader MorphSkinning<bool TDense> : MorphGpuCommon
 {
     override void Compute()
     {
-        uint vertex = streams.DispatchThreadId.x + streams.DispatchThreadId.y * 65535 * 64;
-        if (vertex >= VertexCount) return;
+        // x: vertex, y: instance slot within the batch.
+        uint vertex = streams.DispatchThreadId.x;
+        uint instance = streams.DispatchThreadId.y;
+        if (vertex >= VertexCount || instance >= InstanceCount) return;
+        uint flags = InstanceFlags[instance];
+        if ((flags & 1) == 0) return;
         uint address = vertex * VertexStride;
-        // Unchanged attributes are initialized once in the instance output buffer.
+        uint output = instance * OutputStride + address;
+        uint weightBase = instance * TargetCount;
+        uint boneBase = instance * BoneCount * 4;
+        // Unchanged attributes are initialized once in the instance output slot.
         float3 p = asfloat(Load3(address + PositionOffset));
         float3 n = NormalOffset >= 0 ? asfloat(Load3(address + NormalOffset)) : float3(0, 1, 0);
         float3 t = TangentOffset >= 0 ? asfloat(Load3(address + TangentOffset)) : float3(1, 0, 0);
@@ -21,7 +28,7 @@ shader MorphSkinning<bool TDense> : MorphGpuCommon
             {
                 uint entry = TDense ? item * VertexCount + vertex : item;
                 uint shape = TDense ? item : PackedEntries[entry * 6 + 1] & 65535;
-                float weight = Weights[shape];
+                float weight = Weights[weightBase + shape];
                 [branch]
                 if (weight == 0) continue;
                 uint v; float3 ep, en, et;
@@ -30,7 +37,7 @@ shader MorphSkinning<bool TDense> : MorphGpuCommon
             }
         }
         p += dp; n += dn; t += dt;
-        if (BoneCount != 0)
+        if (BoneCount != 0 && (flags & 2) != 0)
         {
             uint4 indices;
             if (Index16 != 0)
@@ -48,7 +55,7 @@ shader MorphSkinning<bool TDense> : MorphGpuCommon
             for (uint bone = 0; bone < 4; bone++)
             {
                 if (weights[bone] == 0 || indices[bone] >= BoneCount) continue;
-                uint row = indices[bone] * 4;
+                uint row = boneBase + indices[bone] * 4;
                 float3 r0 = BoneRows[row].xyz, r1 = BoneRows[row + 1].xyz, r2 = BoneRows[row + 2].xyz;
                 skinnedP += (p.x * r0 + p.y * r1 + p.z * r2 + BoneRows[row + 3].xyz) * weights[bone];
                 skinnedN += (n.x * r0 + n.y * r1 + n.z * r2) * weights[bone];
@@ -59,9 +66,9 @@ shader MorphSkinning<bool TDense> : MorphGpuCommon
         n = SafeNormal(n, float3(0, 1, 0));
         float3 tangentFallback = SafeNormal(cross(abs(n.x) < 0.9 ? float3(1, 0, 0) : float3(0, 1, 0), n), float3(0, 0, 1));
         t = SafeNormal(t - n * dot(n, t), tangentFallback);
-        Store3(address + PositionOffset, asuint(p));
-        if (NormalOffset >= 0) Store3(address + NormalOffset, asuint(n));
+        Store3(output + PositionOffset, asuint(p));
+        if (NormalOffset >= 0) Store3(output + NormalOffset, asuint(n));
         // The copied tangent.w preserves imported bitangent handedness.
-        if (TangentOffset >= 0) Store3(address + TangentOffset, asuint(t));
+        if (TangentOffset >= 0) Store3(output + TangentOffset, asuint(t));
     }
 };

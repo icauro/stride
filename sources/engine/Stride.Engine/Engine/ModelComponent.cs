@@ -15,13 +15,6 @@ using Stride.Updater;
 
 namespace Stride.Engine
 {
-    [DataContract]
-    public enum SkinningMode
-    {
-        VertexShader,
-        Compute,
-    }
-
     /// <summary>
     /// Add a <see cref="Model"/> to an <see cref="Entity"/>, that will be used during rendering.
     /// </summary>
@@ -38,20 +31,6 @@ namespace Stride.Engine
         private Model model;
         private SkeletonUpdater skeleton;
         private bool modelViewHierarchyDirty = true;
-        private SkinningMode skinningMode;
-
-        /// <summary>Choose vertex-shader skinning or a persistent per-instance compute output. Vertex shader is the compatibility default.</summary>
-        [DataMember(50)]
-        [DefaultValue(SkinningMode.VertexShader)]
-        public SkinningMode SkinningMode
-        {
-            get => skinningMode;
-            set
-            {
-                if (value != SkinningMode.VertexShader && value != SkinningMode.Compute) throw new ArgumentOutOfRangeException(nameof(value));
-                skinningMode = value;
-            }
-        }
 
         /// <summary>
         /// Per-entity state of each individual mesh of a model.

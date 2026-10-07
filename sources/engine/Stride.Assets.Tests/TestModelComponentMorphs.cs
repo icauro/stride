@@ -16,7 +16,8 @@ public class TestModelComponentMorphs
     private static Model ModelWithTargets(int meshes = 1, string target = "Smile")
     {
         var model = new Model();
-        for (int i = 0; i < meshes; i++) model.Meshes.Add(new Mesh { MorphTargets = MeshMorphData.Create(0, new[] { target }, Array.Empty<MeshMorphEntry>()) });
+        for (int i = 0; i < meshes; i++)
+            model.Meshes.Add(new Mesh { MorphTargets = MeshMorphData.Create(0, new[] { target }, Array.Empty<MeshMorphEntry>()) });
         return model;
     }
 
@@ -40,7 +41,7 @@ public class TestModelComponentMorphs
     [Fact]
     public void SerializedControlsSurviveDelayedLoadingAndResetOnReplacement()
     {
-        var component = new ModelComponent { SkinningMode = SkinningMode.Compute };
+        var component = new ModelComponent();
         component.Morphs.SetWeight("Smile", 0.125f);
         using var stream = new MemoryStream();
         var writer = new BinarySerializationWriter(stream);
@@ -49,7 +50,6 @@ public class TestModelComponentMorphs
         ModelComponent restored = null;
         var reader = new BinarySerializationReader(stream);
         reader.Serialize(ref restored, ArchiveMode.Deserialize);
-        Assert.Equal(SkinningMode.Compute, restored.SkinningMode);
         restored.Model = ModelWithTargets();
         Assert.Equal(0.125f, restored.GetMorphWeight(0, "Smile"));
         restored.Model = ModelWithTargets(target: "Blink");
@@ -68,17 +68,41 @@ public class TestModelComponentMorphs
         Assert.Equal(-1f, first.GetMorphWeight(0, 0));
         Assert.Equal(-1f, first.GetMorphWeight(1, 0));
         Assert.Equal(-1f, first.GetMorphWeight(2, 0));
-        Assert.Equal(2, first.Morphs.Weights.Count);
+        Assert.Empty(first.Morphs.Weights); // runtime writes do not touch authored weights
         Assert.Equal(0f, second.GetMorphWeight(0, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => first.SetAllMorphWeights(float.NaN));
         Assert.Equal(-1f, first.GetMorphWeight(0, 0));
         first.SetAllMorphWeights(0f);
-        Assert.All(first.Morphs.Weights.Values, weight => Assert.Equal(0f, weight));
+        Assert.Equal(0f, first.GetMorphWeight(2, 0));
         first.Model = ModelWithTargets(1, "NewTarget");
         first.SetAllMorphWeights(1f);
-        Assert.Single(first.Morphs.Weights);
         Assert.Equal(1f, first.GetMorphWeight(0, 0));
         new ModelComponent().SetAllMorphWeights(1f);
+    }
+
+    [Fact]
+    public void SlotsAreSharedByNameAndAuthoredWeightsSeedThem()
+    {
+        var shared = ModelWithTargets(2);
+        shared.Meshes.Add(new Mesh { MorphTargets = MeshMorphData.Create(0, new[] { "Blink", "Smile" }, Array.Empty<MeshMorphEntry>()) });
+        var component = new ModelComponent(shared);
+        Assert.Equal(new[] { "Smile", "Blink" }, component.MorphTargetNames);
+        int smile = component.FindMorphTarget("Smile"), blink = component.FindMorphTarget("Blink");
+        Assert.Equal(-1, component.FindMorphTarget("Missing"));
+        component.SetMorphWeight(smile, 0.5f);
+        Assert.Equal(0.5f, component.GetMorphWeight(0, 0));
+        Assert.Equal(0.5f, component.GetMorphWeight(2, 1));
+        Assert.Equal(0f, component.GetMorphWeight(2, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => component.SetMorphWeight(5, 1));
+        // An authored change re-seeds runtime weights from the authored values.
+        component.Morphs.SetWeight("Blink", 0.25f);
+        Assert.Equal(0.25f, component.GetMorphWeight(blink));
+        Assert.Equal(0f, component.GetMorphWeight(smile));
+        Assert.Same(component.MorphTargetNames, new ModelComponent(shared).MorphTargetNames);
+        var weights = component.WriteMorphWeights();
+        weights[smile] = 0.75f;
+        Assert.Equal(0.75f, component.GetMorphWeight(2, 1));
+        Assert.Equal(new[] { 0.75f, 0.25f }, component.MorphWeights.ToArray());
     }
 
     [Fact]

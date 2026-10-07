@@ -9,6 +9,7 @@ using Stride.Audio;
 using Stride.Graphics;
 using Stride.Navigation;
 using Stride.Physics;
+using Stride.Rendering;
 using Stride.Streaming;
 
 namespace Stride.Assets
@@ -27,6 +28,7 @@ namespace Stride.Assets
             asset.GetOrCreate<EditorSettings>();
             asset.GetOrCreate<RenderingSettings>();
             asset.GetOrCreate<StreamingSettings>();
+            asset.GetOrCreate<MeshDeformationSettings>();
             asset.GetOrCreate<TextureSettings>();
 
             return asset;

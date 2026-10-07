@@ -8,6 +8,7 @@ shader MorphGpuCommon : ComputeShaderBase
     stage StructuredBuffer<uint> VertexOffsets;
     stage StructuredBuffer<float> Weights;
     stage StructuredBuffer<float4> BoneRows;
+    stage StructuredBuffer<uint> InstanceFlags;
     stage RWBuffer<uint> OutputVertices;
 
     cbuffer PerDispatch
@@ -23,6 +24,8 @@ shader MorphGpuCommon : ComputeShaderBase
         stage uint Index16;
         stage uint TargetCount;
         stage uint ActiveCount;
+        stage uint InstanceCount;
+        stage uint OutputStride;
     }
 
     float HalfValue(uint value) { return f16tof32(value & 65535); }
