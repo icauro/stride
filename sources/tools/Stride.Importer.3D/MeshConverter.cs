@@ -143,8 +143,7 @@ namespace Stride.Importer.ThreeD
                     {
                         var target = mesh->MAnimMeshes[shape];
                         if (target == null) throw new InvalidOperationException("Missing morph target.");
-                        var name = target->MName.AsString;
-                        if (string.IsNullOrWhiteSpace(name)) name = $"Morph{shape}";
+                        var name = MorphTargetName(target, shape);
                         if (morphNames.Add(name)) entityInfo.MorphTargetNames.Add(name);
                     }
                 }
@@ -596,16 +595,28 @@ namespace Stride.Importer.ThreeD
 
         private unsafe void ProcessMorphAnimation(Dictionary<string, AnimationClip> animationClips, Scene* scene, MeshMorphAnim* channel, double ticksPerSec, Dictionary<int, List<int>> meshIndexToNodeIndex)
         {
-            // The channel names the node (glTF) or mesh that owns the morph targets; its keys index that mesh's anim meshes.
+            // The channel names the node (glTF), the mesh, or "<mesh name>*<mesh index>" (FBX) owning the morph targets;
+            // its keys index that mesh's anim meshes.
             var channelName = channel->MName.AsString;
             var nodeName = channelName.CleanNodeName();
             Silk.NET.Assimp.Mesh* mesh = null;
-            foreach (var (meshIndex, nodeIndices) in meshIndexToNodeIndex)
+            int star = channelName.LastIndexOf('*');
+            if (star >= 0 && int.TryParse(channelName.AsSpan(star + 1), out var meshIndex) && meshIndex < scene->MNumMeshes)
             {
-                if (nodeIndices.Exists(nodeIndex => nodes[nodeIndex].Name == nodeName) || scene->MMeshes[meshIndex]->MName.AsString == channelName)
+                mesh = scene->MMeshes[meshIndex];
+                nodeName = meshIndexToNodeIndex.TryGetValue(meshIndex, out var owners) && owners.Count > 0
+                    ? nodes[owners[0]].Name
+                    : channelName[..star].CleanNodeName();
+            }
+            else
+            {
+                foreach (var (index, nodeIndices) in meshIndexToNodeIndex)
                 {
-                    mesh = scene->MMeshes[meshIndex];
-                    break;
+                    if (nodeIndices.Exists(nodeIndex => nodes[nodeIndex].Name == nodeName) || scene->MMeshes[index]->MName.AsString == channelName)
+                    {
+                        mesh = scene->MMeshes[index];
+                        break;
+                    }
                 }
             }
             if (mesh == null)
@@ -629,9 +640,7 @@ namespace Stride.Importer.ThreeD
                         continue;
 
                     // Same naming as ProcessMorphTargets, so curves match the imported target names.
-                    var name = mesh->MAnimMeshes[target]->MName.AsString;
-                    if (string.IsNullOrWhiteSpace(name))
-                        name = $"Morph{target}";
+                    var name = MorphTargetName(mesh->MAnimMeshes[target], (int)target);
                     if (name.Contains(']'))
                     {
                         Logger.Warning($"Morph target '{name}' cannot be animated: ']' is not allowed in animation paths.");
@@ -700,6 +709,19 @@ namespace Stride.Importer.ThreeD
 
             if (animationClip.Curves.Count > 0)
                 animationClips.Add(targetNodeName, animationClip);
+        }
+
+        /// <summary>
+        /// Name of a morph target. Assimp names FBX blend shapes "Channel.Shape"; exporters such as Blender give both the
+        /// same name, which is collapsed so the target matches its glTF name.
+        /// </summary>
+        private static unsafe string MorphTargetName(AnimMesh* target, int index)
+        {
+            var name = target->MName.AsString;
+            if (string.IsNullOrWhiteSpace(name))
+                return $"Morph{index}";
+            int dot = name.IndexOf('.');
+            return dot > 0 && name.AsSpan(0, dot).SequenceEqual(name.AsSpan(dot + 1)) ? name[..dot] : name;
         }
 
         private unsafe void ProcessAnimationCurveVector(AnimationClip animationClip, VectorKey* keys, uint nbKeys, string partialTargetName, double ticksPerSec, bool isTranslation)
@@ -1227,8 +1249,7 @@ namespace Stride.Importer.ThreeD
                 var target = mesh->MAnimMeshes[shape];
                 if (target == null || target->MNumVertices != mesh->MNumVertices)
                     throw new InvalidOperationException($"Morph target {shape} has incompatible vertex topology.");
-                var name = target->MName.AsString;
-                names[shape] = string.IsNullOrWhiteSpace(name) ? $"Morph{shape}" : name;
+                names[shape] = MorphTargetName(target, shape);
                 if (!usedNames.Add(names[shape])) throw new InvalidOperationException($"Duplicate morph target name '{names[shape]}'.");
 
                 bool fileNormals = target->MNormals != null && mesh->MNormals != null;

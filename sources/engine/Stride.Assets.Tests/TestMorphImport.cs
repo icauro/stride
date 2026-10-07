@@ -308,4 +308,74 @@ public class TestMorphImport
         }
         finally { File.Delete(path); }
     }
+
+    /// <summary>
+    /// Compares the imported clip and morph data with Blender's own evaluation of the same frames: GNM_Head.glb/.fbx is an
+    /// animated export, GNM_Head_at_1s/2s.glb/.fbx are static exports of the mesh evaluated at those times.
+    /// The files are not in the repository; the test runs only when STRIDE_GNM_REFERENCE_DIR points at their folder.
+    /// </summary>
+    [Theory]
+    [InlineData("glb", 1)]
+    [InlineData("glb", 2)]
+    [InlineData("fbx", 1)]
+    [InlineData("fbx", 2)]
+    public void AnimatedMorphsMatchBlenderReferenceShape(string format, int seconds)
+    {
+        var directory = Environment.GetEnvironmentVariable("STRIDE_GNM_REFERENCE_DIR");
+        if (string.IsNullOrEmpty(directory))
+            return;
+        var animatedPath = Path.Combine(directory, $"GNM_Head.{format}");
+        var referencePath = Path.Combine(directory, $"GNM_Head_at_{seconds}s.{format}");
+
+        var mesh = Assert.Single(new MeshConverter(null).Convert(animatedPath, animatedPath, false).Meshes);
+        var reference = Assert.Single(new MeshConverter(null).Convert(referencePath, referencePath, false).Meshes);
+        var clip = new MeshConverter(null).ConvertAnimation(animatedPath, animatedPath, 0).AnimationClips.Values
+            .Single(c => c.Channels.Keys.Any(name => name.StartsWith("MorphWeights[", StringComparison.Ordinal)));
+
+        var data = mesh.MorphTargets;
+        var weights = data.TargetNames.Select(name => clip.Channels.TryGetValue($"MorphWeights[{name}]", out var channel)
+            ? Sample((AnimationCurve<float>)clip.Curves[channel.CurveIndex], seconds) : 0f).ToArray();
+        var expected = Positions(reference.Draw);
+        var actual = Positions(mesh.Draw);
+        Assert.Equal(expected.Length, actual.Length);
+
+        // Deltas are stored as half floats: each contributes up to |weight * delta| * 2^-11 of rounding error.
+        var tolerance = new float[actual.Length];
+        foreach (var entry in data.Entries)
+        {
+            var delta = entry.PositionDelta;
+            actual[entry.VertexIndex] += weights[entry.ShapeIndex] * delta;
+            tolerance[entry.VertexIndex] += MathF.Abs(weights[entry.ShapeIndex]) * (MathF.Abs(delta.X) + MathF.Abs(delta.Y) + MathF.Abs(delta.Z)) / 2048;
+        }
+
+        int worst = Enumerable.Range(0, actual.Length).MaxBy(v => (actual[v] - expected[v]).Length() - tolerance[v]);
+        var error = (actual[worst] - expected[worst]).Length();
+        Assert.True(error <= tolerance[worst] + 1e-5f,
+            $"Vertex {worst} is {error:E3} from Blender's shape at {seconds} s (allowed {tolerance[worst]:E3}); " +
+            $"weights {string.Join(", ", data.TargetNames.Zip(weights).Where(x => x.Second != 0).Select(x => $"{x.First}={x.Second:+0.0000;-0.0000}"))}.");
+    }
+
+    private static Vector3[] Positions(MeshDraw draw)
+    {
+        var binding = draw.VertexBuffers[0];
+        var position = binding.Declaration.EnumerateWithOffsets().First(element => element.VertexElement.SemanticName == "POSITION").Offset;
+        var bytes = binding.Buffer.GetSerializationData().Content;
+        return Enumerable.Range(0, binding.Count)
+            .Select(vertex => MemoryMarshal.Read<Vector3>(bytes.AsSpan(binding.Offset + vertex * binding.Declaration.VertexStride + position)))
+            .ToArray();
+    }
+
+    // Linear, like the imported glTF sampler.
+    private static float Sample(AnimationCurve<float> curve, double seconds)
+    {
+        var keys = curve.KeyFrames;
+        var time = CompressedTimeSpan.FromSeconds(seconds);
+        int index = 0;
+        while (index + 1 < keys.Count && keys[index + 1].Time <= time)
+            index++;
+        if (index + 1 == keys.Count || keys[index].Time >= time)
+            return keys[index].Value;
+        var amount = (float)((time.Ticks - keys[index].Time.Ticks) / (double)(keys[index + 1].Time.Ticks - keys[index].Time.Ticks));
+        return MathUtil.Lerp(keys[index].Value, keys[index + 1].Value, amount);
+    }
 }
