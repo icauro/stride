@@ -1,0 +1,131 @@
+!SceneAsset
+Id: 104ecc44-4615-4a66-9994-919ef6bd27d4
+SerializedVersion: {Stride: 3.1.0.1}
+Tags: []
+ChildrenIds: []
+Offset: {X: 0.0, Y: 0.0, Z: 0.0}
+Hierarchy:
+    RootParts:
+        - ref!! 5d1864fa-a269-4833-9b43-c43587db608a
+        - ref!! 6c8ba4ea-3702-4921-bb37-1a4f7972c86c
+        - ref!! 53d7c4d9-2b6e-4e26-bb1b-463e7f9f9015
+        - ref!! 8375c334-6009-4224-aff3-5ed63f94cf59
+        - ref!! 9a07564f-4afd-4a2a-a9c4-6bd1ce284587
+        - ref!! 5f606c19-4793-4a73-b360-f6391671e515
+    Parts:
+        -   Entity:
+                Id: 53d7c4d9-2b6e-4e26-bb1b-463e7f9f9015
+                Name: Ambient light
+                Components:
+                    c697a80055424baeb4a14cd03a1d83d4: !TransformComponent
+                        Id: 98331955-c580-4f05-8195-b230e1b2f5d0
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    ac6c6ae62bbd4ef3866a8e7710560240: !LightComponent
+                        Id: 6e0c0cd6-b8e4-4d17-aef9-2c89ab39581c
+                        Type: !LightAmbient
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 1.0, B: 1.0}
+                        Intensity: 0.25
+        -   Entity:
+                Id: 5d1864fa-a269-4833-9b43-c43587db608a
+                Name: Camera
+                Components:
+                    c697a80055424baeb4a14cd03a1d83d4: !TransformComponent
+                        Id: eef6ed2c-7136-40cd-b508-59147d2ea14d
+                        Position: {X: -0.14, Y: 0.25, Z: 0.62}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    de91adc75b1b435ea86865ffd608432d: !CameraComponent
+                        Id: 8e0b1f1d-7c70-4efa-a70c-4345f819b584
+                        Name: null
+                        Projection: Perspective
+                        NearClipPlane: 0.01
+                        Slot: b0a6b286-b649-41a0-ae6a-9feddb93947f
+        -   Entity:
+                Id: 5f606c19-4793-4a73-b360-f6391671e515
+                Name: Rim light
+                Components:
+                    05fb27cfed8241348c05a262d2f4602c: !TransformComponent
+                        Id: 26ee29e8-223e-4c25-b120-d4eee1a91269
+                        Position: {X: 0.0, Y: 1.0, Z: -1.0}
+                        Rotation: {X: -0.0669873, Y: 0.9330127, Z: 0.25, W: 0.25}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    cf526ebc134a4b098aa9a207d992047b: !LightComponent
+                        Id: 93da6e28-81b6-4120-8a93-0fa7e2bf6595
+                        Type: !LightDirectional
+                            Color: !ColorRgbProvider
+                                Value: {R: 0.75, G: 0.85, B: 1.0}
+                            Shadow:
+                                Size: Large
+                                DepthRange: {}
+                                PartitionMode: !LightDirectionalShadowMap.PartitionLogarithmic {}
+                                ComputeTransmittance: false
+                                BiasParameters: {}
+                        Intensity: 0.8
+        -   Entity:
+                Id: 6c8ba4ea-3702-4921-bb37-1a4f7972c86c
+                Name: Directional light
+                Components:
+                    c697a80055424baeb4a14cd03a1d83d4: !TransformComponent
+                        Id: 025bb047-201d-4432-912f-5cd6fdff2418
+                        Position: {X: 0.0, Y: 1.0, Z: 1.0}
+                        Rotation: {X: -0.2867882, Y: 0.2867882, Z: 0.090424, W: 0.909576}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    ac6c6ae62bbd4ef3866a8e7710560240: !LightComponent
+                        Id: a1d06353-f1ab-4a1f-8baa-97efcbc58be6
+                        Type: !LightDirectional
+                            Color: !ColorRgbProvider
+                                Value: {R: 1.0, G: 0.94, B: 0.86}
+                            Shadow:
+                                Size: Large
+                                DepthRange: {}
+                                PartitionMode: !LightDirectionalShadowMap.PartitionLogarithmic {}
+                                ComputeTransmittance: false
+                                BiasParameters: {}
+                        Intensity: 1.2
+        -   Entity:
+                Id: 8375c334-6009-4224-aff3-5ed63f94cf59
+                Name: HeadShowcaseController
+                Components:
+                    c697a80055424baeb4a14cd03a1d83d4: !TransformComponent
+                        Id: 79ee8596-6259-4448-b193-5b5f20c21058
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    2dc41fa24aaa4857b380d1529c8e593b: !HeadShowcaseController
+                        Id: 4d2a247c-d18d-461c-86f6-301aad12f5d4
+                        Model: cc3d16ec-0ceb-40dc-bb89-6086dd16a5e4:gltf/GNM_Head
+                        FbxModel: 5853cbc9-eb7e-4505-aea4-9b6d1a521dfe:fbx/GNM_Head
+                        Animation: 29d655aa-44fa-47fc-af0b-46ad379cace3:gltf/GNM_Head_HeadMorphs_Loop
+                        Material: b06cbbd5-8b14-47e6-bae0-67067d810056:HeadMaterial
+                        Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+        -   Entity:
+                Id: 9a07564f-4afd-4a2a-a9c4-6bd1ce284587
+                Name: SceneMenu
+                Components:
+                    76a58a94f2a54b5eb9fd449464fdc82d: !TransformComponent
+                        Id: 687c096a-9b8b-45d6-a823-960ff4dfba4d
+                        Position: {X: 0.0, Y: 0.0, Z: 0.0}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    f2b5112f6fa3484ba02c74b48b8e0d73: !SceneMenu
+                        Id: ffd68c81-dd7e-449a-b355-d31d46906a63
+                        Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
+                        Scenes:
+                            fd0c47ac9ebe45599fc43c5ba246a431:
+                                Name: Characters
+                                Scene: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd:scene/ManyModels
+                            4192da3b0a9a42bb92e0c1bfe42a7bdf:
+                                Name: Cylinder benchmark
+                                Scene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:scene/CylinderBenchmark
+                            49ed28d82301499a90d8ca44ebbbad78:
+                                Name: Head showcase
+                                Scene: 104ecc44-4615-4a66-9994-919ef6bd27d4:scene/HeadShowcase

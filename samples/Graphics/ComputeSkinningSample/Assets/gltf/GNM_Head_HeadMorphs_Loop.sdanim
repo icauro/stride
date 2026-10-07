@@ -1,0 +1,20 @@
+!Animation
+Id: 29d655aa-44fa-47fc-af0b-46ad379cace3
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/gltf/GNM_Head.glb
+AnimationStack: 0
+ClipDuration:
+    Enabled: false
+    StartAnimationTime: 0:00:00:00.0000000
+    EndAnimationTime: 0:00:30:00.0000000
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+RepeatMode: LoopInfinite
+Type: !StandardAnimationAssetType {}
+Skeleton: null
+RootMotion: false
+PreviewModel: cc3d16ec-0ceb-40dc-bb89-6086dd16a5e4:gltf/GNM_Head
+AnimationTimeMinimum: 0:00:00:00.0000000
+AnimationTimeMaximum: 0:00:00:04.0000000
+~SourceHashes:
+    4b2b076ba0109ae3827562ced9ef5c7f~../../Resources/gltf/GNM_Head.glb: 1c6591067ab6c7d33c8a16d3a01e22a4

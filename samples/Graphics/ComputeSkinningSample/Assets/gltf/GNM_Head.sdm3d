@@ -1,0 +1,49 @@
+!Model
+Id: cc3d16ec-0ceb-40dc-bb89-6086dd16a5e4
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/gltf/GNM_Head.glb
+Skeleton: null
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Materials:
+    31c06711d9b10992c2915b648c106705:
+        Name: Material
+        MaterialInstance:
+            Material: null
+DeduplicateMaterials: false
+Modifiers: {}
+MorphTargetNames:
+    41be3baa463ec9a29d21a55d94d1c502: head_000
+    3130a0860973370ad724cc21f4c25f3e: head_001
+    3667de563acee359b58db40068a613f8: head_002
+    f8d17a7373d3b8c40cbdab60f9db79d5: head_003
+    8bce30f93501aeb7fbb201ce09fdfa60: head_004
+    f6fe516e413eba6b57c598f0b70e9c99: head_005
+    739795f43f7f84d9b5aa340ab278189b: head_006
+    f0babd53e17c7463a98d54b9ef67835c: head_007
+    17c414648616b8ef8d7622f871f3adb8: head_008
+    2e8b9cdbd7dd303e45befc66cacc2dfb: head_009
+    70097a9dfbbd56d624f4d8b9c9785c0d: head_010
+    2e4e5c34c41b5de441f56ef9226d7666: head_011
+    9e7d6a2601eaeb0ecaee4b459669f45b: head_012
+    145c6db29d365f9ccdf016a01d37ff34: head_013
+    d1398b1bb6840179eec140d227b5aea8: head_014
+    db4bc749a6d5e4f7bafd8cbfa7288011: head_015
+    1c10e97ad0796c8174192bf3562fa51a: head_016
+    b96c694778831f5d767eceae86842cb7: head_017
+    7cf0bb34e1c5d581daf8ab7f77595ccc: head_018
+    45d10b650d111aff24a5b231f64cbdbb: head_019
+    3454a21e733841ef5d340227ee271288: head_020
+    b168d4ec7c6c044046e31bbb5e0eaecb: head_021
+    90ff5508b49233b92f268e578c6ff087: head_022
+    b6ae01bd5ef78a1c0409c45c51fc8773: head_023
+    6d012de8234d663032ebc8c952bedf72: head_024
+    ad09c3a92195d6301d992320cc12de0d: head_025
+    b4bc70ad2013997a266cd09a14fee6e8: head_026
+    16024db1e1f5a16157b142d73bd00a8d: head_027
+    c6ae1e074c53d32d73ff1de054cec3d5: head_028
+    ec281d729dc831a8a0f4193c7ea49bcf: head_029
+    a49247a0fe47af461eb3a9c1279753b0: head_030
+    cfc58ebb593cc3f15f2a493228f2e44b: head_031
+~SourceHashes:
+    7ca1762be2bd2aae432b679659d325df~../../Resources/gltf/GNM_Head.glb: 1c6591067ab6c7d33c8a16d3a01e22a4

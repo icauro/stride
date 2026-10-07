@@ -1,0 +1,15 @@
+!Model
+Id: 5853cbc9-eb7e-4505-aea4-9b6d1a521dfe
+SerializedVersion: {Stride: 2.0.0.0}
+Tags: []
+Source: !file ../../Resources/fbx/GNM_Head.fbx
+Skeleton: null
+PivotPosition: {X: 0.0, Y: 0.0, Z: 0.0}
+Materials:
+    6fbef2304e8546228c31102595c215d1:
+        Name: DefaultMaterial
+        MaterialInstance:
+            Material: null
+DeduplicateMaterials: false
+Modifiers: {}
+MorphTargetNames: {}

@@ -240,3 +240,6 @@ Hierarchy:
                             928f294eaf74487789c7fa167df9e0e0:
                                 Name: Cylinder benchmark
                                 Scene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:scene/CylinderBenchmark
+                            e44a290b4fe643d08592f10160f57311:
+                                Name: Head showcase
+                                Scene: 104ecc44-4615-4a66-9994-919ef6bd27d4:scene/HeadShowcase
