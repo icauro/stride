@@ -316,7 +316,7 @@ sealed partial class BenchmarkGame : Game
         }
         deformationSettings ??= new MeshDeformationSettings
         {
-            Mode = VertexShaderSkinning ? MeshDeformationMode.ComputeMorph : MeshDeformationMode.Compute,
+            Mode = VertexShaderSkinning ? MeshDeformationMode.VertexShader : MeshDeformationMode.Compute,
             BatchSize = DeformationBatchSize,
             ThreadGroup = Enum.Parse<DeformationThreadGroup>(DeformationThreadGroup),
         };
@@ -330,9 +330,8 @@ sealed partial class BenchmarkGame : Game
 
     private MeshDeformationSettings deformationSettings;
 
-    // Mirrors ModelRenderProcessor's per-instance choice for the active mode.
     private bool ComputeSkinning(ModelComponent model)
-        => deformationSettings != null && (deformationSettings.Mode == MeshDeformationMode.Compute || deformationSettings.Mode == MeshDeformationMode.Auto && model.IsShadowCaster);
+        => deformationSettings?.Mode == MeshDeformationMode.Compute;
 
     private void FinishScenario()
     {

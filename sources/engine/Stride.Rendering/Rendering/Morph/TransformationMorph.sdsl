@@ -1,0 +1,84 @@
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
+// Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
+/// <summary>
+/// Applies morph targets to the mesh position, normal and tangent before skinning.
+/// </summary>
+/// <remarks>
+/// MorphTargets: Macro - flags of <see cref="MeshMorphBuffers"/>: 1 enabled, 2 dense layout, 4 normal deltas, 8 tangent deltas.
+/// </remarks>
+#ifndef MorphTargets
+# define MorphTargets 1
+#endif
+
+shader TransformationMorph : TransformationBase, PositionStream4, NormalStream
+{
+    rgroup PerDraw.Morph
+    {
+        stage StructuredBuffer<uint> MorphEntries;
+        stage StructuredBuffer<uint> MorphVertexOffsets;
+        stage StructuredBuffer<float> MorphWeights;
+    }
+
+    cbuffer PerDraw
+    {
+        stage uint MorphTargetCount;
+        stage uint MorphVertexCount;
+    }
+
+    stage stream uint VertexID : SV_VertexID;
+
+    float3 SafeNormal(float3 value, float3 fallback)
+    {
+        float lengthSquared = dot(value, value);
+        return lengthSquared > 1e-20 ? value * rsqrt(lengthSquared) : fallback;
+    }
+
+    override stage void PreTransformPosition()
+    {
+        uint targetCount = MorphTargetCount;
+        uint vertex = streams.VertexID;
+#if (MorphTargets & 2) != 0
+        // Dense entries are target-major: one entry per target and vertex.
+        uint vertexCount = MorphVertexCount;
+        uint start = 0, end = targetCount;
+#else
+        uint start = MorphVertexOffsets[vertex], end = MorphVertexOffsets[vertex + 1];
+#endif
+        float3 dp = 0, dn = 0, dt = 0;
+        for (uint item = start; item < end; item++)
+        {
+#if (MorphTargets & 2) != 0
+            uint entry = (item * vertexCount + vertex) * 6;
+            uint shape = item;
+#else
+            uint entry = item * 6;
+            uint shape = MorphEntries[entry + 1] & 65535;
+#endif
+            float weight = MorphWeights[shape];
+            [branch]
+            if (weight == 0) continue;
+            uint a = MorphEntries[entry + 1], b = MorphEntries[entry + 2];
+            dp += float3(f16tof32(a >> 16), f16tof32(b), f16tof32(b >> 16)) * weight;
+#if (MorphTargets & 4) != 0
+            uint c = MorphEntries[entry + 3], d = MorphEntries[entry + 4];
+            dn += float3(f16tof32(c), f16tof32(c >> 16), f16tof32(d)) * weight;
+#if (MorphTargets & 8) != 0
+            uint e = MorphEntries[entry + 5];
+            dt += float3(f16tof32(d >> 16), f16tof32(e), f16tof32(e >> 16)) * weight;
+#endif
+#endif
+        }
+        streams.Position.xyz += dp;
+#if (MorphTargets & 4) != 0
+        float3 n = SafeNormal(streams.meshNormal + dn, float3(0, 1, 0));
+        streams.meshNormal = n;
+#if (MorphTargets & 8) != 0
+        float3 t = streams.meshTangent.xyz + dt;
+        float3 tangentFallback = SafeNormal(cross(abs(n.x) < 0.9 ? float3(1, 0, 0) : float3(0, 1, 0), n), float3(0, 0, 1));
+        // tangent.w keeps the imported bitangent handedness.
+        streams.meshTangent.xyz = SafeNormal(t - n * dot(n, t), tangentFallback);
+#endif
+#endif
+        base.PreTransformPosition();
+    }
+};

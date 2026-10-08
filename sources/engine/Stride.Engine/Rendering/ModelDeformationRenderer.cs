@@ -26,34 +26,38 @@ public enum DeformationThreadGroup
     X64Y8,
 }
 
-// Rendering owns shared immutable inputs. Instances of the same mesh share batches of up to
-// BatchSize output slots, so one dispatch deforms every instance in a batch.
+// Rendering owns shared immutable inputs. In compute mode, instances of the same mesh share batches of up to
+// BatchSize output slots, so one dispatch deforms every instance in a batch. In vertex shader mode, each
+// instance only owns its morph weights, and its render meshes apply them in TransformationMorph.
 internal sealed class ModelDeformationRenderer : IDisposable
 {
     private readonly Dictionary<(Mesh, MeshDraw, MeshMorphData), SharedMesh> shared = new();
     private readonly Dictionary<ModelComponent, Instance[]> instances = new();
     private readonly Dictionary<(bool Dense, DeformationThreadGroup Group), ComputeEffectShader> effects = new();
     private readonly HashSet<Batch> pending = new();
+    private readonly List<Instance> pendingWeights = new();
     private readonly RenderDrawContext context;
     private int batchSize = 32;
     private DeformationThreadGroup threadGroup = DeformationThreadGroup.X32Y16;
+    private MeshDeformationMode mode = MeshDeformationMode.VertexShader;
 
     public ModelDeformationRenderer(RenderDrawContext context)
     {
         this.context = context;
-        if (!context.GraphicsDevice.Features.HasComputeShaders || context.GraphicsDevice.Features.RequestedProfile < GraphicsProfile.Level_11_0)
-            throw new NotSupportedException("Compute deformation requires graphics profile 11.0 or higher.");
     }
 
-    public void Configure(int maxBatchSize, DeformationThreadGroup group)
+    public void Configure(int maxBatchSize, DeformationThreadGroup group, MeshDeformationMode deformationMode)
     {
         maxBatchSize = Math.Clamp(maxBatchSize, 1, 1024);
-        if (maxBatchSize == batchSize && group == threadGroup)
+        if (maxBatchSize == batchSize && group == threadGroup && deformationMode == mode)
             return;
+        if (deformationMode == MeshDeformationMode.Compute && (!context.GraphicsDevice.Features.HasComputeShaders || context.GraphicsDevice.Features.RequestedProfile < GraphicsProfile.Level_11_0))
+            throw new NotSupportedException("Compute deformation requires graphics profile 11.0 or higher.");
         foreach (var component in instances.Keys.ToArray())
             Remove(component);
         batchSize = maxBatchSize;
         threadGroup = group;
+        mode = deformationMode;
     }
 
     public void Remove(ModelComponent component)
@@ -69,7 +73,8 @@ internal sealed class ModelDeformationRenderer : IDisposable
     {
         var data = instance.Shared;
         instance.Dispose();
-        if (instance.Batch.Used == 0)
+        pendingWeights.Remove(instance);
+        if (instance.Batch?.Used == 0)
         {
             data.Batches.Remove(instance.Batch);
             pending.Remove(instance.Batch);
@@ -82,8 +87,9 @@ internal sealed class ModelDeformationRenderer : IDisposable
         }
     }
 
-    public void Draw(ModelComponent model, RenderModel renderModel, bool computeSkinning)
+    public void Draw(ModelComponent model, RenderModel renderModel)
     {
+        bool compute = mode == MeshDeformationMode.Compute;
         if (!model.Enabled || model.Model == null)
         {
             Remove(model);
@@ -106,7 +112,7 @@ internal sealed class ModelDeformationRenderer : IDisposable
         {
             var mesh = meshes[meshIndex];
             bool deformMorph = morphEnabled && mesh.MorphTargets?.VertexCount > 0;
-            bool deformSkin = computeSkinning && mesh.Skinning != null;
+            bool deformSkin = compute && mesh.Skinning != null;
             if (!deformMorph && !deformSkin)
             {
                 if (owned[meshIndex] != null)
@@ -121,13 +127,13 @@ internal sealed class ModelDeformationRenderer : IDisposable
             {
                 var key = (mesh, mesh.Draw, mesh.MorphTargets);
                 if (!shared.TryGetValue(key, out var data))
-                    shared[key] = data = new SharedMesh(context, mesh);
+                    shared[key] = data = new SharedMesh(context, mesh, compute);
                 try
                 {
-                    var batch = data.Batches.FirstOrDefault(x => x.Used < x.Capacity);
-                    if (batch == null)
+                    Batch batch = null;
+                    if (compute && (batch = data.Batches.FirstOrDefault(x => x.Used < x.Capacity)) == null)
                         data.Batches.Add(batch = new Batch(context.GraphicsDevice, data, batchSize));
-                    owned[meshIndex] = instance = new Instance(data, batch);
+                    owned[meshIndex] = instance = new Instance(context.GraphicsDevice, data, batch);
                     data.Users++;
                 }
                 catch { if (data.Users == 0) { shared.Remove(key); data.Dispose(); } throw; }
@@ -137,15 +143,25 @@ internal sealed class ModelDeformationRenderer : IDisposable
                 continue;
             Matrix world = renderModel.Meshes[info.MeshStartIndex].World;
             var bones = deformSkin ? model.MeshInfos[meshIndex].BlendMatrices : Array.Empty<Matrix>();
-            instance.Mesh.Skinning = deformSkin ? null : mesh.Skinning;
             instance.Prepare(deformMorph ? model.GetMorphWeights(meshIndex) : instance.ZeroWeights, bones, world);
-            pending.Add(instance.Batch);
+            if (compute)
+            {
+                instance.Mesh.Skinning = deformSkin ? null : mesh.Skinning;
+                pending.Add(instance.Batch);
+            }
+            else
+                pendingWeights.Add(instance);
             for (int pass = 0; pass < info.MeshCount; pass++)
             {
                 var rendered = renderModel.Meshes[info.MeshStartIndex + pass];
-                rendered.Mesh = instance.Mesh;
-                rendered.ActiveMeshDraw = instance.Mesh.Draw;
-                rendered.BlendMatrices = deformSkin ? null : model.MeshInfos[meshIndex].BlendMatrices;
+                if (compute)
+                {
+                    rendered.Mesh = instance.Mesh;
+                    rendered.ActiveMeshDraw = instance.Mesh.Draw;
+                    rendered.BlendMatrices = deformSkin ? null : model.MeshInfos[meshIndex].BlendMatrices;
+                }
+                else
+                    rendered.MorphBuffers = instance.Buffers;
                 rendered.BoundingBox = new BoundingBoxExt(!deformSkin && mesh.Skinning != null ? instance.SkinnedWorldBounds(model.MeshInfos[meshIndex].BlendMatrices) : instance.WorldBounds);
             }
         }
@@ -153,9 +169,12 @@ internal sealed class ModelDeformationRenderer : IDisposable
 
     public void Flush()
     {
+        var command = context.CommandList;
+        foreach (var instance in pendingWeights)
+            instance.Upload(command);
+        pendingWeights.Clear();
         if (pending.Count == 0)
             return;
-        var command = context.CommandList;
         var timer = context.RenderContext.Services.GetService<IGpuTimestampRecorder>();
         using (timer?.BeginRegion("ControlUpload"))
             foreach (var batch in pending)
@@ -238,8 +257,9 @@ internal sealed class ModelDeformationRenderer : IDisposable
         public readonly Mesh Source;
         public readonly MeshDraw Draw;
         public readonly MeshMorphData Data;
-        public readonly Buffer Input, Entries, Offsets;
-        public readonly int PositionOffset, NormalOffset, TangentOffset, IndicesOffset, WeightsOffset, Index16;
+        public readonly Buffer Input;
+        public Buffer Entries, Offsets;
+        public readonly int PositionOffset, NormalOffset, TangentOffset, IndicesOffset, WeightsOffset, Index16, MorphFlags;
         public readonly int TargetCount, BoneCount;
         public readonly byte[] VertexBytes;
         public readonly VertexBufferBinding Binding;
@@ -248,20 +268,33 @@ internal sealed class ModelDeformationRenderer : IDisposable
         public readonly List<Batch> Batches = new();
         public int Users;
 
-        public SharedMesh(RenderDrawContext context, Mesh mesh)
+        public SharedMesh(RenderDrawContext context, Mesh mesh, bool compute)
         {
             var device = context.GraphicsDevice;
             Source = mesh;
             Draw = mesh.Draw;
             Data = mesh.MorphTargets;
             Data?.Validate();
+            TargetCount = Data?.TargetNames.Length ?? 0;
+            BoneCount = mesh.Skinning?.Bones.Length ?? 0;
+            MeasureDeltaBounds(out PositionBounds, out DeltaBounds);
+            if (!compute)
+            {
+                // The vertex shader reads the mesh vertices; only morph data is uploaded.
+                var declarations = Draw.VertexBuffers.Select(x => x.Declaration).ToArray();
+                bool HasElement(string name) => declarations.Any(x => x.VertexElements.Any(e => e.SemanticName == name && e.SemanticIndex == 0));
+                MorphFlags = MeshMorphBuffers.Enabled | (Data.Layout == MeshMorphLayout.DenseMorphMajor ? MeshMorphBuffers.Dense : 0);
+                if (HasElement("NORMAL"))
+                    MorphFlags |= MeshMorphBuffers.Normal | (HasElement("TANGENT") ? MeshMorphBuffers.Tangent : 0);
+                try { CreateMorphBuffers(context.GraphicsDevice, Draw.VertexBuffers[0].Count); }
+                catch { Dispose(); throw; }
+                return;
+            }
             if (Draw.VertexBuffers.Length != 1)
                 throw new NotSupportedException("Compute deformation requires an interleaved vertex buffer.");
             Binding = Draw.VertexBuffers[0];
             if ((Data != null && Binding.Count != Data.VertexCount) || Binding.Stride % 4 != 0)
                 throw new InvalidOperationException("Deformation vertex layout/count mismatch.");
-            TargetCount = Data?.TargetNames.Length ?? 0;
-            BoneCount = mesh.Skinning?.Bones.Length ?? 0;
             var elements = Binding.Declaration.EnumerateWithOffsets().ToArray();
             int Offset(string name, bool required, params PixelFormat[] formats)
             {
@@ -282,6 +315,23 @@ internal sealed class ModelDeformationRenderer : IDisposable
             // back once when preparing this shared mesh, never during normal updates.
             var bytes = Binding.Buffer.GetSerializationData()?.Content ?? Binding.Buffer.GetData<byte>(context.CommandList);
             VertexBytes = bytes.AsSpan(Binding.Offset, checked(Binding.Count * Binding.Stride)).ToArray();
+            try
+            {
+                Input = Buffer.New(device, VertexBytes.AsSpan(), 4, BufferFlags.ShaderResource, PixelFormat.R32_UInt);
+                CreateMorphBuffers(device, Binding.Count);
+            }
+            catch { Dispose(); throw; }
+        }
+
+        private void CreateMorphBuffers(GraphicsDevice device, int vertexCount)
+        {
+            Buffer Structured(ReadOnlySpan<byte> value) => Buffer.New(device, value.Length == 0 ? new byte[4] : value, 4, BufferFlags.StructuredBuffer | BufferFlags.ShaderResource);
+            Entries = Structured(MemoryMarshal.AsBytes((Data?.Entries ?? Array.Empty<MeshMorphEntry>()).AsSpan()));
+            Offsets = Structured(MemoryMarshal.AsBytes((Data?.VertexOffsets ?? new uint[vertexCount + 1]).AsSpan()));
+        }
+
+        private void MeasureDeltaBounds(out Vector3[] positionBounds, out double[] deltaBounds)
+        {
             // Per-target maximum magnitudes. Finite non-negative binary16 values order like their bit patterns,
             // so maxima are taken on the masked bits and converted once.
             var positionBits = new ushort[TargetCount * 3];
@@ -300,21 +350,13 @@ internal sealed class ModelDeformationRenderer : IDisposable
                 deltaBits[shape] = (ushort)Math.Max(deltaBits[shape], Math.Max(Math.Max(px, py), Math.Max(pz, other)));
             }
             static float Half(ushort bits) => (float)BitConverter.UInt16BitsToHalf(bits);
-            PositionBounds = new Vector3[TargetCount];
-            DeltaBounds = new double[TargetCount];
+            positionBounds = new Vector3[TargetCount];
+            deltaBounds = new double[TargetCount];
             for (int shape = 0; shape < TargetCount; shape++)
             {
-                PositionBounds[shape] = new Vector3(Half(positionBits[shape * 3]), Half(positionBits[shape * 3 + 1]), Half(positionBits[shape * 3 + 2]));
-                DeltaBounds[shape] = Half(deltaBits[shape]);
+                positionBounds[shape] = new Vector3(Half(positionBits[shape * 3]), Half(positionBits[shape * 3 + 1]), Half(positionBits[shape * 3 + 2]));
+                deltaBounds[shape] = Half(deltaBits[shape]);
             }
-            try
-            {
-                Buffer Structured(ReadOnlySpan<byte> value) => Buffer.New(device, value.Length == 0 ? new byte[4] : value, 4, BufferFlags.StructuredBuffer | BufferFlags.ShaderResource);
-                Input = Buffer.New(device, VertexBytes.AsSpan(), 4, BufferFlags.ShaderResource, PixelFormat.R32_UInt);
-                Entries = Structured(MemoryMarshal.AsBytes((Data?.Entries ?? Array.Empty<MeshMorphEntry>()).AsSpan()));
-                Offsets = Structured(MemoryMarshal.AsBytes((Data?.VertexOffsets ?? new uint[Binding.Count + 1]).AsSpan()));
-            }
-            catch { Dispose(); throw; }
         }
         public void Dispose()
         {
@@ -417,20 +459,35 @@ internal sealed class ModelDeformationRenderer : IDisposable
         public readonly Batch Batch;
         public readonly int Slot;
         public readonly Mesh Mesh;
+        public readonly MeshMorphBuffers Buffers;
         public BoundingBox WorldBounds;
         private BoundingBox expandedBounds;
         public readonly float[] ZeroWeights;
         private readonly Matrix[] matrices;
         private readonly Vector4[] rows;
+        private float[] weights;
 
-        public Instance(SharedMesh shared, Batch batch)
+        public Instance(GraphicsDevice device, SharedMesh shared, Batch batch)
         {
             Shared = shared;
             Batch = batch;
-            Slot = batch.Allocate();
             matrices = new Matrix[Math.Max(shared.BoneCount, 1)];
             rows = new Vector4[matrices.Length * 4];
             ZeroWeights = new float[shared.TargetCount];
+            if (batch == null)
+            {
+                Buffers = new MeshMorphBuffers
+                {
+                    Entries = shared.Entries,
+                    VertexOffsets = shared.Offsets,
+                    Weights = Buffer.New(device, Math.Max(shared.TargetCount, 1) * 4, 4, BufferFlags.StructuredBuffer | BufferFlags.ShaderResource, PixelFormat.None),
+                    Flags = shared.MorphFlags,
+                    TargetCount = shared.TargetCount,
+                    VertexCount = shared.Source.Draw.VertexBuffers[0].Count,
+                };
+                return;
+            }
+            Slot = batch.Allocate();
             var source = shared.Source;
             Mesh = new Mesh(source)
             {
@@ -485,7 +542,16 @@ internal sealed class ModelDeformationRenderer : IDisposable
                     WorldBounds = bone == 0 ? transformed : BoundingBox.Merge(WorldBounds, transformed);
                 }
             }
-            Batch.Set(Slot, values, rows, bones.Length, activeCount);
+            if (Batch != null)
+                Batch.Set(Slot, values, rows, bones.Length, activeCount);
+            else
+                weights = values;
+        }
+
+        public void Upload(CommandList command)
+        {
+            if (weights.Length != 0)
+                Buffers.Weights.SetData(command, weights.AsSpan());
         }
 
         public BoundingBox SkinnedWorldBounds(Matrix[] bones)
@@ -501,7 +567,8 @@ internal sealed class ModelDeformationRenderer : IDisposable
 
         public void Dispose()
         {
-            Batch.Free(Slot);
+            Batch?.Free(Slot);
+            Buffers?.Weights.Dispose();
         }
     }
 

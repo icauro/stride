@@ -98,15 +98,17 @@ namespace Stride.Rendering
             });
 
             // GPU command recording is sequential, after model transforms/materials are prepared.
-            bool supported = context.GraphicsDevice.Features.HasComputeShaders && context.GraphicsDevice.Features.RequestedProfile >= GraphicsProfile.Level_11_0;
+            var features = context.GraphicsDevice.Features;
             var settings = DeformationSettings ??= new MeshDeformationSettings();
-            deformationRenderer?.Configure(settings.BatchSize, settings.ThreadGroup);
+            // Without compute shaders, the vertex shader deforms; morph buffers need at least graphics profile 10.0.
+            var mode = settings.Mode == MeshDeformationMode.Compute && features.HasComputeShaders && features.RequestedProfile >= GraphicsProfile.Level_11_0
+                ? MeshDeformationMode.Compute : MeshDeformationMode.VertexShader;
+            bool morphSupported = features.RequestedProfile >= GraphicsProfile.Level_10_0;
+            deformationRenderer?.Configure(settings.BatchSize, settings.ThreadGroup, mode);
             foreach (var item in ComponentDatas)
             {
-                // Auto: shadow casters are drawn in several passes, so skinning once in compute pays off.
-                bool computeSkinning = supported && (settings.Mode == MeshDeformationMode.Compute || settings.Mode == MeshDeformationMode.Auto && item.Key.IsShadowCaster);
-                bool hasMorphs = item.Key.Morphs.Enabled && item.Key.Model?.Meshes.Exists(mesh => mesh.MorphTargets?.VertexCount > 0) == true;
-                bool hasSkinning = computeSkinning && item.Key.Model?.Meshes.Exists(mesh => mesh.Skinning != null) == true;
+                bool hasMorphs = morphSupported && item.Key.Morphs.Enabled && item.Key.Model?.Meshes.Exists(mesh => mesh.MorphTargets?.VertexCount > 0) == true;
+                bool hasSkinning = mode == MeshDeformationMode.Compute && item.Key.Model?.Meshes.Exists(mesh => mesh.Skinning != null) == true;
                 if (!item.Key.Enabled || item.Key.Model == null || (!hasMorphs && !hasSkinning))
                 {
                     deformationRenderer?.Remove(item.Key);
@@ -115,9 +117,9 @@ namespace Stride.Rendering
                 if (deformationRenderer == null)
                 {
                     deformationRenderer = new ModelDeformationRenderer(new RenderDrawContext(Services, context, Services.GetSafeServiceAs<GraphicsContext>()));
-                    deformationRenderer.Configure(settings.BatchSize, settings.ThreadGroup);
+                    deformationRenderer.Configure(settings.BatchSize, settings.ThreadGroup, mode);
                 }
-                deformationRenderer.Draw(item.Key, item.Value, computeSkinning);
+                deformationRenderer.Draw(item.Key, item.Value);
             }
             deformationRenderer?.Flush();
         }
@@ -153,6 +155,7 @@ namespace Stride.Rendering
                         renderMesh.IsScalingNegative = nodeTransformations[nodeIndex].IsScalingNegative;
                         renderMesh.BoundingBox = new BoundingBoxExt(meshInfo.BoundingBox);
                         renderMesh.BlendMatrices = meshInfo.BlendMatrices;
+                        renderMesh.MorphBuffers = null;
                     }
                 }
             }

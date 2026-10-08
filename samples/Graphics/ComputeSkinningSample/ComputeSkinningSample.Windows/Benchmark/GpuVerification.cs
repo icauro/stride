@@ -25,6 +25,24 @@ sealed partial class BenchmarkGame
                 var data = mesh.MorphTargets;
                 var renderMesh = rendered.Meshes[rendered.Materials[meshIndex].MeshStartIndex];
                 var outputBinding = renderMesh.Mesh.Draw.VertexBuffers[0];
+                if (!ComputeSkinning(models[instance]))
+                {
+                    // The vertex shader deforms the source vertices: check its bindings and weights instead of an output buffer.
+                    if (!ReferenceEquals(outputBinding.Buffer, vb.Buffer))
+                        throw new Exception("Vertex shader mode still draws a compute output buffer.");
+                    if (mesh.Skinning != null && (renderMesh.Mesh.Skinning == null || renderMesh.BlendMatrices == null))
+                        throw new Exception("Vertex-shader skinning was not retained.");
+                    bool morphed = data?.VertexCount > 0 && models[instance].Morphs.Enabled;
+                    if (morphed != (renderMesh.MorphBuffers != null))
+                        throw new Exception($"Vertex shader morph buffers {(morphed ? "missing" : "left installed")}.");
+                    if (!morphed)
+                        continue;
+                    var weights = renderMesh.MorphBuffers.Weights.GetData<float>(GraphicsContext.CommandList);
+                    for (int shape = 0; shape < data.TargetNames.Length; shape++)
+                        if (weights[shape] != models[instance].GetMorphWeight(meshIndex, shape))
+                            throw new Exception($"Vertex shader morph weight {shape} of instance {instance} is {weights[shape]}, expected {models[instance].GetMorphWeight(meshIndex, shape)}.");
+                    continue;
+                }
                 if (ReferenceEquals(outputBinding.Buffer, vb.Buffer))
                 {
                     if (ComputeSkinning(models[instance]) || data != null && models[instance].Morphs.Enabled)
@@ -100,7 +118,7 @@ sealed partial class BenchmarkGame
     {
         if (frame == 12 && !SkinningOnly) zeroWeightsThisFrame = true;
         if (frame == 13) previous[0] = -1;
-        if (frame == 16) deformationSettings.Mode = MeshDeformationMode.ComputeMorph;
+        if (frame == 16) deformationSettings.Mode = MeshDeformationMode.VertexShader;
         if (frame == 20) deformationSettings.Mode = MeshDeformationMode.Compute;
         if (frame == 30) models[0].Morphs.Enabled = false;
         if (frame == 34) models[0].Morphs.Enabled = true;

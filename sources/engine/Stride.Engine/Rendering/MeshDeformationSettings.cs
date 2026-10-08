@@ -12,10 +12,8 @@ namespace Stride.Rendering;
 [DataContract]
 public enum MeshDeformationMode
 {
-    /// <summary>Compute skinning for models drawn in several passes (shadow casters), vertex-shader skinning otherwise.</summary>
-    Auto,
-    /// <summary>Morphs in compute once per frame; skinning in the vertex shader of every pass.</summary>
-    ComputeMorph,
+    /// <summary>Morphs and skinning in the vertex shader of every pass; no extra vertex memory.</summary>
+    VertexShader,
     /// <summary>Morphs and skinning in compute once per frame; every pass reads the deformed vertices.</summary>
     Compute,
 }
@@ -30,8 +28,8 @@ public sealed class MeshDeformationSettings : Configuration
 {
     /// <userdoc>Where morph targets and skinning are evaluated.</userdoc>
     [DataMember(10)]
-    [DefaultValue(MeshDeformationMode.Auto)]
-    public MeshDeformationMode Mode { get; set; } = MeshDeformationMode.Auto;
+    [DefaultValue(MeshDeformationMode.VertexShader)]
+    public MeshDeformationMode Mode { get; set; } = MeshDeformationMode.VertexShader;
 
     /// <userdoc>Maximum number of instances of one mesh deformed by a single compute dispatch. 1 gives one dispatch per instance.</userdoc>
     [DataMember(30)]

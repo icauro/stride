@@ -26,7 +26,7 @@ sealed class DeformationControls
     {
         panel.Children.Add(ui.Section("Deformation (all scenes)"));
         var modes = Enum.GetValues<MeshDeformationMode>();
-        ui.RadioGroup(panel, "Mode", ["Auto", "Morph", "Morph + skin"], Array.IndexOf(modes, settings.Mode), index => { settings.Mode = modes[index]; Refresh(); });
+        ui.RadioGroup(panel, "Mode", ["Vertex shader", "Compute"], Array.IndexOf(modes, settings.Mode), index => { settings.Mode = modes[index]; Refresh(); });
         panel.Children.Add(modeHint = ui.Text("", 13, SampleUI.Muted, new Thickness(0, 2, 0, 0)));
         panel.Children.Add(batchSizeLabel = ui.Label());
         panel.Children.Add(ui.IntegerSlider(1, 64, settings.BatchSize, value => { settings.BatchSize = value; Refresh(); }));
@@ -39,9 +39,8 @@ sealed class DeformationControls
     {
         modeHint.Text = settings.Mode switch
         {
-            MeshDeformationMode.Auto => "Compute skinning for shadow casters only",
-            MeshDeformationMode.ComputeMorph => "Compute morphs; skinning stays in the vertex shader",
-            _ => "Morphs and skinning both in compute",
+            MeshDeformationMode.VertexShader => "Morphs and skinning in the vertex shader of every pass",
+            _ => "Morphs and skinning in compute once per frame",
         };
         batchSizeLabel.Text = settings.BatchSize == 1 ? "Batch size: 1 (one dispatch per instance)" : $"Batch size: {settings.BatchSize}";
     }

@@ -24,4 +24,27 @@ sealed class SampleGame(string initialScene, string verifyHeadFolder = null) : G
         if (verifyHeadFolder != null)
             HeadVerification.Start(this, verifyHeadFolder);
     }
+
+    private bool captureRequested;
+    private Stride.Core.Mathematics.Color[] captured;
+
+    /// <summary>Reads back the next frame before it is presented; a flip swap chain discards it after.</summary>
+    public async Task<Stride.Core.Mathematics.Color[]> CaptureFrame()
+    {
+        captured = null;
+        captureRequested = true;
+        while (captured == null)
+            await Script.NextFrame();
+        return captured;
+    }
+
+    protected override void Draw(Stride.Games.GameTime gameTime)
+    {
+        base.Draw(gameTime);
+        if (captureRequested)
+        {
+            captureRequested = false;
+            captured = GraphicsDevice.Presenter.BackBuffer.GetData<Stride.Core.Mathematics.Color>(GraphicsContext.CommandList);
+        }
+    }
 }

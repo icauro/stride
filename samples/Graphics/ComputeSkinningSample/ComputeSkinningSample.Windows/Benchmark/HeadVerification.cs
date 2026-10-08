@@ -6,7 +6,7 @@ using Stride.Graphics.Data;
 using Stride.Rendering;
 
 /// <summary>
-/// --verify-head &lt;folder&gt;: plays the head showcase clip, holds it at 1 s and 2 s, reads back the compute-morphed
+/// --verify-head &lt;folder&gt;: switches to compute deformation, plays the head showcase clip, holds it at 1 s and 2 s, reads back the compute-morphed
 /// vertices and compares them with Blender's evaluation of the same frames (GNM_Head_at_1s.glb and GNM_Head_at_2s.glb
 /// from sample-3d/gnm/export_gnm_frames.py, next to GNM_Head.glb). Checks the glTF head, then the FBX head the scene's
 /// source switch offers. Exits with code 0 on success and 1 on failure.
@@ -45,6 +45,11 @@ static class HeadVerification
             head = game.SceneSystem.SceneInstance?.RootScene?.Entities.SelectMany(Descendants)
                 .Select(entity => entity.Get<ModelComponent>()).FirstOrDefault(model => model?.Entity.Get<AnimationComponent>() != null);
         }
+        // Only compute mode writes the morphed vertices to a buffer that can be read back.
+        MeshDeformationSettings settings;
+        while ((settings = game.SceneSystem.SceneInstance.Processors.OfType<ModelRenderProcessor>().FirstOrDefault()?.DeformationSettings) == null)
+            await game.Script.NextFrame();
+        settings.Mode = MeshDeformationMode.Compute;
         var animation = head.Entity.Get<AnimationComponent>();
         var controller = game.SceneSystem.SceneInstance.RootScene.Entities.SelectMany(Descendants)
             .Select(entity => entity.Get<ComputeSkinningSample.HeadShowcaseController>()).First(c => c != null);
@@ -53,11 +58,11 @@ static class HeadVerification
             if (model == null)
                 continue;
             head.Model = model;
-            await VerifyModel(game, folder, format, head, animation);
+            await VerifyModel(game, folder, format, head, animation, settings);
         }
     }
 
-    private static async Task VerifyModel(Game game, string folder, string format, ModelComponent head, AnimationComponent animation)
+    private static async Task VerifyModel(Game game, string folder, string format, ModelComponent head, AnimationComponent animation, MeshDeformationSettings settings)
     {
         var mesh = head.Model.Meshes.Single();
         var data = mesh.MorphTargets;
@@ -139,7 +144,53 @@ static class HeadVerification
             if (worstExcess > 0)
                 throw new Exception($"{format} head at {seconds} s, vertex {worst} is {worstError:E3} from Blender's shape (allowed {tolerance[worst] + 2e-5f:E3}); weights {active}.");
             Console.WriteLine($"PASS {format} head at {seconds} s: {source.Count} GPU-morphed vertices match Blender (largest error {worstError:E3}); weights {active}.");
+            await CompareVertexShaderFrame(game, settings, $"{format} head at {seconds} s");
         }
+    }
+
+    // The compute output matches Blender; the vertex shader path must draw the same image.
+    private static async Task CompareVertexShaderFrame(Game game, MeshDeformationSettings settings, string label)
+    {
+        // Eye adaptation brightens or darkens the whole frame over time: wait until two compute frames agree.
+        var compute = await Capture(game);
+        for (int attempt = 0; ; attempt++)
+        {
+            var next = await Capture(game);
+            bool settled = Compare(compute, next).Different == 0;
+            compute = next;
+            if (settled)
+                break;
+            if (attempt == 100)
+                throw new Exception($"{label}: the compute frame did not settle.");
+        }
+        settings.Mode = MeshDeformationMode.VertexShader;
+        var vertexShader = await Capture(game);
+        settings.Mode = MeshDeformationMode.Compute;
+        var (different, largest) = Compare(compute, vertexShader);
+        // Shading rounding differs slightly between the paths; a wrong shape moves silhouettes by whole pixels.
+        if (different > compute.Length / 10000)
+            throw new Exception($"{label}: the vertex shader frame differs from the compute frame in {different} pixels (largest channel difference {largest}).");
+        Console.WriteLine($"PASS {label}: vertex shader frame matches compute ({different} of {compute.Length} pixels differ by more than 4, largest {largest}).");
+    }
+
+    private static (int Different, int Largest) Compare(Stride.Core.Mathematics.Color[] a, Stride.Core.Mathematics.Color[] b)
+    {
+        int different = 0, largest = 0;
+        for (int pixel = 0; pixel < a.Length; pixel++)
+        {
+            int difference = Math.Max(Math.Abs(a[pixel].R - b[pixel].R), Math.Max(Math.Abs(a[pixel].G - b[pixel].G), Math.Abs(a[pixel].B - b[pixel].B)));
+            largest = Math.Max(largest, difference);
+            if (difference > 4)
+                different++;
+        }
+        return (different, largest);
+    }
+
+    private static async Task<Stride.Core.Mathematics.Color[]> Capture(Game game)
+    {
+        for (int frame = 0; frame < 4; frame++)
+            await game.Script.NextFrame();
+        return await ((SampleGame)game).CaptureFrame();
     }
 
     private static IEnumerable<Entity> Descendants(Entity entity)
