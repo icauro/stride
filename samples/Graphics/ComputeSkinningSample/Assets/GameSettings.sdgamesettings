@@ -2,7 +2,7 @@
 Id: c36dc7c5-b5a2-4734-bcca-1a999368ccb7
 SerializedVersion: {Stride: 3.1.0.1}
 Tags: []
-DefaultScene: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd:scene/ManyModels
+DefaultScene: 104ecc44-4615-4a66-9994-919ef6bd27d4:scene/HeadShowcase
 GraphicsCompositor: 345b59a2-e7b7-41f6-a49d-3b0f2f7a822d:GraphicsCompositor
 Defaults:
     - !Stride.Audio.AudioEngineSettings,Stride.Audio

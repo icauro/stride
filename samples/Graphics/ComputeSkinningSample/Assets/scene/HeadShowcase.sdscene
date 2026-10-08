@@ -120,12 +120,12 @@ Hierarchy:
                         Id: ffd68c81-dd7e-449a-b355-d31d46906a63
                         Font: 1b57b80b-b6b7-4996-904e-b667ab44dc0e:Font
                         Scenes:
+                            49ed28d82301499a90d8ca44ebbbad78:
+                                Name: Head showcase
+                                Scene: 104ecc44-4615-4a66-9994-919ef6bd27d4:scene/HeadShowcase
                             fd0c47ac9ebe45599fc43c5ba246a431:
                                 Name: Characters
                                 Scene: ca201ce5-28b8-457e-a4ab-ec31e39dd6fd:scene/ManyModels
                             4192da3b0a9a42bb92e0c1bfe42a7bdf:
                                 Name: Cylinder benchmark
                                 Scene: b5a8abbf-d74f-494d-b90d-52ae42579fa9:scene/CylinderBenchmark
-                            49ed28d82301499a90d8ca44ebbbad78:
-                                Name: Head showcase
-                                Scene: 104ecc44-4615-4a66-9994-919ef6bd27d4:scene/HeadShowcase
