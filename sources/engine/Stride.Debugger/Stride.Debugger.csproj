@@ -5,10 +5,14 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>$(StrideEditorTargetFramework)</TargetFramework>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <DefineConstants>$(DefineConstants);STRIDE_NUGET_RESOLVER_UI</DefineConstants>
     <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
     <StrideAssemblyProcessorOptions>--parameter-key --auto-module-initializer --serialization</StrideAssemblyProcessorOptions>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
     <PackageReference Include="Mono.Options" />
   </ItemGroup>
   <ItemGroup>
@@ -21,4 +25,15 @@
     <ProjectReference Include="..\..\core\Stride.Core.MicroThreading\Stride.Core.MicroThreading.csproj" />
   </ItemGroup>
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
+  <Target Name="GetEditorDebuggerDeploymentFiles" DependsOnTargets="ResolveReferences;GetCopyToOutputDirectoryItems" Returns="@(_EditorDebuggerDeploymentFiles)">
+    <ItemGroup>
+      <_EditorDebuggerDeploymentFiles Include="$(TargetPath)"><TargetPath>$(TargetFileName)</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="$(TargetDir)$(TargetName).exe" Condition="Exists('$(TargetDir)$(TargetName).exe')"><TargetPath>$(TargetName).exe</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="$(TargetDir)$(TargetName).runtimeconfig.json"><TargetPath>$(TargetName).runtimeconfig.json</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="$(TargetDir)$(TargetName).deps.json"><TargetPath>$(TargetName).deps.json</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="@(ReferenceCopyLocalPaths)"><TargetPath>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(Filename)%(Extension)</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="@(_StrideMultiApiStaged)"><TargetPath>%(_StrideMultiApiStaged.StageSubPath)</TargetPath></_EditorDebuggerDeploymentFiles>
+      <_EditorDebuggerDeploymentFiles Include="@(AllItemsFullPathWithTargetPath)" />
+    </ItemGroup>
+  </Target>
 </Project>

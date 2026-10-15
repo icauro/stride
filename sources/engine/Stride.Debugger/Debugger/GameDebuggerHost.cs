@@ -10,8 +10,10 @@ namespace Stride.Debugger.Target
 {
     public class GameDebuggerHost : IGameDebuggerHost
     {
-        private TaskCompletionSource<IGameDebuggerTarget> target = new TaskCompletionSource<IGameDebuggerTarget>();
+        private TaskCompletionSource<IGameDebuggerTarget> target = new TaskCompletionSource<IGameDebuggerTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
         private NpClient<IGameDebuggerTarget> callbackChannel;
+        private readonly object gate = new object();
+        private bool disposed;
 
         public event Action GameExited;
 
@@ -29,8 +31,13 @@ namespace Stride.Debugger.Target
 
         public void RegisterTarget(string callbackAddress)
         {
-            callbackChannel = new NpClient<IGameDebuggerTarget>(new NpEndPoint(callbackAddress));
-            target.TrySetResult(callbackChannel.Proxy);
+            lock (gate)
+            {
+                if (disposed) return;
+                var channel = new NpClient<IGameDebuggerTarget>(new NpEndPoint(callbackAddress));
+                if (!target.TrySetResult(channel.Proxy)) { channel.Dispose(); return; }
+                callbackChannel = channel;
+            }
         }
 
         public void OnGameExited()
@@ -45,7 +52,12 @@ namespace Stride.Debugger.Target
 
         public void Dispose()
         {
-            this.callbackChannel.Dispose();
+            lock (gate)
+            {
+                if (disposed) return;
+                disposed = true; target.TrySetCanceled();
+                callbackChannel?.Dispose(); callbackChannel = null;
+            }
         }
     }
 }

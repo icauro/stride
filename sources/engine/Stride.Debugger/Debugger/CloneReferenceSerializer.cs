@@ -20,9 +20,11 @@ namespace Stride.Debugger.Target
     /// <summary>
     /// When serializing/deserializing Yaml for live objects, this serializer will handle those objects as reference (similar to Clone serializer).
     /// </summary>
-    [YamlSerializerFactory(YamlAssetProfile.Name)]
+    [YamlSerializerFactory(CloneReferenceSerializer.Profile)]
     public class CloneReferenceSerializer : ObjectSerializer
     {
+        public const string Profile = "DebuggerLiveClone";
+
         // TODO: We might want to share some of the recursive logic with PrefabAssetSerializer?
         // However, ThreadStatic would still need to be separated...
         [ThreadStatic]
@@ -51,7 +53,7 @@ namespace Stride.Debugger.Target
         /// <inheritdoc/>
         protected override void CreateOrTransformObject(ref ObjectContext objectContext)
         {
-            if (recursionLevel >= 2)
+            if (References != null && recursionLevel >= 2)
             {
                 // We are inside a Script
                 // Transform everything into CloneReference for both serialization and deserialization
@@ -74,7 +76,7 @@ namespace Stride.Debugger.Target
         /// <inheritdoc/>
         protected override void TransformObjectAfterRead(ref ObjectContext objectContext)
         {
-            if (recursionLevel >= 2)
+            if (References != null && recursionLevel >= 2)
             {
                 // We are inside a Script
                 if (!objectContext.SerializerContext.IsSerializing)

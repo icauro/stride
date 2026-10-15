@@ -52,6 +52,8 @@ namespace Stride.Debugger.Target
         /// </summary>
         /// <param name="gameTypeName">Name of the game type.</param>
         void GameLaunch(string gameTypeName);
+        bool GameIsRunning();
+        void SetAssemblyResolutionPaths(string[] paths);
 
         /// <summary>
         /// Stops the current game, using <see cref="Game.Exit"/>.

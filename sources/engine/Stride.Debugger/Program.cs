@@ -15,12 +15,25 @@ namespace Stride
 {
     public static class Program
     {
+        [Stride.Core.ModuleInitializer(int.MinValue)]
+        internal static void InitializeGraphicsResolver()
+        {
+            if (Assembly.GetEntryAssembly() == typeof(Program).Assembly)
+                Stride.Core.Assets.GraphicsApiHostResolver.Setup(Stride.Core.Assets.GraphicsApiSelector.Resolve());
+        }
         public static int Main(string[] args)
+        {
+            Stride.Core.Assets.GraphicsApiHostResolver.Setup(Stride.Core.Assets.GraphicsApiSelector.Resolve());
+            return RunDebugger(args);
+        }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int RunDebugger(string[] args)
         {
             var exeName = Path.GetFileName(Assembly.GetExecutingAssembly().Location);
             var showHelp = false;
 
             string hostPipe = null;
+            string dataDirectory = null;
             bool waitDebuggerAttach = false;
 
             var p = new OptionSet
@@ -39,6 +52,7 @@ namespace Stride
                 string.Empty,
                 { "h|help", "Show this message and exit", v => showHelp = v != null },
                 { "host=", "Host pipe", v => hostPipe = v },
+                { "data-directory=", "Compiled game data directory", v => dataDirectory = v },
                 { "wait-debugger-attach", "Process will wait for a debuggger to attach, for 5 seconds", v => waitDebuggerAttach = true },
             };
 
@@ -67,6 +81,12 @@ namespace Stride
                 if (hostPipe == null)
                 {
                     throw new OptionException("Host pipe not specified", "host");
+                }
+                if (dataDirectory != null)
+                {
+                    var actual = Path.GetFullPath(dataDirectory);
+                    if (!Directory.Exists(actual)) throw new DirectoryNotFoundException(actual);
+                    PlatformFolders.ApplicationDataSubDirectory = actual;
                 }
 
                 // Open WCF channel with master builder
