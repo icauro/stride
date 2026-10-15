@@ -14,7 +14,7 @@ namespace Stride.Assets.Scripts
 {
     [DataContract("VisualScriptAsset")]
     [AssetDescription(FileExtension)]
-    public partial class VisualScriptAsset : AssetComposite, IProjectFileGeneratorAsset
+    public partial class VisualScriptAsset : AssetComposite, IProjectFileGeneratorAsset, IAssetObjectReferenceNormalizer
     {
         /// <summary>
         /// The default file extension used by the <see cref="VisualScriptAsset"/>.
@@ -164,12 +164,13 @@ namespace Stride.Assets.Scripts
 
         public VisualScriptCompilerResult Compile(AssetItem assetItem)
         {
+            Stride.Assets.Quantum.VisualScriptLegacyReferenceNormalizer.Normalize(this);
             var generatedAbsolutePath = assetItem.GetGeneratedAbsolutePath().ToOSPath();
 
             var compilerOptions = new VisualScriptCompilerOptions
             {
                 FilePath = generatedAbsolutePath,
-                Class = Path.GetFileNameWithoutExtension(generatedAbsolutePath),
+                Class = Path.GetFileNameWithoutExtension(assetItem.FullPath.ToOSPath()),
             };
 
             // Try to get root namespace from containing project
@@ -181,7 +182,7 @@ namespace Stride.Assets.Scripts
             if (sourceProjectAbsolute != null)
             {
                 // Find root namespace from project
-                var rootNamespace = assetItem.Package.RootNamespace ?? sourceProjectAbsolute.GetFileName();
+                var rootNamespace = assetItem.Package.RootNamespace ?? sourceProjectAbsolute.GetFileNameWithoutExtension();
                 if (rootNamespace != null)
                 {
                     compilerOptions.DefaultNamespace = rootNamespace;
@@ -203,5 +204,8 @@ namespace Stride.Assets.Scripts
             var compilerResult = VisualScriptCompiler.Generate(this, compilerOptions);
             return compilerResult;
         }
+
+        void IAssetObjectReferenceNormalizer.NormalizeObjectReferences()
+            => Stride.Assets.Quantum.VisualScriptLegacyReferenceNormalizer.Normalize(this);
     }
 }
