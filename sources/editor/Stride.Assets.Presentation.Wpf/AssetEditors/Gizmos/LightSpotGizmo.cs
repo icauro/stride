@@ -93,7 +93,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             }
 
             // Check if we only need to update the vertex positions:
-            bool GeometryAffectingParametersChanged = !MathUtil.NearEqual(currentAngleOuterInRadians, LightSpot.AngleOuterInRadians) ||
+            bool GeometryAffectingParametersChanged = !MathUtil.NearEqual(currentAngleOuterInRadians, MathUtil.DegreesToRadians(Math.Max(LightSpot.AngleInner, LightSpot.AngleOuter))) ||
                                                       !MathUtil.NearEqual(currentRange, LightSpot.Range) ||
                                                       !MathUtil.NearEqual(currentAspectRatio, LightSpot.AspectRatio) || // TODO: This will trigger a rebuild even if no texture is being used.
                                                       !MathUtil.NearEqual(currentProjectionPlaneDistance, LightSpot.ProjectionPlaneDistance) || // TODO: This will trigger a rebuild even if no texture is being used.
@@ -102,7 +102,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             if (GeometryAffectingParametersChanged) // TODO: PERFORMANCE: We're doing redundant work. If the lighting mode changes, we do a rebuild and then we also update the vertex positions (redundant).
             {
                 // Save the current state:
-                currentAngleOuterInRadians = LightSpot.AngleOuterInRadians; // "AngleOuterInRadians" already contains the max value between "AngleInner" and "AngleOuter".
+                currentAngleOuterInRadians = MathUtil.DegreesToRadians(Math.Max(LightSpot.AngleInner, LightSpot.AngleOuter));
                 currentRange = LightSpot.Range;
                 currentAspectRatio = LightSpot.AspectRatio;
                 currentProjectionPlaneDistance = LightSpot.ProjectionPlaneDistance;

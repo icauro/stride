@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
+
 using Stride.Assets.Presentation.AssetEditors.GameEditor.Game;
 using Stride.Engine;
 using Stride.Extensions;
@@ -138,8 +138,8 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             var axisRotations = new [] { Vector3.Zero, new Vector3(MathUtil.PiOverTwo, 0, MathUtil.PiOverTwo), new Vector3(-MathUtil.PiOverTwo, -MathUtil.PiOverTwo, 0) };
             for (int axis = 0; axis < 3; axis++)
             {
-                axisRootEntities[axis].TransformValue.RotationEulerXYZ = axisRotations[axis];
-                entity.TransformValue.Children.Add(axisRootEntities[axis].TransformValue);
+                axisRootEntities[axis].Transform.RotationEulerXYZ = axisRotations[axis];
+                entity.Transform.Children.Add(axisRootEntities[axis].Transform);
             }
 
             // Add middle sphere
@@ -161,7 +161,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         {
             base.UpdateShape();
             
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
             if (cameraService == null)
                 return;
 
@@ -171,7 +171,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
             // reset the plane rotations
             for (int axis = 0; axis < 3; axis++)
-                translationPlaneRoots[axis].TransformValue.Rotation = Quaternion.Identity;
+                translationPlaneRoots[axis].Transform.Rotation = Quaternion.Identity;
 
             for (int axis = 0; axis < 3; axis++)
             {
@@ -180,8 +180,8 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
                 if (isCameraBackfacing)
                 {
-                    translationPlaneRoots[(axis + 1) % 3].TransformValue.Rotation *= Quaternion.RotationY(MathUtil.Pi);
-                    translationPlaneRoots[(axis + 2) % 3].TransformValue.Rotation *= Quaternion.RotationZ(MathUtil.Pi);
+                    translationPlaneRoots[(axis + 1) % 3].Transform.Rotation *= Quaternion.RotationY(MathUtil.Pi);
+                    translationPlaneRoots[(axis + 2) % 3].Transform.Rotation *= Quaternion.RotationZ(MathUtil.Pi);
                 }
             }
         }
@@ -189,7 +189,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         protected override void UpdateTransformationAxis()
         {
             var newSelection = GizmoTransformationAxes.None;
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
 
             // calculate the ray in the gizmo space
             var gizmoMatrix = WorldMatrix;
@@ -203,12 +203,12 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                 return;
             }
 
-            var clickRay = EditorGameHelper.CalculateRayFromMousePosition(cameraService.Component, Input.MousePosition, gizmoViewInverse);
+            var clickRay = EditorGameHelper.CalculateRayFromMousePosition(cameraService.Component, Host.MousePosition, gizmoViewInverse);
             
             var minHitDistance = float.PositiveInfinity;
 
             // Select the closest intersecting translation plane
-            foreach (var pair in EditorGameComponentGizmoService.PlaneToIndex)
+            foreach (var pair in TransformationGizmo.PlaneToIndex)
             {
                 var minimum = new Vector3(0) { [pair.Value] = -AxisBodyRadius };
                 var maximum = new Vector3(GizmoPlaneLength);
@@ -290,7 +290,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
         private void UpdateDrawOrder()
         {
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
             // calculate the depth of the entities
             var viewProjection = cameraService.ViewMatrix * cameraService.ProjectionMatrix;
             foreach (EntitySortInfo sortInfo in sortedEntities)

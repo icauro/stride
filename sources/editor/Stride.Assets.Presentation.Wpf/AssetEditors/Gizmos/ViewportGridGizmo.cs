@@ -27,6 +27,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         private List<Entity> originAxes = new List<Entity>();
         private List<Entity> grids = new List<Entity>();
         private Entity originAxis;
+        private readonly List<Texture> generatedTextures = new List<Texture>();
 
         private readonly Color RedUniformColor = new Color(0xFC, 0x37, 0x37);
         private readonly Color GreenUniformColor = new Color(0x32, 0xE3, 0x35);
@@ -108,9 +109,9 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                 }
             };
 
-            axisEntity.TransformValue.Scale = new Vector3(GridSize, 1f / GridBase, 1f / GridBase);
+            axisEntity.Transform.Scale = new Vector3(GridSize, 1f / GridBase, 1f / GridBase);
             if (axis != 0)
-                axisEntity.TransformValue.Rotation = Quaternion.RotationX(MathUtil.PiOverTwo) * Quaternion.RotationAxis(new Vector3 { [1 + (axis % 2)] = 1f }, MathUtil.PiOverTwo);
+                axisEntity.Transform.Rotation = Quaternion.RotationX(MathUtil.PiOverTwo) * Quaternion.RotationAxis(new Vector3 { [1 + (axis % 2)] = 1f }, MathUtil.PiOverTwo);
             var axisEntityRoot = new Entity("Scene grid origin axis root");
             axisEntityRoot.AddChild(axisEntity);
 
@@ -141,6 +142,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         {
             var gridImage = imageBuilder();
             var gridTexture = Texture.New(GraphicsDevice, gridImage);
+            generatedTextures.Add(gridTexture);
             gridImage.Dispose();
 
             return gridTexture;
@@ -171,7 +173,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         private AxisToHide UpdateGrids(Color3 gridColor, float alpha, int gridAxisIndex, float sceneUnit)
         {
             var gridAxisIndexForDeterminingHiddenAxes = gridAxisIndex;
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = GridCameraHost;
             if (cameraService == null)
                 return AxisToHide.All;
 
@@ -251,14 +253,14 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
                 // Apply positions
                 grid.Transform.Position = snappedPosition;
-                originAxis.TransformValue.Position = originPosition;
+                originAxis.Transform.Position = originPosition;
                 for (int axis = 0; axis < 3; axis++)
-                    originAxes[axis].TransformValue.Position[axis] = snappedPosition[axis];
+                    originAxes[axis].Transform.Position[axis] = snappedPosition[axis];
 
                 // Apply the scale (Note: scale cannot be applied at root or sub-position is scaled too)
                 grid.Transform.Scale = new Vector3(gridScale);
                 for (int axis = 0; axis < 3; axis++)
-                    originAxes[axis].TransformValue.Scale = new Vector3(gridScale);
+                    originAxes[axis].Transform.Scale = new Vector3(gridScale);
 
                 // Determine and apply the rotation to the grid
                 SetPlaneEntityRotation(2, upVector, grid);
@@ -405,5 +407,12 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             All = 4,
             None = -1,
         }
+        protected override void Destroy()
+        {
+            base.Destroy();
+            foreach (var texture in generatedTextures) texture.Dispose();
+            generatedTextures.Clear();
+        }
     }
 }
+

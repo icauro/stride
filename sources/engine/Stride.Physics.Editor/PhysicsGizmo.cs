@@ -20,6 +20,7 @@ namespace Stride.Physics.Editor
     public class PhysicsGizmo : EntityGizmo<PhysicsComponent>
     {
         private readonly List<Entity> spawnedEntities = new List<Entity>();
+        public IReadOnlyList<Entity> DebugEntities => spawnedEntities;
 
         private bool rendering;
 
@@ -35,10 +36,12 @@ namespace Stride.Physics.Editor
 
         protected override void Destroy()
         {
+            if (Component.DebugEntity != null && spawnedEntities.Contains(Component.DebugEntity)) Component.RemoveDebugEntity(EditorScene);
             foreach (var spawnedEntity in spawnedEntities)
             {
                 EditorScene.Entities.Remove(spawnedEntity);
             }
+            spawnedEntities.Clear(); base.Destroy();
         }
 
         private struct PhysicsElementInfo
@@ -277,8 +280,5 @@ namespace Stride.Physics.Editor
             GizmoRootEntity.Transform.UseTRS = false;
         }
 
-        public PhysicsGizmo(EntityComponent component) : base(component)
-        {
-        }
     }
 }

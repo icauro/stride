@@ -13,7 +13,10 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         public const RenderGroup GridGroup = RenderGroup.Group2;
         public const RenderGroupMask GridGroupMask = RenderGroupMask.Group2;
 
-        protected static readonly ValueParameterKey<Color4> GridColorKey = ParameterKeys.NewValue<Color4>();
+        // This source is also linked into hosts without the WPF assembly processor.
+        // Match its generated name and register the key before material shader generation.
+        protected static readonly ValueParameterKey<Color4> GridColorKey = (ValueParameterKey<Color4>)ParameterKeys.Merge(
+            ParameterKeys.NewValue<Color4>(), typeof(GridGizmoBase), "GridGizmoBase.GridColorKey");
 
         /// <summary>
         /// Initializes a new instance of the <see cref="GridGizmoBase" /> class.

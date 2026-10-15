@@ -65,8 +65,8 @@ namespace Stride.Assets.Presentation.Thumbnails
 
             protected override void DestroyScene(Scene scene)
             {
-                // TODO dispose resources allocated by the procedural model "model.Dispose"
                 base.DestroyScene(scene);
+                MaterialPreviewGeometry.DisposeGeneratedModel(model);
             }
         }
     }

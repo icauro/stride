@@ -65,6 +65,7 @@ public abstract class AssetsPlugin
                 throw new InvalidOperationException("The plugin type is already registered.");
 
             var plugin = (AssetsPlugin)Activator.CreateInstance(type)!;
+            if (plugin is AssetsEditorPlugin editorPlugin) editorPlugin.RegisterPackageSettings();
             registeredPlugins = [.. registeredPlugins, plugin];
             return plugin;
         }

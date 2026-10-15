@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Stride.Core;
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
 using Stride.Assets.Presentation.AssetEditors.GameEditor.Game;
 using Stride.Assets.SpriteFont;
 using Stride.Assets.SpriteFont.Compiler;
@@ -16,7 +15,6 @@ using Stride.Graphics.Font;
 using Stride.Graphics.GeometricPrimitives;
 using Stride.Rendering;
 using Stride.Rendering.Compositing;
-using Stride.Assets.Presentation.SceneEditor;
 
 namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 {
@@ -27,10 +25,9 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
     /// The view gizmo sets the viewport to the top/right corner of the window before rendering. 
     /// This is done in order to avoid deformations at frustum extremities when rendering the gizmo.
     /// </remarks>
-    public class CameraOrientationGizmo : AxialGizmo
+    public partial class CameraOrientationGizmo : AxialGizmo
     {
-        private readonly EditorGameCameraOrientationService service;
-        private readonly EntityHierarchyEditorGame game;
+        private readonly CameraOrientationGizmoHost host;
 
         public const RenderGroup ViewGizmoGroup = RenderGroup.Group6;
         private const RenderGroupMask ViewGizmoGroupMask = RenderGroupMask.Group6;
@@ -100,11 +97,10 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// </summary>
         /// <param name="service">The service that is using this gizmo.</param>
         /// <param name="game">The scene game.</param>
-        internal CameraOrientationGizmo(EditorGameCameraOrientationService service, EntityHierarchyEditorGame game)
+        public CameraOrientationGizmo(CameraOrientationGizmoHost host)
         {
             RenderGroup = ViewGizmoGroup;
-            this.service = service;
-            this.game = game;
+            this.host = host;
         }
 
         public Int3 SelectedElement { get; private set; }
@@ -115,7 +111,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
         private void UpdateCamera()
         {
-            var view = service.Camera.ViewMatrix;
+            var view = host.ViewMatrix;
             view.TranslationVector = new Vector3(0, 0, -OuterExtent * CameraDistanceFactor);
             cameraComponent.ViewMatrix = view;
         }
@@ -164,7 +160,8 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             // Calculate the ray in the gizmo space
             var viewInverse = Matrix.Invert(cameraComponent.ViewMatrix);
             var viewport = gizmoViewportRenderer.Viewport;
-            var mousePosition = (Input.MousePosition * gizmoViewportRenderer.OutputSize - new Vector2(viewport.X, viewport.Y)) / ViewportSize;
+            var mousePosition = (host.MousePosition * gizmoViewportRenderer.OutputSize - new Vector2(viewport.X, viewport.Y)) / ViewportSize;
+            if (mousePosition.X < 0 || mousePosition.Y < 0 || mousePosition.X > 1 || mousePosition.Y > 1) return;
             var clickRay = EditorGameHelper.CalculateRayFromMousePosition(cameraComponent, mousePosition, viewInverse);
 
             var minHitDistance = float.PositiveInfinity;
@@ -254,24 +251,24 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             // create the default fonts
             var fontItem = OfflineRasterizedSpriteFontFactory.Create();
             fontItem.FontType.Size = FontSize;
-            defaultFont = OfflineRasterizedFontCompiler.Compile(Services.GetService<IFontFactory>(), fontItem, GraphicsDevice.ColorSpace == ColorSpace.Linear);
+            defaultFont = OfflineRasterizedFontCompiler.Compile(host.FontFactory, fontItem, GraphicsDevice.ColorSpace == ColorSpace.Linear);
 
             // create the sprite batch use to draw text
             spriteBatch = new SpriteBatch(GraphicsDevice) { DefaultDepth = 1 };
 
             // Add a renderer on the top right side
             var cameraOrientationGizmoRenderStage = new RenderStage("CameraOrientationGizmo", "Main");
-            game.EditorSceneSystem.GraphicsCompositor.RenderStages.Add(cameraOrientationGizmoRenderStage);
+            host.Compositor.RenderStages.Add(cameraOrientationGizmoRenderStage);
 
-            var meshRenderFeature = game.EditorSceneSystem.GraphicsCompositor.RenderFeatures.OfType<MeshRenderFeature>().First();
+            var meshRenderFeature = host.Compositor.RenderFeatures.OfType<MeshRenderFeature>().First();
             meshRenderFeature.RenderStageSelectors.Add(new SimpleGroupToRenderStageSelector
             {
-                EffectName = EditorGraphicsCompositorHelper.EditorForwardShadingEffect,
+                EffectName = CameraOrientationGizmoHost.EditorForwardShadingEffect,
                 RenderGroup = ViewGizmoGroupMask,
                 RenderStage = cameraOrientationGizmoRenderStage
             });
 
-            var editorCompositor = (EditorTopLevelCompositor)game.EditorSceneSystem.GraphicsCompositor.Game;
+            var editorCompositor = (EditorTopLevelCompositor)host.Compositor.Game;
             editorCompositor.AddOverlayGizmoCompositor(gizmoViewportRenderer = new GizmoViewportRenderer
             {
                 Name = "Render Camera Orientation",
@@ -313,7 +310,8 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
         protected override void Destroy()
         {
-            defaultFont.Dispose();
+            defaultFont?.Dispose();
+            spriteBatch?.Dispose();
 
             base.Destroy();
         }
@@ -328,7 +326,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
             var textureToWorldSpace = Matrix.RotationX(MathUtil.Pi) * Matrix.Translation(0, 0, OuterExtent);
 
-            var displayDirectionNames = SceneEditorSettings.DisplayDirectionNames.GetValue();
+            var displayDirectionNames = host.DisplayDirectionNames;
 
             var textScale = displayDirectionNames ? NameIndicatorScale : XYZIndicatorScale;
 
@@ -359,5 +357,15 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                 Rotation = Matrix.RotationYawPitchRoll(angles.Y, angles.X, angles.Z);
             }
         }
+    }
+
+    public abstract class CameraOrientationGizmoHost
+    {
+        public const string EditorForwardShadingEffect = "StrideEditorForwardShadingEffect";
+        public abstract Matrix ViewMatrix { get; }
+        public abstract Vector2 MousePosition { get; }
+        public abstract bool DisplayDirectionNames { get; }
+        public abstract GraphicsCompositor Compositor { get; }
+        public abstract IFontFactory FontFactory { get; }
     }
 }

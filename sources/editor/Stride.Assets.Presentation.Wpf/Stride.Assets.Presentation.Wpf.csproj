@@ -66,6 +66,7 @@
     <ProjectReference Include="..\..\tools\Stride.Graphics.RenderDocPlugin\Stride.Graphics.RenderDocPlugin.csproj" />
     <ProjectReference Include="..\Stride.Core.Assets.Editor.Wpf\Stride.Core.Assets.Editor.Wpf.csproj" />
     <ProjectReference Include="..\Stride.Editor.Wpf\Stride.Editor.Wpf.csproj" />
+    <ProjectReference Include="..\Stride.Assets.Thumbnails\Stride.Assets.Thumbnails.csproj" />
     <!-- Force Stride.Templates.Games (NewGame, the bundled-with-installer set) to build before
          GameStudio links. Without this, a fresh checkout that builds only the editor never
          produces the .nupkg the DotNetNewTemplateBridge resolves via PackageStore at runtime.
@@ -112,6 +113,11 @@
     <EmbeddedResource Include="Resources\*.cur" />
   </ItemGroup>
   <!-- Templates -->
+  <ItemGroup>
+    <!-- Native definitions/resources live once in the headless production assembly. -->
+    <Compile Remove="Thumbnails\*.cs;Resources\Thumbnails\StaticThumbnails.Designer.cs" />
+    <EmbeddedResource Remove="Resources\Thumbnails\StaticThumbnails.resx" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Remove="Templates\Core\**" />
     <Compile Remove="Templates\Assets\**" />

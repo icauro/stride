@@ -197,7 +197,10 @@ namespace Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game
 
             // initialize the gizmo
             foreach (var gizmo in transformationGizmos)
+                {
+                gizmo.Host = new WpfTransformGizmoHost(game);
                 gizmo.Initialize(game.Services, editorScene);
+                }
 
             // Deactivate all transformation gizmo by default
             foreach (var gizmo in transformationGizmos)

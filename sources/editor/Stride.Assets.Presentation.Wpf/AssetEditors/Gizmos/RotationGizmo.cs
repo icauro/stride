@@ -7,7 +7,7 @@ using Stride.Engine;
 using Stride.Extensions;
 using Stride.Graphics.GeometricPrimitives;
 using Stride.Rendering;
-using Stride.Assets.Presentation.SceneEditor;
+
 
 namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 {
@@ -60,13 +60,13 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         protected override void UpdateTransformationAxis()
         {
             var newSelection = GizmoTransformationAxes.None;
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
 
             const int CollisionTessellation = 20;
             const float ClickThickness = 2f * RotationGizmoThickness;
 
             // determine the mouse position normalized, centered and correctly oriented
-            var mousePosition = Input.MousePosition;
+            var mousePosition = Host.MousePosition;
             var screenPosition = new Vector2(2f * (mousePosition.X - 0.5f), -2f * (mousePosition.Y - 0.5f));
 
             // calculate view parameters
@@ -159,7 +159,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             var transformation = new InitialTransformation { Rotation = Quaternion.Identity, Scale = Vector3.One };
 
             // set the rotation to apply in the gizmo space
-            transformation.Rotation = SceneEditorSettings.UseLinearMovementForRotation.GetValue() ? GetRotationFromLinearMovement() : GetRotationFromCircularMovement();
+            transformation.Rotation = Host.UseLinearMovementForRotation ? GetRotationFromLinearMovement() : GetRotationFromCircularMovement();
 
             return transformation;
         }
@@ -169,7 +169,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             // TODO: use cameraComponent.WorldToScreenPosition instead once implemented
             // determine the anchor entity's screen position
             var anchorEntityWorldPosition = AnchorEntity.Transform.WorldMatrix.TranslationVector;
-            var cameraComponent = Game.EditorServices.Get<IEditorGameCameraService>().Component;
+            var cameraComponent = Host.Component;
             Vector3.TransformCoordinate(ref anchorEntityWorldPosition, ref cameraComponent.ViewProjectionMatrix, out var clipSpace);
             Vector3.TransformCoordinate(ref anchorEntityWorldPosition, ref cameraComponent.ViewMatrix, out var viewSpace);
             var anchorEntityScreenPosition = new Vector2
@@ -179,7 +179,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             };
 
             // determine the vectors going from the anchor entity's position to the start and current mouse positions
-            var anchorEntityToMouse = new Vector2(Input.MousePosition.X, -Input.MousePosition.Y) - anchorEntityScreenPosition;
+            var anchorEntityToMouse = new Vector2(Host.MousePosition.X, -Host.MousePosition.Y) - anchorEntityScreenPosition;
             var anchorEntityToStartMouse = new Vector2(StartMousePosition.X, -StartMousePosition.Y) - anchorEntityScreenPosition;
 
             anchorEntityToMouse.X *= cameraComponent.AspectRatio;
@@ -197,7 +197,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
             // determine the rotation axis
             var rotationAxisWorldUp = rotationAxes[(int)TransformationAxes / 2].Transform.WorldMatrix.Up;
-            var cameraToAnchorEntity = AnchorEntity.Transform.WorldMatrix.TranslationVector - Game.EditorServices.Get<IEditorGameCameraService>().Position;
+            var cameraToAnchorEntity = AnchorEntity.Transform.WorldMatrix.TranslationVector - Host.Position;
             var rotationAxis = new Vector3(0) { [(int)TransformationAxes / 2] = MathF.Sign(Vector3.Dot(cameraToAnchorEntity, rotationAxisWorldUp)) };
 
             return Quaternion.RotationAxis(rotationAxis, rotationAngle);
@@ -205,7 +205,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
         private Quaternion GetRotationFromLinearMovement()
         {
-            var mouseDrag = Input.MousePosition - StartMousePosition;
+            var mouseDrag = Host.MousePosition - StartMousePosition;
 
             // determine the rotation angle
             var rotationAngle = Vector2.Dot(new Vector2(mouseDrag.X, -mouseDrag.Y), TransformationDirection) * 2.1f * MathUtil.Pi; // half screen size if little bit more Pi

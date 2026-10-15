@@ -26,11 +26,7 @@ namespace Stride.Physics.Editor
 
         // Each time we create a primitive we allocate memory that won't be garbage collected without calling Dispose,
         // so we need a global cache of those per a graphics device (in case there's more than one).
-        private static Dictionary<Graphics.GraphicsDevice, GeometricPrimitive> SphereCache = new Dictionary<Graphics.GraphicsDevice, GeometricPrimitive>(1);
-        private static Dictionary<Graphics.GraphicsDevice, GeometricPrimitive> ConeCache = new Dictionary<Graphics.GraphicsDevice, GeometricPrimitive>(1);
-        private static Dictionary<Graphics.GraphicsDevice, GeometricPrimitive> CylinderCache = new Dictionary<Graphics.GraphicsDevice, GeometricPrimitive>(1);
-        private static Dictionary<Graphics.GraphicsDevice, Dictionary<float, GeometricPrimitive>> LimitDiscCache = new Dictionary<Graphics.GraphicsDevice, Dictionary<float,GeometricPrimitive>>(1);
-        private static Dictionary<Graphics.GraphicsDevice, Dictionary<Color, Material>> MaterialCache = new Dictionary<Graphics.GraphicsDevice, Dictionary<Color, Material>>();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Graphics.GraphicsDevice, Dictionary<Color, Material>> MaterialCache = new();
 
         // Using the same render group as transformation gizmo which means constraint gizmo is visible while inside another mesh
         private static readonly RenderGroup GizmoRenderGroup = TransformationGizmo.TransformationGizmoGroup;
@@ -144,52 +140,22 @@ namespace Stride.Physics.Editor
         #region Cache accessors
         private static GeometricPrimitive GetSphere(Graphics.GraphicsDevice device)
         {
-            if (!SphereCache.TryGetValue(device, out var sphere))
-            {
-                sphere = GeometricPrimitive.Sphere.New(device, CenterSphereRadius, Tessellation);
-                SphereCache.Add(device, sphere);
-            }
-
-            return sphere;
+            return device.GetOrCreateSharedData("Constraint Gizmo Sphere", d => GeometricPrimitive.Sphere.New(d, CenterSphereRadius, Tessellation));
         }
 
         private static GeometricPrimitive GetCone(Graphics.GraphicsDevice device)
         {
-            if (!ConeCache.TryGetValue(device, out var cone))
-            {
-                cone = GeometricPrimitive.Cone.New(device, AxisConeRadius, AxisConeHeight, Tessellation);
-                ConeCache.Add(device, cone);
-            }
-
-            return cone;
+            return device.GetOrCreateSharedData("Constraint Gizmo Cone", d => GeometricPrimitive.Cone.New(d, AxisConeRadius, AxisConeHeight, Tessellation));
         }
 
         private static GeometricPrimitive GetCylinder(Graphics.GraphicsDevice device)
         {
-            if (!CylinderCache.TryGetValue(device, out var cylinder))
-            {
-                cylinder = GeometricPrimitive.Cylinder.New(device, CylinderLength, CylinderRadius, Tessellation);
-                CylinderCache.Add(device, cylinder);
-            }
-
-            return cylinder;
+            return device.GetOrCreateSharedData("Constraint Gizmo Cylinder", d => GeometricPrimitive.Cylinder.New(d, CylinderLength, CylinderRadius, Tessellation));
         }
 
         private static GeometricPrimitive GetLimitDisc(Graphics.GraphicsDevice device, float angle)
         {
-            if (!LimitDiscCache.TryGetValue(device, out var cache))
-            {
-                cache = new Dictionary<float, GeometricPrimitive>();
-                LimitDiscCache.Add(device, cache);
-            }
-
-            if (!cache.TryGetValue(angle, out var disc))
-            {
-                disc = GeometricPrimitive.Disc.New(device, LimitDiscRadius, angle, Tessellation);
-                cache.Add(angle, disc);
-            }
-
-            return disc;
+            return device.GetOrCreateSharedData(("Constraint Gizmo Limit", angle), d => GeometricPrimitive.Disc.New(d, LimitDiscRadius, angle, Tessellation));
         }
 
         private static Material GetMaterial(Graphics.GraphicsDevice device, Color color)

@@ -12,9 +12,18 @@ namespace Stride.Core.Assets.Editor
         /// <summary>What this editor process runs on, e.g. ".NET 11.0.0-rc.1, Vulkan"; for windows whose title stays short.</summary>
         public static string EditorEnvironment { get; set; }
 
-        public static string UserDataPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            ProductNameDirectory);
+        public static string UserDataPath
+        {
+            get
+            {
+                var overridden = Environment.GetEnvironmentVariable("STRIDE_EDITOR_USER_DATA_PATH");
+                if (string.IsNullOrWhiteSpace(overridden)) return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ProductNameDirectory);
+                if (!Path.IsPathFullyQualified(overridden))
+                    throw new ArgumentException("STRIDE_EDITOR_USER_DATA_PATH must be an absolute directory path.");
+                return Path.GetFullPath(overridden);
+            }
+        }
 
         public static string DefaultTempPath => Path.Combine(
             Path.GetTempPath(),

@@ -51,5 +51,14 @@
       <LastGenOutput>DefaultThumbnails.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Stride.Editor.Thumbnails/Stride.Editor.Thumbnails.csproj" />
+    <ProjectReference Include="../Stride.Editor.Previews/Stride.Editor.Previews.csproj" />
+    <Compile Remove="Engine/EmbeddedGame.cs;EditorGame/Game/EditorServiceGame.cs;EditorGame/Game/EditorGameServiceRegistry.cs;EditorGame/Game/IEditorGameService.cs;Build/IGameSettingsAccessor.cs;Preview/PreviewGame.cs" />
+    <Compile Remove="Thumbnails/*.cs" />
+    <Compile Include="Thumbnails/GameStudioThumbnailService.cs;Thumbnails/ThumbnailAssetBuildUnit.cs" />
+    <Compile Remove="Engine/EntityExtensions.cs;Preview/PreviewCompilationContext.cs;Resources/DefaultThumbnails.Designer.cs;GraphicsDeviceLoss.cs" />
+    <EmbeddedResource Remove="Resources/DefaultThumbnails.resx" />
+  </ItemGroup>
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
 </Project>

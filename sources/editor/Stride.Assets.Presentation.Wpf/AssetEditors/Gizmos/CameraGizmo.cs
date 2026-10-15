@@ -4,7 +4,6 @@
 using System;
 using Stride.Core;
 using Stride.Core.Mathematics;
-using Stride.Editor.EditorGame.Game;
 using Stride.Engine;
 using Stride.Engine.Gizmos;
 using Stride.Engine.Processors;
@@ -56,8 +55,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         {
             var root = base.Create();
 
-            var renderingSettings = Game.PackageSettings?.GetConfiguration<RenderingSettings>();
-            var aspect = (renderingSettings == null) ? 1.7778f : (float)renderingSettings.DefaultBackBufferWidth / (float)renderingSettings.DefaultBackBufferHeight;
+            var aspect = DefaultCameraAspectRatio;
 
             cameraParameters = new CameraParameters(Component, aspect);
 
@@ -86,8 +84,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         {
             base.Update();
 
-            var renderingSettings = Game.PackageSettings?.GetConfiguration<RenderingSettings>();
-            var aspect = (renderingSettings == null) ? 1.7778f : (float)renderingSettings.DefaultBackBufferWidth / (float)renderingSettings.DefaultBackBufferHeight;
+            var aspect = DefaultCameraAspectRatio;
 
             // update frustumMesh aspect
             var newCameraParameters = new CameraParameters(Component, aspect);

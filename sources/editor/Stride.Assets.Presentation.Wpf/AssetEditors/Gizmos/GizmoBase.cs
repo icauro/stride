@@ -96,6 +96,16 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// Gets the current command list.
         /// </summary>
         public CommandList GraphicsCommandList { get; private set; }
+        protected virtual float DefaultCameraAspectRatio
+        {
+            get
+            {
+                var settings = Game.PackageSettings?.GetConfiguration<RenderingSettings>();
+                return settings == null ? 1.7778f : (float)settings.DefaultBackBufferWidth / settings.DefaultBackBufferHeight;
+            }
+        }
+        private Stride.Engine.Gizmos.TransformGizmoHost gridCameraHost;
+        protected virtual Stride.Engine.Gizmos.TransformGizmoHost GridCameraHost => gridCameraHost ??= new WpfTransformGizmoHost(Game);
 
         /// <summary>
         /// Gets the factor used to adjust specifically the size of this gizmo

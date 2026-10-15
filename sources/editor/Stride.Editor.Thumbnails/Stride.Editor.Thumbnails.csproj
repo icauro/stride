@@ -1,0 +1,37 @@
+<Project>
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'Directory.Build.props'))/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.props" />
+  <PropertyGroup>
+    <TargetFramework>$(StrideXplatEditorTargetFramework)</TargetFramework>
+    <RootNamespace>Stride.Editor</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StridePackAssets>true</StridePackAssets>
+    <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
+    <StrideAssemblyProcessorOptions>--auto-module-initializer --serialization --parameter-key</StrideAssemblyProcessorOptions>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../shared/SharedAssemblyInfo.cs" Link="Properties/SharedAssemblyInfo.cs" />
+    <!-- Single canonical native implementation; WPF forwards these public types. -->
+    <Compile Include="../Stride.Editor.Wpf/Thumbnails/*.cs"
+             Exclude="../Stride.Editor.Wpf/Thumbnails/GameStudioThumbnailService.cs;../Stride.Editor.Wpf/Thumbnails/ThumbnailAssetBuildUnit.cs"
+             Link="Thumbnails/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Editor.Wpf/Preview/PreviewCompilationContext.cs" Link="Preview/PreviewCompilationContext.cs" />
+    <Compile Include="../Stride.Editor.Wpf/Engine/EntityExtensions.cs" Link="Engine/EntityExtensions.cs" />
+    <Compile Include="../Stride.Editor.Wpf/GraphicsDeviceLoss.cs" Link="GraphicsDeviceLoss.cs" />
+    <Compile Include="../Stride.Editor.Wpf/Resources/DefaultThumbnails.Designer.cs" Link="Resources/DefaultThumbnails.Designer.cs" />
+    <EmbeddedResource Include="../Stride.Editor.Wpf/Resources/DefaultThumbnails.resx"
+                      Link="Resources/DefaultThumbnails.resx" LogicalName="Stride.Editor.Resources.DefaultThumbnails.resources" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../engine/Stride.Assets/Stride.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Assets.Models/Stride.Assets.Models.csproj" />
+    <ProjectReference Include="../../engine/Stride.Navigation/Stride.Navigation.csproj" />
+    <ProjectReference Include="../../engine/Stride.Particles/Stride.Particles.csproj" />
+    <ProjectReference Include="../../engine/Stride.Physics/Stride.Physics.csproj" />
+    <ProjectReference Include="../../engine/Stride.SpriteStudio.Runtime/Stride.SpriteStudio.Runtime.csproj" />
+    <ProjectReference Include="../../engine/Stride.UI/Stride.UI.csproj" />
+    <ProjectReference Include="../../tools/Stride.TextureConverter/Stride.TextureConverter.csproj" />
+    <ProjectReference Include="../../presentation/Stride.Core.Presentation/Stride.Core.Presentation.csproj" />
+    <ProjectReference Include="../../buildengine/Stride.Core.BuildEngine.Common/Stride.Core.BuildEngine.Common.csproj" />
+  </ItemGroup>
+  <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
+</Project>

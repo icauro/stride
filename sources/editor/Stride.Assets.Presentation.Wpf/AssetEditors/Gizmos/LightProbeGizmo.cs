@@ -3,7 +3,6 @@
 using System;
 using System.Runtime.InteropServices;
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
 using Stride.Engine;
 using Stride.Engine.Gizmos;
 using Stride.Extensions;
@@ -40,7 +39,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             set
             {
                 base.IsSelected = value;
-                GizmoRootEntity.Tags.Set(EditorGameComponentGizmoService.SelectedKey, value);
+                GizmoRootEntity.Tags.Set(GizmoSelectionKeys.Selected, value);
             }
         }
 
@@ -76,7 +75,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         {
             base.Update();
 
-            if (Component.Coefficients != null)
+            if (Component.Coefficients != null && Component.Coefficients.Count != 0)
             {
                 var coefficientsSpan = CollectionsMarshal.AsSpan(Component.Coefficients);
                 lightProbeMaterial.Passes[0].Parameters.Set(ComputeSphericalHarmonicsKeys.SphericalColors, Component.Coefficients.Count, ref coefficientsSpan[0]);

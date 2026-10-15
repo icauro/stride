@@ -31,7 +31,7 @@ namespace Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game
         internal static readonly PropertyKey<Entity> ReferencedEntityKey = new PropertyKey<Entity>("ReferencedEntityProperty", typeof(EntityHierarchyEditorGame));
         private readonly IEditorGameController controller;
         private static readonly PropertyKey<Dictionary<EntityComponent, IEntityGizmo>> GizmoEntitiesKey = new PropertyKey<Dictionary<EntityComponent, IEntityGizmo>>("GizmoEntitiesProperty", typeof(EditorGameComponentGizmoService));
-        public static readonly PropertyKey<bool> SelectedKey = new PropertyKey<bool>("SelectedProperty", typeof(EditorGameComponentGizmoService));
+        public static readonly PropertyKey<bool> SelectedKey = GizmoSelectionKeys.Selected;
         private readonly HashSet<IEntityGizmo> sceneGizmos = new HashSet<IEntityGizmo>();
         private readonly Dictionary<Type, bool> gizmoVisibilities = new Dictionary<Type, bool>();
         private EntityHierarchyEditorGame game;

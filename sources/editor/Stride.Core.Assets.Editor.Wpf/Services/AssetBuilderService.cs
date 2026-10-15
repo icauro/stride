@@ -24,7 +24,7 @@ namespace Stride.Core.Assets.Editor.Services
         private readonly Timer retouchTimer;
 
         // TODO: this is temporary until we have thread local databases (and a better solution for databases used in standard tasks)
-        public static readonly object OutOfMicrothreadDatabaseLock = new object();      
+        public static readonly object OutOfMicrothreadDatabaseLock = MicrothreadLocalDatabases.OutOfMicrothreadDatabaseLock;
 
         public AssetBuilderService([NotNull] string buildDirectory)
         {

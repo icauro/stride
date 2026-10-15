@@ -10,11 +10,9 @@ using Stride.Core.Annotations;
 using Stride.Core.Mathematics;
 using Stride.Core.Settings;
 using Stride.Assets.Presentation.AssetEditors.GameEditor;
-using Stride.Assets.Presentation.AssetEditors.GameEditor.Game;
 using Stride.Engine;
 using Stride.Engine.Gizmos;
 using Stride.Engine.Processors;
-using Stride.Assets.Presentation.AssetEditors.GameEditor.ViewModels;
 
 namespace Stride.Assets.Presentation.SceneEditor
 {
@@ -22,8 +20,8 @@ namespace Stride.Assets.Presentation.SceneEditor
     public sealed class SceneSettingsData
     {
         // Camera view parameters
-        public Vector3 CamPosition = EditorGameCameraService.DefaultPosition;
-        public Vector2 CamPitchYaw = new Vector2(EditorGameCameraService.DefaultPitch, EditorGameCameraService.DefaultYaw);
+        public Vector3 CamPosition = new Vector3(4, 2, 4);
+        public Vector2 CamPitchYaw = new Vector2(-MathUtil.Pi / 12.0f, MathUtil.Pi / 4.0f);
 
         // Camera projection parameters
         public CameraProjectionMode CamProjection = CameraProjectionMode.Perspective;
@@ -32,7 +30,7 @@ namespace Stride.Assets.Presentation.SceneEditor
         public float CamNearClipPlane = CameraComponent.DefaultNearClipPlane;
         public float CamFarClipPlane = CameraComponent.DefaultFarClipPlane;
         public float CamAspectRatio = CameraComponent.DefaultAspectRatio;
-        public float CamMoveSpeed = EditorGameCameraService.DefaultMoveSpeed;
+        public float CamMoveSpeed = 3.0f;
 
         // Snapping
         public bool TranslationSnapActive = false;
@@ -48,7 +46,7 @@ namespace Stride.Assets.Presentation.SceneEditor
         public bool GridVisible = true;
         public Color3 GridColor = (Color3)new Color(180, 180, 180);
         public float GridOpacity = 0.35f;
-        public int GridAxisIndex = (int)ViewportGridAxis.Y;
+        public int GridAxisIndex = 2;
         public bool CameraPreviewVisible = true;
         public RenderMode RenderMode = RenderMode.SingleStream;
         public string ActiveStream = string.Empty;

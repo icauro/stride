@@ -45,7 +45,8 @@ public sealed class EditorGameServiceRegistry : IAsyncDisposable
         {
             var service = Services[index];
             await service.DisposeAsync();
+            // Retain only unfinished services if a later disposal phase fails.
+            Services.RemoveAt(index);
         }
-        Services.Clear();
     }
 }

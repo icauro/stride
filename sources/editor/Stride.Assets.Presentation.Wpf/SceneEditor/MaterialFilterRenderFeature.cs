@@ -17,6 +17,9 @@ namespace Stride.Assets.Presentation.SceneEditor
         // TODO GRAPHICS REFACTOR: Should be per render stage
         public ShaderSource MaterialFilter { get; set; }
 
+        /// <summary>Optional content ownership filter for a host sharing editor and scene mesh features.</summary>
+        public System.Func<RenderObject, bool> IsContentObject { get; set; }
+
         /// <inheritdoc/>
         protected override void InitializeCore()
         {
@@ -34,6 +37,7 @@ namespace Stride.Assets.Presentation.SceneEditor
 
             foreach (var renderObject in RootRenderFeature.RenderObjects)
             {
+                if (IsContentObject?.Invoke(renderObject) == false) continue;
                 var staticObjectNode = renderObject.StaticObjectNode;
 
                 for (int i = 0; i < effectSlotCount; ++i)

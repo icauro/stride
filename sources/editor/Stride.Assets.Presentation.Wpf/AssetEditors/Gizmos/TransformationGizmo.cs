@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
+
 using Stride.Assets.Presentation.AssetEditors.GameEditor;
 using Stride.Assets.Presentation.AssetEditors.GameEditor.Game;
 using Stride.Engine;
@@ -21,6 +21,9 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
     /// </summary>
     public abstract class TransformationGizmo : AxialGizmo
     {
+        public Stride.Engine.Gizmos.TransformGizmoHost Host { get; set; }
+        internal static readonly Dictionary<GizmoTransformationAxes, int> PlaneToIndex = new() { { GizmoTransformationAxes.YZ, 0 }, { GizmoTransformationAxes.XZ, 1 }, { GizmoTransformationAxes.XY, 2 } };
+        public bool IsTransforming => TransformationStarted;
         public const float TransformationStartPixelThreshold = 8;
 
         protected const float MinimumRayAngle = 2.5f * MathUtil.Pi / 180f;
@@ -53,7 +56,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// <summary>
         /// Gets the gizmo default scale in ratio of screen height ( 1 => full screen vertically )
         /// </summary>
-        public float DefaultScale => GizmoDefaultSize / GraphicsDevice.Presenter.BackBuffer.Height;
+        public float DefaultScale => GizmoDefaultSize / Math.Max(1, Host.ViewportSize.Y);
 
         /// <summary>
         /// Returns whether the transformation has started or not
@@ -182,7 +185,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             }
         }
 
-        private Matrix GetWorldMatrix(IEditorGameCameraService cameraService)
+        private Matrix GetWorldMatrix(Stride.Engine.Gizmos.TransformGizmoHost cameraService)
         {
             Matrix worldMatrix = Matrix.Identity;
 
@@ -195,15 +198,14 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                     Matrix parentMatrix;
                     if (AnchorEntity.GetParent() != null)
                     {
-                        parentMatrix = AnchorEntity.TransformValue.Parent.WorldMatrix;
+                        parentMatrix = AnchorEntity.Transform.Parent.WorldMatrix;
                     }
                     else
                     {
                         // Root entity in subscene — use Scene.Offset as parent matrix
                         var scene = AnchorEntity.Scene;
-                        parentMatrix = (scene != null && scene.Offset != Vector3.Zero)
-                            ? Matrix.Translation(scene.Offset)
-                            : Matrix.Identity;
+                        scene?.UpdateWorldMatrix();
+                        parentMatrix = scene?.WorldMatrix ?? Matrix.Identity;
                     }
                     
                     // We don't use the entity's "WorldMatrix" because its scale could be zero, which would break the gizmo.
@@ -222,7 +224,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             return worldMatrix;
         }
 
-        private float GetTargetedScale(IEditorGameCameraService cameraService)
+        private float GetTargetedScale(Stride.Engine.Gizmos.TransformGizmoHost cameraService)
         {
             if (cameraService.Component.Projection == CameraProjectionMode.Perspective)
             {
@@ -241,7 +243,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             // force to recalculate the entity world matrix to avoid the gizmo to have one frame of delay.
             AnchorEntity.Transform.UpdateWorldMatrix(); // TODO perform this computation only when necessary?
 
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
 
             Matrix worldMatrix = GetWorldMatrix(cameraService);
             float targetedScale = GetTargetedScale(cameraService);
@@ -260,16 +262,17 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             worldMatrix.Row3 = worldMatrixRow3;
 
             GizmoRootEntity.Transform.UseTRS = false;
-            GizmoRootEntity.Transform.LocalMatrix = worldMatrix;
+            EditorScene.UpdateWorldMatrix();
+            GizmoRootEntity.Transform.LocalMatrix = worldMatrix * Matrix.Invert(EditorScene.WorldMatrix);
             GizmoRootEntity.Transform.UpdateWorldMatrix();
         }
 
         private void UpdateTransformationAxisBase()
         {
-            if (Game.EditorServices.Get<IEditorGameCameraService>().IsMoving)
+            if (Host.IsMoving)
                 return;
 
-            if (duplicationDone)
+            if (duplicationDone || transformationInitialized && Host.LeftButtonDown)
                 return;
 
             UpdateTransformationAxis();
@@ -294,16 +297,16 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// </summary>
         protected virtual void InitializeTransformation()
         {
-            StartMousePosition = Input.MousePosition;
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            StartMousePosition = Host.MousePosition;
+            var cameraService = Host;
 
             // calculate the un-projection plane for 2D transformations
             var planeNormal = Vector3.Zero;
             StartWorldMatrix = WorldMatrix;
             var gizmoViewInverse = Matrix.Invert(StartWorldMatrix * cameraService.ViewMatrix);
-            if (EditorGameComponentGizmoService.PlaneToIndex.ContainsKey(TransformationAxes))
+            if (TransformationGizmo.PlaneToIndex.ContainsKey(TransformationAxes))
             {
-                planeNormal[EditorGameComponentGizmoService.PlaneToIndex[TransformationAxes]] = 1f;
+                planeNormal[TransformationGizmo.PlaneToIndex[TransformationAxes]] = 1f;
             }
             else if (TransformationAxes == GizmoTransformationAxes.XYZ)
             {
@@ -353,9 +356,8 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                 else
                 {
                     var scene = entity.Scene;
-                    inverseParent = (scene != null && scene.Offset != Vector3.Zero)
-                        ? Matrix.Invert(Matrix.Translation(scene.Offset))
-                        : Matrix.Identity;
+                    scene?.UpdateWorldMatrix();
+                    inverseParent = scene == null ? Matrix.Identity : Matrix.Invert(scene.WorldMatrix);
                 }
 
                 InitialTransformations[entity] = new InitialTransformation
@@ -376,11 +378,11 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// </summary>
         private async Task TransformSceneEntityBase()
         {
-            if (!Input.IsKeyDown(Keys.LeftCtrl) && !Input.IsKeyDown(Keys.RightCtrl))
+            if (!Host.ControlDown)
                 duplicationDone = false;
 
             // skip the update if no transformation is currently performed
-            if (!IsEnabled || AnchorEntity == null || TransformationAxes == GizmoTransformationAxes.None || !Input.IsMouseButtonDown(MouseButton.Left))
+            if (!IsEnabled || AnchorEntity == null || TransformationAxes == GizmoTransformationAxes.None || !Host.LeftButtonDown)
             {
                 if (transformationInitialized)
                     OnTransformationFinished();
@@ -397,14 +399,14 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             }
 
             // calculate the current drag translation in the screen normalized space
-            var mousePosition = Input.MousePosition;
+            var mousePosition = Host.MousePosition;
             var mouseDrag = mousePosition - StartMousePosition;
 
             // start the transformation only if user has dragged from a given amount of pixel. Determine direction of the transformation.
             if (!TransformationStarted)
             {
                 // ensure that the mouse cursor has been moved enough
-                var screenSize = new Vector2(GraphicsDevice.Presenter.BackBuffer.Width, GraphicsDevice.Presenter.BackBuffer.Height);
+                var screenSize = Host.ViewportSize;
                 var mouseDragPixel = mouseDrag * screenSize;
                 if (mouseDragPixel.Length() < TransformationStartPixelThreshold)
                     return;
@@ -417,10 +419,10 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
                     return;
 
                 // check if Ctrl is pressed and initiate a duplication in this case.
-                if (ModifiedEntities.Count > 0 && !duplicationDone && Input.IsKeyDown(Keys.LeftCtrl) || Input.IsKeyDown(Keys.RightCtrl))
+                if (ModifiedEntities.Count > 0 && !duplicationDone && Host.ControlDown && Host.CanDuplicateSelection)
                 {
                     duplicationDone = true;
-                    await Game.EditorServices.Get<IEditorGameEntitySelectionService>().DuplicateSelection();
+                    await Host.DuplicateSelection();
                 }
 
                 OnTransformationStarted(mouseDragPixel);
@@ -492,6 +494,15 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// </summary>
         protected virtual void UpdateShape()
         {
+        }
+
+        public void CancelTransformation()
+        {
+            InitialTransformations.Clear();
+            transformationInitialized = false;
+            TransformationStarted = false;
+            duplicationDone = false;
+            TransformationAxes = GizmoTransformationAxes.None;
         }
 
         public void ClearTransformationAxes()

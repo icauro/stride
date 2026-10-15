@@ -72,7 +72,7 @@ namespace Stride.Assets.Presentation.Preview
             materialEntity.Add(new ModelComponent { Model = model });
 
             var previewEntity = new PreviewEntity(materialEntity);
-            previewEntity.Disposed += () => UnloadAsset(material);
+            previewEntity.Disposed += () => { MaterialPreviewGeometry.DisposeGeneratedModel(model); UnloadAsset(material); };
             return previewEntity;
         }
 

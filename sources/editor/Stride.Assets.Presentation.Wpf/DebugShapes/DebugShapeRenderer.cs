@@ -1,6 +1,9 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 using System.ComponentModel;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Stride.Core.Mathematics;
 using Stride.Assets.Presentation.AssetEditors.Gizmos;
 using Stride.Engine;
@@ -24,9 +27,10 @@ namespace Stride.Assets.Presentation.DebugShapes
         Torus       = 5,
     }
 
-    public class DebugShapeRenderer
+    public class DebugShapeRenderer : IDisposable
     {
         private Entity debugEntity;
+        public Entity Entity => debugEntity;
 
         private Scene scene;
 
@@ -102,6 +106,14 @@ namespace Stride.Assets.Presentation.DebugShapes
             if (needToDeleteOld && debugEntity != null)
             {
                 scene.Entities.Remove(debugEntity);
+                var buffers = new HashSet<Stride.Graphics.Buffer>();
+                foreach (var model in debugEntity.Components.OfType<ModelComponent>())
+                    foreach (var mesh in model.Model.Meshes)
+                    {
+                        foreach (var vertex in mesh.Draw.VertexBuffers) buffers.Add(vertex.Buffer);
+                        if (mesh.Draw.IndexBuffer != null) buffers.Add(mesh.Draw.IndexBuffer.Buffer);
+                    }
+                foreach (var buffer in buffers) buffer.Dispose();
                 debugEntity = null;
             }
 
@@ -151,6 +163,12 @@ namespace Stride.Assets.Presentation.DebugShapes
 
             scene.Entities.Add(debugEntity);
             debugEntity.Enable<ModelComponent>();
+        }
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            SetDebugShape(DebugShapeType.None, RenderGroup.Group0); material = null; disposed = true;
         }
     }
 }

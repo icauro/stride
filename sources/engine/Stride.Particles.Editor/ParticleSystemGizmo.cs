@@ -1,7 +1,6 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
 using Stride.Assets.Presentation.AssetEditors.Gizmos;
 using Stride.Assets.Presentation.DebugShapes;
 using Stride.Engine;
@@ -25,7 +24,7 @@ namespace Stride.Particles.Editor
         {
             if (shapeRenderer == null)
             {
-                shapeRenderer = new DebugShapeRenderer(GraphicsDevice, ((EntityHierarchyEditorGame)Game).EditorScene);
+                shapeRenderer = new DebugShapeRenderer(GraphicsDevice, EditorScene);
             }
 
             return base.Create();
@@ -33,7 +32,7 @@ namespace Stride.Particles.Editor
 
         protected override void Destroy()
         {
-            shapeRenderer?.SetDebugShape(DebugShapeType.None, ParticlesShapesGroup);
+            shapeRenderer?.Dispose();
 
             base.Destroy();
         }
@@ -83,6 +82,8 @@ namespace Stride.Particles.Editor
 
             base.Update();
         }
+
+        public Entity DebugShapeEntity => shapeRenderer?.Entity;
 
     }
 }

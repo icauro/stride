@@ -18,11 +18,11 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         /// </summary>
         protected override InitialTransformation CalculateTransformation()
         {
-            var cameraService = Game.EditorServices.Get<IEditorGameCameraService>();
+            var cameraService = Host;
             // determine the position of the start/end points of the drag in the gizmo space
             var gizmoWorldInverse = Matrix.Invert(StartWorldMatrix);
             var gizmoViewInverse = Matrix.Invert(cameraService.ViewMatrix) * gizmoWorldInverse;
-            var ray = EditorGameHelper.CalculateRayFromMousePosition(cameraService.Component, Input.MousePosition, gizmoViewInverse);
+            var ray = EditorGameHelper.CalculateRayFromMousePosition(cameraService.Component, Host.MousePosition, gizmoViewInverse);
             var endPointGizmo = EditorGameHelper.ProjectOnPlaneWithLimitAngle(ray, ProjectionPlane, MinimumRayAngle);
             DragTranslationWorld = endPointGizmo - StartClickPoint;
 

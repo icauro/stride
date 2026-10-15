@@ -1,0 +1,30 @@
+using System.Runtime.CompilerServices;
+using Stride.Editor.Thumbnails;
+
+// Preserve the original assembly-qualified public contracts for compiled plugins.
+// The shared assembly owns the only definitions; no namespace-shadow copies exist.
+[assembly: TypeForwardedTo(typeof(IThumbnailCompiler))]
+[assembly: TypeForwardedTo(typeof(IThumbnailCommand))]
+[assembly: TypeForwardedTo(typeof(ThumbnailCompilationContext))]
+[assembly: TypeForwardedTo(typeof(ThumbnailCompilerContext))]
+[assembly: TypeForwardedTo(typeof(ThumbnailCompilerBase<>))]
+[assembly: TypeForwardedTo(typeof(ThumbnailCommand))]
+[assembly: TypeForwardedTo(typeof(ThumbnailCommandParameters))]
+[assembly: TypeForwardedTo(typeof(ThumbnailBuildStep))]
+[assembly: TypeForwardedTo(typeof(ThumbnailBuiltEventArgs))]
+[assembly: TypeForwardedTo(typeof(ThumbnailBuildResult))]
+[assembly: TypeForwardedTo(typeof(ThumbnailGenerator))]
+[assembly: TypeForwardedTo(typeof(ThumbnailBuildHelper))]
+[assembly: TypeForwardedTo(typeof(ThumbnailListCompiler))]
+[assembly: TypeForwardedTo(typeof(StrideThumbnailCommand<>))]
+[assembly: TypeForwardedTo(typeof(ThumbnailFromEntityCommand<>))]
+[assembly: TypeForwardedTo(typeof(ThumbnailFromSpriteBatchCommand<>))]
+[assembly: TypeForwardedTo(typeof(ThumbnailFromTextureCommand<>))]
+[assembly: TypeForwardedTo(typeof(StaticThumbnailCompiler<>))]
+[assembly: TypeForwardedTo(typeof(StaticThumbnailCommand<>))]
+[assembly: TypeForwardedTo(typeof(StaticThumbnailCommandParameters))]
+[assembly: TypeForwardedTo(typeof(CustomAssetThumbnailCompiler))]
+[assembly: TypeForwardedTo(typeof(Stride.Editor.Resources.DefaultThumbnails))]
+[assembly: TypeForwardedTo(typeof(Stride.Editor.Preview.PreviewCompilationContext))]
+[assembly: TypeForwardedTo(typeof(Stride.Editor.Engine.EntityExtensions))]
+[assembly: TypeForwardedTo(typeof(Stride.Editor.GraphicsDeviceLoss))]

@@ -3,8 +3,6 @@
 using System.Linq;
 using Stride.Core;
 using Stride.Core.Mathematics;
-using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.Game;
-using Stride.Assets.Presentation.AssetEditors.GameEditor.Game;
 using Stride.Assets.SpriteFont;
 using Stride.Assets.SpriteFont.Compiler;
 using Stride.Engine;
@@ -24,9 +22,9 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
     /// The space marker sets the viewport to the left/bottom corner of the window before rendering. 
     /// This is done in order to avoid deformations at frustum extremities when rendering the marker.
     /// </remarks>
-    public class SpaceMarker : AxialGizmo
+    public partial class SpaceMarker : AxialGizmo
     {
-        private readonly EntityHierarchyEditorGame game;
+        private readonly SpaceMarkerHost host;
 
         public const RenderGroup SpaceMarkerGroup = RenderGroup.Group3;
         private const RenderGroupMask SpaceMarkerGroupMask = RenderGroupMask.Group3;
@@ -76,20 +74,21 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
         //private Matrix projectionMatrix;
 
         private CameraComponent cameraComponent;
+        public RenderStage MarkerRenderStage { get; private set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SpaceMarker"/> class.
         /// </summary>
         /// <param name="game">The scene game.</param>
-        internal SpaceMarker(EntityHierarchyEditorGame game)
+        public SpaceMarker(SpaceMarkerHost host)
         {
             RenderGroup = SpaceMarkerGroup;
-            this.game = game;
+            this.host = host;
         }
 
         private void UpdateCamera()
         {
-            var view = Game.EditorServices.Get<IEditorGameCameraService>().ViewMatrix;
+            var view = host.ViewMatrix;
             view.TranslationVector = new Vector3(0, 0, -BodyLength * CameraDistanceFactor);
             cameraComponent.ViewMatrix = view;
         }
@@ -106,7 +105,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
             for (int i = 0; i < 3; i++)
             {
-                var vector = GizmoRootEntity.Transform.Position;
+                var vector = GizmoRootEntity.Transform.WorldMatrix.TranslationVector;
                 vector[i] += 1.15f * GizmoRootEntity.Transform.Scale[i];
 
                 var projectedPosition = Vector3.TransformCoordinate(vector, viewMatrix * projectionMatrix);
@@ -143,17 +142,18 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
             // Add a renderer on the left bottom size
             var cameraOrientationGizmoRenderStage = new RenderStage("CameraOrientationGizmo", "Main");
-            game.EditorSceneSystem.GraphicsCompositor.RenderStages.Add(cameraOrientationGizmoRenderStage);
+            MarkerRenderStage = cameraOrientationGizmoRenderStage;
+            host.Compositor.RenderStages.Add(cameraOrientationGizmoRenderStage);
 
-            var meshRenderFeature = game.EditorSceneSystem.GraphicsCompositor.RenderFeatures.OfType<MeshRenderFeature>().First();
+            var meshRenderFeature = host.Compositor.RenderFeatures.OfType<MeshRenderFeature>().First();
             meshRenderFeature.RenderStageSelectors.Add(new SimpleGroupToRenderStageSelector
             {
-                EffectName = EditorGraphicsCompositorHelper.EditorForwardShadingEffect,
+                EffectName = SpaceMarkerHost.EditorForwardShadingEffect,
                 RenderGroup = SpaceMarkerGroupMask,
                 RenderStage = cameraOrientationGizmoRenderStage
             });
 
-            var editorCompositor = (EditorTopLevelCompositor)game.EditorSceneSystem.GraphicsCompositor.Game;
+            var editorCompositor = (EditorTopLevelCompositor)host.Compositor.Game;
             editorCompositor.AddOverlayGizmoCompositor(new GizmoViewportRenderer
             {
                 Name = "Render Spacemarker",
@@ -170,7 +170,7 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
             // create the default fonts
             var fontItem = OfflineRasterizedSpriteFontFactory.Create();
             fontItem.FontType.Size = 8;
-            defaultFont = OfflineRasterizedFontCompiler.Compile(Services.GetService<IFontFactory>(), fontItem, GraphicsDevice.ColorSpace == ColorSpace.Linear);
+            defaultFont = OfflineRasterizedFontCompiler.Compile(host.FontFactory, fontItem, GraphicsDevice.ColorSpace == ColorSpace.Linear);
 
             // create the sprite batch use to draw text
             spriteBatch = new SpriteBatch(GraphicsDevice) { DefaultDepth = 1 };
@@ -206,9 +206,19 @@ namespace Stride.Assets.Presentation.AssetEditors.Gizmos
 
         protected override void Destroy()
         {
-            defaultFont.Dispose();
+            defaultFont?.Dispose();
+            spriteBatch?.Dispose();
 
             base.Destroy();
         }
+    }
+
+    /// <summary>Engine services used by the original scene orientation marker.</summary>
+    public abstract class SpaceMarkerHost
+    {
+        public const string EditorForwardShadingEffect = "StrideEditorForwardShadingEffect";
+        public abstract Matrix ViewMatrix { get; }
+        public abstract GraphicsCompositor Compositor { get; }
+        public abstract IFontFactory FontFactory { get; }
     }
 }

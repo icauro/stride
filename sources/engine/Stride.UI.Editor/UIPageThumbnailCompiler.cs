@@ -5,8 +5,8 @@ using Stride.Core.Assets;
 using Stride.Core.Assets.Compiler;
 using Stride.Core.Mathematics;
 using Stride.Core.Serialization;
-using Stride.UI.Editor.Services;
 using Stride.UI.Assets;
+using Stride.Assets.Thumbnails;
 using Stride.Editor.Thumbnails;
 using Stride.Engine;
 using Stride.Engine.Processors;
@@ -51,7 +51,7 @@ namespace Stride.UI.Editor
             protected override CameraComponent CreateCamera(GraphicsCompositor graphicsCompositor)
             {
                 var camera = base.CreateCamera(graphicsCompositor);
-                var renderingSize = designResolution / UIEditorController.DesignDensity;
+                var renderingSize = designResolution / AssetThumbnailRules.UIDesignDensity;
 
                 // Use an orthographic camera
                 camera.Projection = CameraProjectionMode.Orthographic;
@@ -73,7 +73,7 @@ namespace Stride.UI.Editor
                 {
                     Page = LoadedAsset,
                     Resolution = designResolution,
-                    Size = designResolution / UIEditorController.DesignDensity,
+                    Size = designResolution / AssetThumbnailRules.UIDesignDensity,
                     IsFullScreen = false,
                 });
 

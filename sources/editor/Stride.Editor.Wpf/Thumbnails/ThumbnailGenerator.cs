@@ -2,8 +2,10 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
-using Stride.Core.Assets.Editor.Services;
 using Stride.Core.BuildEngine;
 using Stride.Core;
 using Stride.Core.Diagnostics;
@@ -14,7 +16,6 @@ using Stride.Core.Serialization.Contents;
 using Stride.Assets;
 using Stride.Assets.SpriteFont;
 using Stride.Assets.SpriteFont.Compiler;
-using Stride.Editor.Preview;
 using Stride.Engine;
 using Stride.Engine.Design;
 using Stride.Games;
@@ -30,7 +31,7 @@ namespace Stride.Editor.Thumbnails
     public class ThumbnailGenerator : IDisposable
     {
         /// <summary>
-        /// A constant string that can be used to identify an attribute of type <see cref="PreviewGame"/> in collections.
+        /// A constant string that identifies the native thumbnail generator in compiler context properties.
         /// </summary>
         public static readonly PropertyKey<ThumbnailGenerator> Key = new PropertyKey<ThumbnailGenerator>("ThumbnailGeneratorKey", typeof(ThumbnailGenerator));
 
@@ -140,6 +141,22 @@ namespace Stride.Editor.Thumbnails
 
             // Deactivate the asynchronous effect compilation
             ((EffectCompilerCache)EffectSystem.Compiler).CompileEffectAsynchronously = false;
+            // Standalone thumbnail workers receive the immutable certified engine
+            // shader closure used by the live ImGui host. Its editor-only effects
+            // are absent from the ordinary authored asset shader union.
+            var shaderRoot = Path.Combine(AppContext.BaseDirectory, "Shaders", "Engine");
+            if (Directory.Exists(shaderRoot))
+            {
+                IEffectCompiler localCompiler = EffectSystem.Compiler;
+                while (localCompiler is EffectCompilerChain chain) localCompiler = chain.InnerCompiler;
+                if (localCompiler is not EffectCompiler local)
+                    throw new InvalidOperationException("The native thumbnail compiler cannot consume its certified shader sources.");
+                var directories = Directory.EnumerateFiles(shaderRoot, "*.sdsl", SearchOption.AllDirectories)
+                    .Select(Path.GetDirectoryName).Where(directory => directory != null)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(directory => directory, StringComparer.OrdinalIgnoreCase).ToArray();
+                if (directories.Length == 0) throw new InvalidDataException("The certified native thumbnail shader directory is empty.");
+                local.UseFileSystem = true; local.SourceDirectories.Clear(); local.SourceDirectories.AddRange(directories);
+            }
             
             // load game system content
             gameSystems.LoadContent();
@@ -170,6 +187,58 @@ namespace Stride.Editor.Thumbnails
         /// <summary>
         /// The micro-thread in charge of processing the thumbnail build requests and creating the thumbnails.
         /// </summary>
+        private void CaptureRenderDiagnostics(ThumbnailBuildRequest request)
+        {
+            var diagnostics = Environment.GetEnvironmentVariable("STRIDE_EDITOR_ASSET_DIAGNOSTICS");
+            if (string.IsNullOrEmpty(diagnostics)) return;
+            static IEnumerable<Entity> Entities(Scene scene)
+            {
+                foreach (var entity in scene.Entities)
+                    foreach (var nested in EntityTree(entity)) yield return nested;
+                foreach (var child in scene.Children)
+                    foreach (var entity in Entities(child)) yield return entity;
+            }
+            static IEnumerable<Entity> EntityTree(Entity entity)
+            {
+                yield return entity;
+                foreach (var child in entity.GetChildren())
+                    foreach (var nested in EntityTree(child)) yield return nested;
+            }
+            var models = Entities(request.Scene).Where(entity => entity.Get<ModelComponent>()?.Model != null).Take(32)
+                .Select(entity => new
+                {
+                    entity.Name, entity.Get<ModelComponent>().Enabled,
+                    meshes = entity.Get<ModelComponent>().Model.Meshes.Count,
+                    materialPasses = entity.Get<ModelComponent>().Model.Materials.Sum(instance => instance.Material?.Passes.Count ?? 0),
+                    vertexBytes = entity.Get<ModelComponent>().Model.Meshes.Sum(mesh => mesh.Draw.VertexBuffers.Sum(binding => (long)binding.Buffer.SizeInBytes)),
+                    position = new { entity.Transform.Position.X, entity.Transform.Position.Y, entity.Transform.Position.Z },
+                }).ToArray();
+            var cameras = request.GraphicsCompositor.Cameras.Take(8).Select(slot => new
+            {
+                slot.Id, bound = slot.Camera != null, name = slot.Camera?.Entity?.Name, enabled = slot.Camera?.Enabled,
+                position = slot.Camera == null ? null : new
+                { slot.Camera.Entity.Transform.Position.X, slot.Camera.Entity.Transform.Position.Y, slot.Camera.Entity.Transform.Position.Z },
+            }).ToArray();
+            var record = new { request.Url, request.Size, GraphicsDevice.FrameDrawCalls, GraphicsDevice.FrameTriangleCount, models, cameras };
+            try { File.AppendAllText(Path.ChangeExtension(diagnostics, ".thumbnail-render.jsonl"), JsonSerializer.Serialize(record) + Environment.NewLine); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        private static bool HasRenderableModel(Scene scene)
+        {
+            static bool EntityHasModel(Entity entity)
+            {
+                var model = entity.Get<ModelComponent>();
+                return model is { Enabled: true, Model: not null }
+                    && model.Model.Materials.Any(instance => instance.Material?.Passes.Count > 0)
+                    && model.Model.Meshes.Any(mesh => mesh.Draw is { DrawCount: > 0, VertexBuffers: not null } draw
+                        && draw.VertexBuffers.Any(binding => binding.Buffer is { SizeInBytes: > 0 }))
+                    || entity.GetChildren().Any(EntityHasModel);
+            }
+            return scene.Entities.Any(EntityHasModel) || scene.Children.Any(HasRenderableModel);
+        }
+
         private ResultStatus ProcessThumbnailRequests(ThumbnailBuildRequest request)
         {
             // Nothing more goes to a lost device (some drivers crash on commands to it): the studio restarts
@@ -183,7 +252,7 @@ namespace Stride.Editor.Thumbnails
             {
                 try
                 {
-                    lock (AssetBuilderService.OutOfMicrothreadDatabaseLock)
+                    lock (MicrothreadLocalDatabases.OutOfMicrothreadDatabaseLock)
                     {
                         MicrothreadLocalDatabases.MountCommonDatabase();
 
@@ -222,6 +291,10 @@ namespace Stride.Editor.Thumbnails
                             GraphicsContext.ResourceGroupAllocator.Reset(GraphicsContext.CommandList);
                             gameSystems.Draw(nullGameTime);
 
+                            CaptureRenderDiagnostics(request);
+                            if (GraphicsDevice.FrameDrawCalls == 0 && HasRenderableModel(request.Scene))
+                                throw new InvalidOperationException("The native thumbnail renderer submitted no GPU draw commands for renderable model content. "
+                                    + "Check its effect compiler and certified engine shader sources; a cleared target cannot certify a successful thumbnail.");
                             // write the thumbnail to the file
                             using (var thumbnailImage = renderTarget.GetDataAsImage(GraphicsCommandList))
                             {

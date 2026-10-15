@@ -13,6 +13,8 @@ namespace Stride.Assets.Presentation.SceneEditor
     /// </summary>
     public class HighlightRenderFeature : SubRenderFeature
     {
+        // Null preserves the original WPF shared-service contract.
+        public HighlightRenderState State { get; set; }
         public static readonly Dictionary<Material, Color4> MaterialHighlightColors = new Dictionary<Material, Color4>();
 
         public static readonly Dictionary<Mesh, Color4> MeshHighlightColors = new Dictionary<Mesh, Color4>();
@@ -45,11 +47,11 @@ namespace Stride.Assets.Presentation.SceneEditor
                 Color4 highlightColor;
 
                 var isHighlighted =
-                    MaterialHighlightColors.TryGetValue(renderMesh.MaterialPass.Material, out highlightColor) ||
-                    MeshHighlightColors.TryGetValue(renderMesh.Mesh, out highlightColor) ||
-                    (MaterialsHighlightedForModel.Contains(renderMesh.MaterialPass.Material)
+                    (State?.MaterialHighlightColors ?? MaterialHighlightColors).TryGetValue(renderMesh.MaterialPass.Material, out highlightColor) ||
+                    (State?.MeshHighlightColors ?? MeshHighlightColors).TryGetValue(renderMesh.Mesh, out highlightColor) ||
+                    ((State?.MaterialsHighlightedForModel ?? MaterialsHighlightedForModel).Contains(renderMesh.MaterialPass.Material)
                      && renderMesh.Source is ModelComponent component
-                     && ModelHighlightColors.TryGetValue(component, out highlightColor));
+                     && (State?.ModelHighlightColors ?? ModelHighlightColors).TryGetValue(component, out highlightColor));
 
                 renderModelObjectInfo[objectNodeReference] = highlightColor;
             }

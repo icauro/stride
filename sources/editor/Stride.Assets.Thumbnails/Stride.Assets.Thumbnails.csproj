@@ -1,0 +1,34 @@
+<Project>
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'Directory.Build.props'))/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.props" />
+  <PropertyGroup>
+    <TargetFramework>$(StrideXplatEditorTargetFramework)</TargetFramework>
+    <RootNamespace>Stride.Assets.Thumbnails</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
+    <StrideAssemblyProcessorOptions>--auto-module-initializer --serialization --parameter-key</StrideAssemblyProcessorOptions>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../shared/SharedAssemblyInfo.cs" Link="Properties/SharedAssemblyInfo.cs" />
+    <EmbeddedResource Include="../../engine/Stride.Audio.Editor/Resources/SoundThumbnail.png" LogicalName="Stride.Assets.Thumbnails.SoundThumbnail.png" />
+    <EmbeddedResource Include="../../engine/Stride.Video.Editor/Resources/VideoThumbnail.png" LogicalName="Stride.Assets.Thumbnails.VideoThumbnail.png" />
+    <EmbeddedResource Include="../../engine/Stride.UI.Editor/Resources/UILibraryThumbnail.png" LogicalName="Stride.Assets.Thumbnails.UILibraryThumbnail.png" />
+    <!-- Canonical production asset-specific registrations, independent of WPF. -->
+    <Compile Include="../Stride.Assets.Presentation.Wpf/Thumbnails/*.cs" Link="Thumbnails/%(Filename)%(Extension)" />
+    <Compile Include="../../engine/Stride.UI.Editor/UIPageThumbnailCompiler.cs" Link="Thumbnails/UIPageThumbnailCompiler.cs" />
+    <Compile Include="../../engine/Stride.Physics.Editor/HeightmapThumbnailCompiler.cs" Link="Thumbnails/HeightmapThumbnailCompiler.cs" />
+    <Compile Include="../../engine/Stride.SpriteStudio.Editor/SpriteStudioAnimationThumbnailCompiler.cs" Link="Thumbnails/SpriteStudioAnimationThumbnailCompiler.cs" />
+    <Compile Include="../../engine/Stride.SpriteStudio.Editor/SpriteStudioSheetThumbnailCompiler.cs" Link="Thumbnails/SpriteStudioSheetThumbnailCompiler.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/StaticThumbnails.Designer.cs" Link="Resources/Thumbnails/StaticThumbnails.Designer.cs" />
+    <EmbeddedResource Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/StaticThumbnails.resx"
+                      Link="Resources/Thumbnails/StaticThumbnails.resx" LogicalName="Stride.Assets.Presentation.Resources.Thumbnails.StaticThumbnails.resources" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Stride.Editor.Thumbnails/Stride.Editor.Thumbnails.csproj" />
+    <ProjectReference Include="../../engine/Stride.SpriteStudio.Assets/Stride.SpriteStudio.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.UI.Assets/Stride.UI.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Audio.Assets/Stride.Audio.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Video.Assets/Stride.Video.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Physics.Assets/Stride.Physics.Assets.csproj" />
+  </ItemGroup>
+  <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
+</Project>

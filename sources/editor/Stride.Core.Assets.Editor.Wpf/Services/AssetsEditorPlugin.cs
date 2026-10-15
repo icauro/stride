@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Stride.Core.Reflection;
 using Stride.Core.Assets.Editor.Annotations;
@@ -20,6 +21,12 @@ public abstract class AssetsEditorPlugin : AssetsPlugin
 
     // TODO: give access to this differently
     public readonly List<PackageSettingsEntry> ProfileSettings = [];
+
+    internal void RegisterPackageSettings()
+    {
+        PackageSettingsRegistry.Register(this, () => ProfileSettings.Select(entry =>
+            new PackageSettingRegistration(entry.SettingsKey, (PackageSettingsTarget)(int)entry.TargetPackage)));
+    }
 
     public static IReadOnlyDictionary<Type, object> TypeImagesDictionary => TypeImages;
 

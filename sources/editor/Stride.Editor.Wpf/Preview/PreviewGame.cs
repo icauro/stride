@@ -28,6 +28,7 @@ namespace Stride.Editor.Preview
         /// The pending preview request to process.
         /// </summary>
         private PreviewRequest previewRequest;
+        private bool previewStopping;
 
         private readonly object requestLock = new object();
 
@@ -62,7 +63,7 @@ namespace Stride.Editor.Preview
             {
                 foreach (var sceneInstanceVisibilityGroup in visgroups)
                 {
-                    sceneInstanceVisibilityGroup.NeedActiveRenderStageReevaluation = true;
+                    sceneInstanceVisibilityGroup.RequestActiveRenderStageReevaluation();
                 }
             }
         }
@@ -140,13 +141,13 @@ namespace Stride.Editor.Preview
                         if (request.Scene != null)
                             previewScene.Children.Add(request.Scene);
 
-                        request.RequestCompletion.SetResult(ResultStatus.Successful);
+                        request.RequestCompletion.TrySetResult(ResultStatus.Successful);
                     }
                     catch (Exception e)
                     {
                         // end the thumbnail build task
-                        request.Logger.Error("An exception occurred while loading the preview scene.", e);
-                        request.RequestCompletion.SetResult(ResultStatus.Failed);
+                        (request.Logger ?? GlobalLogger.GetLogger("Preview")).Error("An exception occurred while loading the preview scene.", e);
+                        request.RequestCompletion.TrySetResult(ResultStatus.Failed);
                     }
                 }
 
@@ -169,12 +170,25 @@ namespace Stride.Editor.Preview
         /// <returns>The result of the scene load</returns>
         public async Task<ResultStatus> LoadPreviewScene(Scene previewScene, GraphicsCompositor graphicsCompositor, ILogger logger)
         {
+            PreviewRequest request;
             lock (requestLock)
             {
-                previewRequest = new PreviewRequest(previewScene, graphicsCompositor, logger);
+                if (previewStopping) throw new ObjectDisposedException(nameof(PreviewGame));
+                previewRequest?.RequestCompletion.TrySetCanceled();
+                previewRequest = request = new PreviewRequest(previewScene, graphicsCompositor, logger);
             }
 
-            return await previewRequest.RequestCompletion.Task;
+            return await request.RequestCompletion.Task;
+        }
+
+        protected override void Destroy()
+        {
+            lock (requestLock)
+            {
+                previewStopping = true;
+                previewRequest?.RequestCompletion.TrySetCanceled(); previewRequest = null;
+            }
+            base.Destroy();
         }
 
         /// <summary>
@@ -183,7 +197,7 @@ namespace Stride.Editor.Preview
         /// <param name="logger">The logger to use in case of errors.</param>
         public async Task UnloadPreviewScene(ILogger logger)
         {
-            await LoadPreviewScene(null, null, null);
+            await LoadPreviewScene(null, null, logger);
         }
 
         private class PreviewRequest
@@ -191,7 +205,7 @@ namespace Stride.Editor.Preview
             /// <summary>
             /// The signal triggered when the preview request is completed.
             /// </summary>
-            public readonly TaskCompletionSource<ResultStatus> RequestCompletion = new TaskCompletionSource<ResultStatus>();
+            public readonly TaskCompletionSource<ResultStatus> RequestCompletion = new TaskCompletionSource<ResultStatus>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             /// <summary>
             /// The log to use in case of error

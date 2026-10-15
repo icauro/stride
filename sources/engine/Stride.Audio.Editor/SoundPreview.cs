@@ -21,6 +21,7 @@ namespace Stride.Audio.Editor
         private SoundInstance instance;
 
         private TimeSpan startTime = TimeSpan.Zero;
+        private TimeSpan retainedPosition = TimeSpan.Zero;
 
         public Action<bool, bool, TimeSpan, TimeSpan> UpdateViewModelTime { get; set; }
 
@@ -53,7 +54,7 @@ namespace Stride.Audio.Editor
         {
             loaded = false;
 
-            startTime = TimeSpan.Zero;
+            startTime = retainedPosition = TimeSpan.Zero;
 
             if (sound != null)
             {
@@ -101,9 +102,13 @@ namespace Stride.Audio.Editor
                         {
                             if (loaded)
                             {
-                                IsPlaying = instance.PlayState == PlayState.Playing;
-                                var position = instance.Position;
-                                UpdateViewModelTime(true, IsPlaying, position + startTime, sound.TotalLength);
+                                var state = instance.PlayState;
+                                IsPlaying = state == PlayState.Playing;
+                                // Native Position is the absolute source playhead,
+                                // including a static buffer's selected range start.
+                                if (IsPlaying) retainedPosition = instance.Position;
+                                else if (state == PlayState.Stopped) retainedPosition = startTime;
+                                UpdateViewModelTime(true, IsPlaying, retainedPosition, sound.TotalLength);
                             }
                             else
                             {
@@ -124,7 +129,7 @@ namespace Stride.Audio.Editor
             var wasPlaying = instance?.PlayState == PlayState.Playing;
 
             instance?.Stop();
-            startTime = value;
+            startTime = retainedPosition = value;
             instance?.SetRange(new PlayRange(value, sound.TotalLength));
 
             if (wasPlaying)
@@ -138,6 +143,7 @@ namespace Stride.Audio.Editor
 
         public void Pause()
         {
+            if (instance?.PlayState == PlayState.Playing) retainedPosition = instance.Position;
             instance?.Pause();
         }
 
