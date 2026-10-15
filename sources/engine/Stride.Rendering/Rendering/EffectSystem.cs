@@ -18,7 +18,7 @@ namespace Stride.Rendering
     /// <summary>
     /// The effect system.
     /// </summary>
-    public class EffectSystem : GameSystemBase
+    public partial class EffectSystem : GameSystemBase
     {
         private static readonly Logger Log = GlobalLogger.GetLogger("EffectSystem");
 

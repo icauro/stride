@@ -8,7 +8,7 @@ using Stride.Graphics;
 
 namespace Stride.Video
 {
-    public class VideoSystem : GameSystemBase, IService
+    public partial class VideoSystem : GameSystemBase, IService, IGraphicsDeviceRecoveryParticipant
     {
         public VideoSystem([NotNull] IServiceRegistry registry) : base(registry)
         {

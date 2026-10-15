@@ -12,7 +12,7 @@ using Stride.Rendering;
 
 namespace Stride.Physics.Engine
 {
-    public class PhysicsShapesRenderingService : GameSystem
+    public partial class PhysicsShapesRenderingService : GameSystem, IGraphicsDeviceRecoveryParticipant
     {
         private GraphicsDevice graphicsDevice;
 

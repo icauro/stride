@@ -17,12 +17,12 @@ namespace Stride.Engine
     /// <summary>
     /// The scene system handles the scenes of a game.
     /// </summary>
-    public class SceneSystem : GameSystemBase
+    public partial class SceneSystem : GameSystemBase
     {
         private static readonly Logger Log = GlobalLogger.GetLogger("SceneSystem");
 
         private RenderContext renderContext;
-        private RenderDrawContext renderDrawContext;
+        protected RenderDrawContext renderDrawContext;
 
         private int previousWidth;
         private int previousHeight;

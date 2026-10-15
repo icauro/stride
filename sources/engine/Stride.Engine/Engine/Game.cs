@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Stride.Core;
 using Stride.Core.Diagnostics;
 using Stride.Core.IO;
+using Stride.Core.Serialization.Contents;
 using Stride.Core.Mathematics;
 using Stride.Core.Reflection;
 using Stride.Core.Storage;
@@ -33,7 +34,7 @@ namespace Stride.Engine
     /// <summary>
     /// Main Game class system.
     /// </summary>
-    public class Game : GameBase, ISceneRendererContext, IGameSettingsService
+    public partial class Game : GameBase, ISceneRendererContext, IGameSettingsService
     {
         /// <summary>
         /// Static event that will be fired when a game is initialized
@@ -82,7 +83,8 @@ namespace Stride.Engine
         /// Gets the scene system.
         /// </summary>
         /// <value>The scene system.</value>
-        public SceneSystem SceneSystem { get; }
+        private readonly SceneSystem sceneSystem;
+        public SceneSystem SceneSystem { get { ValidateGameContext(); return sceneSystem; } }
 
         /// <summary>
         /// Gets the effect system.
@@ -126,6 +128,7 @@ namespace Stride.Engine
         {
             get
             {
+                ValidateGameContext();
                 if (gameFontSystem.FontSystem == null)
                     throw new InvalidOperationException("The font system is not initialized yet");
 
@@ -200,7 +203,7 @@ namespace Stride.Engine
             Script = new ScriptSystem(Services);
             Services.AddService(Script);
 
-            SceneSystem = new SceneSystem(Services);
+            sceneSystem = new SceneSystem(Services);
             Services.AddService(SceneSystem);
 
             Streaming = new StreamingManager(Services);
@@ -238,9 +241,50 @@ namespace Stride.Engine
             AutoLoadDefaultSettings = true;
         }
 
+        /// <summary>Creates a real per-view game authority on an existing host device.</summary>
+        /// <remarks>Local scene/script services and collection belong to the caller. Font, audio, input, effects and platform remain borrowed.</remarks>
+        public Game(Game host, ServiceRegistry services, GameSystemCollection systems, ContentManager content,
+            Func<IServiceRegistry, SceneSystem> sceneFactory) : base(host ?? throw new ArgumentNullException(nameof(host)), services, systems, content)
+        {
+            try
+            {
+                ArgumentNullException.ThrowIfNull(sceneFactory);
+                Settings = host.Settings;
+                GraphicsDeviceManager = host.GraphicsDeviceManager;
+                Input = host.Input;
+                EffectSystem = host.EffectSystem;
+                Streaming = host.Streaming;
+                SpriteAnimation = host.SpriteAnimation;
+                DebugTextSystem = host.DebugTextSystem;
+                ProfilingSystem = host.ProfilingSystem;
+                VRDeviceSystem = host.VRDeviceSystem;
+                gameFontSystem = host.gameFontSystem;
+                Script = new ScriptSystem(Services);
+                sceneSystem = sceneFactory(Services) ?? throw new InvalidOperationException("The view scene factory returned no scene system.");
+                Services.AddService(Script);
+                Services.AddService(SceneSystem);
+            }
+            catch
+            {
+                try { sceneSystem?.Dispose(); }
+                finally
+                {
+                    try { Script?.Dispose(); }
+                    finally
+                    {
+                        // Base already registered this scope as IGame. Always
+                        // invalidate it, including failed validation/creation.
+                        Dispose();
+                    }
+                }
+                throw;
+            }
+        }
+
         /// <inheritdoc/>
         protected override void Destroy()
         {
+            if (IsSharedGameContext) { base.Destroy(); return; }
             OnGameDestroyed(this);
 
             DestroyAssetDatabase();

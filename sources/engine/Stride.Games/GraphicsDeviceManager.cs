@@ -36,7 +36,7 @@ namespace Stride.Games
     ///   Manages the <see cref="GraphicsDevice"/> life-cycle, providing access to it and events that can be
     ///   subscribed to be notified of when the device is created, reset, or disposed.
     /// </summary>
-    public class GraphicsDeviceManager : ComponentBase, IGraphicsDeviceManager, IGraphicsDeviceService
+    public partial class GraphicsDeviceManager : ComponentBase, IGraphicsDeviceManager, IGraphicsDeviceService
     {
         // Switch to indicate if window events should be delayed until the beginning of frames,
         // just before running the Game.Window.RunCallback
@@ -1085,6 +1085,9 @@ namespace Stride.Games
             // We make sure that we won't be call by an asynchronous event (windows resized)
             lock (lockDeviceCreation)
             {
+                // A window event can arrive while the host drains a lost device. Keep
+                // pending settings, but do not resize or submit onto that dead presenter.
+                if (graphicsRecoverySuspended && !forceCreate) return;
                 using (Profiler.Begin(GraphicsDeviceManagerProfilingKeys.CreateDevice))
                 {
                     ChangeOrCreateDevice();

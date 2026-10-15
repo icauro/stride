@@ -37,7 +37,7 @@ namespace Stride.Games
     /// <summary>
     /// The game.
     /// </summary>
-    public abstract class GameBase : ComponentBase, IGame
+    public abstract partial class GameBase : ComponentBase, IGame
     {
         #region Fields
 
@@ -67,7 +67,13 @@ namespace Stride.Games
         /// <summary>
         /// Initializes a new instance of the <see cref="GameBase" /> class.
         /// </summary>
-        protected GameBase()
+        protected GameBase() : this(null, null, null, null)
+        {
+        }
+
+        /// <summary>Creates an independently scheduled game scope borrowing the host's device and platform.</summary>
+        /// <remarks>The caller owns the supplied scene services and systems; this scope never runs or disposes the host platform.</remarks>
+        protected GameBase(GameBase host, ServiceRegistry services, GameSystemCollection systems, ContentManager content)
         {
             // Internals
             Log = GlobalLogger.GetLogger(GetType().GetTypeInfo().Name);
@@ -85,7 +91,23 @@ namespace Stride.Games
             isMouseVisible = true;
 
             // Externals
-            Services = new ServiceRegistry();
+            if (host != null)
+            {
+                if (host.IsDisposed) throw new ObjectDisposedException(nameof(host));
+                sharedGameHost = host;
+                this.services = services ?? throw new ArgumentNullException(nameof(services));
+                GameSystems = systems ?? throw new ArgumentNullException(nameof(systems));
+                Content = content ?? throw new ArgumentNullException(nameof(content));
+                GraphicsDevice = host.GraphicsDevice;
+                GraphicsContext = host.GraphicsContext;
+                graphicsDeviceManager = host.graphicsDeviceManager;
+                LaunchParameters = host.LaunchParameters;
+                Context = host.Context;
+                Services.AddService<IGame>(this);
+                IsActive = host.IsActive;
+                return;
+            }
+            this.services = new ServiceRegistry();
 
             // Database file provider
             Services.AddService<IDatabaseFileProviderService>(new DatabaseFileProviderService(null));
@@ -164,13 +186,40 @@ namespace Stride.Games
         /// <summary>
         /// Gets the <see cref="ContentManager"/>.
         /// </summary>
-        public ContentManager Content { get; private set; }
+        private ContentManager contentManager;
+        public ContentManager Content { get { ValidateGameContext(); return contentManager; } private set => contentManager = value; }
 
         /// <summary>
         /// Gets the game components registered by this game.
         /// </summary>
         /// <value>The game components.</value>
-        public GameSystemCollection GameSystems { get; private set; }
+        private readonly GameBase sharedGameHost;
+        protected bool IsSharedGameContext => sharedGameHost != null;
+        protected void ValidateGameContext()
+        {
+            if (IsSharedGameContext && IsDisposed) throw new ObjectDisposedException(GetType().Name);
+        }
+        /// <summary>Advances an owner-scheduled scene scope's actual native clock.</summary>
+        public void AdvanceSceneContextTime(GameTime time, bool drawing)
+        {
+            ValidateGameContext();
+            if (!IsSharedGameContext) throw new InvalidOperationException("Only owner-scheduled scene scopes use this clock API.");
+            ArgumentNullException.ThrowIfNull(time);
+            var clock = drawing ? DrawTime : UpdateTime;
+            clock.Factor = time.Factor;
+            clock.Update(time.Total, time.Elapsed, true);
+            IsActive = sharedGameHost.IsActive;
+        }
+        /// <summary>Publishes the lifetime of an owner-scheduled native scene.</summary>
+        public void SetSceneContextRunning(bool running)
+        {
+            ValidateGameContext();
+            if (!IsSharedGameContext) throw new InvalidOperationException("The platform game manages its own running state.");
+            IsRunning = running;
+            IsExiting = !running;
+        }
+        private GameSystemCollection gameSystems;
+        public GameSystemCollection GameSystems { get { ValidateGameContext(); return gameSystems; } private set => gameSystems = value; }
 
         /// <summary>
         /// Gets the game context.
@@ -182,9 +231,11 @@ namespace Stride.Games
         /// Gets the graphics device.
         /// </summary>
         /// <value>The graphics device.</value>
-        public GraphicsDevice GraphicsDevice { get; private set; }
+        private GraphicsDevice graphicsDevice;
+        public GraphicsDevice GraphicsDevice { get { ValidateGameContext(); return graphicsDevice; } private set => graphicsDevice = value; }
 
-        public GraphicsContext GraphicsContext { get; private set; }
+        private GraphicsContext graphicsContext;
+        public GraphicsContext GraphicsContext { get { ValidateGameContext(); return graphicsContext; } private set => graphicsContext = value; }
 
         /// <summary>
         /// Gets or sets the time between each <see cref="Tick"/> when <see cref="IsActive"/> is false.
@@ -197,6 +248,12 @@ namespace Stride.Games
         /// </summary>
         /// <value><c>true</c> if this instance is active; otherwise, <c>false</c>.</value>
         public bool IsActive { get; private set; }
+
+        /// <summary>
+        /// Whether the host should tick. Editors with additional native authoring
+        /// windows can remain active while their main game window is unfocused.
+        /// </summary>
+        protected virtual bool IsActiveForTick => IsActive;
 
         /// <summary>
         /// Gets a value indicating whether this instance is exiting.
@@ -266,7 +323,8 @@ namespace Stride.Games
         /// </summary>
         /// <value>The service container.</value>
         [NotNull]
-        public ServiceRegistry Services { get; }
+        private readonly ServiceRegistry services;
+        public ServiceRegistry Services { get { ValidateGameContext(); return services; } }
 
         /// <summary>
         /// Gets or sets the target elapsed time, this is the duration of each tick/update
@@ -308,7 +366,7 @@ namespace Stride.Games
                 {
                     return gamePlatform.MainWindow;
                 }
-                return null;
+                return sharedGameHost?.Window;
             }
         }
 
@@ -317,7 +375,7 @@ namespace Stride.Games
         /// <summary>
         /// Gets the full name of the device this game is running if available
         /// </summary>
-        public string FullPlatformName => gamePlatform.FullName;
+        public string FullPlatformName => sharedGameHost?.FullPlatformName ?? gamePlatform.FullName;
 
         #endregion
 
@@ -334,7 +392,7 @@ namespace Stride.Games
         public void Exit()
         {
             IsExiting = true;
-            gamePlatform.Exit();
+            if (!IsSharedGameContext) gamePlatform.Exit();
         }
 
         /// <summary>
@@ -376,7 +434,11 @@ namespace Stride.Games
                     // Drain pending GPU work before the window is destroyed: a queued flip-model
                     // Present can only complete while its window is alive, and the device is
                     // destroyed after the window on the exit path.
-                    Window.Closing += (_, _) => GraphicsDevice?.WaitForGpuIdle();
+                    Window.Closing += (_, request) =>
+                    {
+                        if (request is not System.ComponentModel.CancelEventArgs { Cancel: true })
+                            GraphicsDevice?.WaitForGpuIdle();
+                    };
 
                     // Bind Graphics Context enabling initialize to use GL API eg. SetData to texture ...etc
                     BeginDraw();
@@ -414,6 +476,7 @@ namespace Stride.Games
         /// <exception cref="System.InvalidOperationException">Cannot run this instance while it is already running</exception>
         public void Run(GameContext gameContext = null)
         {
+            if (IsSharedGameContext) throw new InvalidOperationException("A borrowed scene game is scheduled by its owner and cannot run a platform loop.");
             if (IsRunning)
             {
                 throw new InvalidOperationException("Cannot run this instance while it is already running");
@@ -502,6 +565,7 @@ namespace Stride.Games
         /// </summary>
         public void Tick()
         {
+            if (IsSharedGameContext) throw new InvalidOperationException("A borrowed scene game is updated by its owning scene authority.");
             lock (TickLock)
             {
                 // If this instance is existing, then don't make any further update/draw
@@ -512,14 +576,32 @@ namespace Stride.Games
                 }
 
                 // If this instance is not active, sleep for an inactive sleep time
-                if (!IsActive)
+                if (!IsActiveForTick)
                 {
+                    IsTickWorkActive = true;
+                    try { OnInactiveTick(); }
+                    finally { IsTickWorkActive = false; }
                     Thread.Sleep(InactiveSleepTime);
                     return;
                 }
 
-                RawTickProducer();
+                IsTickWorkActive = true;
+                try { RawTickProducer(); }
+                finally { IsTickWorkActive = false; }
+                OnCompletedTick();
             }
+        }
+
+        /// <summary>Runs on the owner thread after update and drawing have completely returned.</summary>
+        protected virtual void OnCompletedTick()
+        {
+        }
+        /// <summary>True while this tick's producer or inactive owner work is on the stack.</summary>
+        protected bool IsTickWorkActive { get; private set; }
+
+        /// <summary>Allows an owner-thread host to finish background work while update and rendering are paused.</summary>
+        protected virtual void OnInactiveTick()
+        {
         }
 
         /// <summary>
@@ -601,7 +683,7 @@ namespace Stride.Games
                 var window = gamePlatform.MainWindow;
                 if (gamePlatform.IsBlockingRun) // throttle fps if Game.Tick() called from internal main loop
                 {
-                    if (window.IsMinimized || window.Visible == false || (window.Focused == false && TreatNotFocusedLikeMinimized))
+                    if (window.IsMinimized || window.Visible == false || (window.Focused == false && TreatNotFocusedLikeMinimized && (!IsActiveForTick || IsActive)))
                     {
                         MinimizedMinimumUpdateRate.Throttle(out long _);
                     }
@@ -643,11 +725,24 @@ namespace Stride.Games
             {
                 RawTickCore(elapsedTimePerUpdate, updateCount, drawInterpolationFactor, drawFrame);
             }
+            catch (GraphicsDeviceException ex) when (ex.Status != GraphicsDeviceStatus.Normal)
+            {
+                beginDrawOk = false;
+                if (!OnGraphicsDeviceLost(ex)) throw;
+            }
+            catch (GraphicsDeviceException ex) when (GraphicsDevice is { GraphicsDeviceStatus: not GraphicsDeviceStatus.Normal })
+            {
+                var loss = GraphicsDeviceException.FromLostDevice(GraphicsDevice, GraphicsDevice.GraphicsDeviceStatus, ex);
+                beginDrawOk = false;
+                if (!OnGraphicsDeviceLost(loss)) throw loss;
+            }
             catch (Exception ex) when (ex is not GraphicsDeviceException && GraphicsDevice is { GraphicsDeviceStatus: not GraphicsDeviceStatus.Normal })
             {
                 // The first call to notice a lost device can be anything (a failed Map or resource creation, often wrapped
                 // by a content load, or the end of the frame): the run ends with the device status whichever it was
-                throw GraphicsDeviceException.FromLostDevice(GraphicsDevice, GraphicsDevice.GraphicsDeviceStatus, ex);
+                var loss = GraphicsDeviceException.FromLostDevice(GraphicsDevice, GraphicsDevice.GraphicsDeviceStatus, ex);
+                beginDrawOk = false;
+                if (!OnGraphicsDeviceLost(loss)) throw loss;
             }
         }
 
@@ -658,6 +753,9 @@ namespace Stride.Games
             try
             {
                 beginDrawSuccessful = BeginDraw();
+
+                if (IsGraphicsDeviceRecoveryPending)
+                    return;
 
                 // Reset the time of the next frame
                 for (int i = 0; i < updateCount && !IsExiting; i++)
@@ -737,6 +835,13 @@ namespace Stride.Games
         {
             base.Destroy();
 
+            if (IsSharedGameContext)
+            {
+                IsRunning = false;
+                IsExiting = true;
+                return;
+            }
+
             lock (this)
             {
                 if (Window != null && Window.IsActivated) // force the window to be in an correct state during destroy (Deactivated events are sometimes dropped on windows)
@@ -780,6 +885,9 @@ namespace Stride.Games
         protected virtual bool BeginDraw()
         {
             beginDrawOk = false;
+
+            if (IsGraphicsDeviceRecoveryPending)
+                return false;
 
             if ((graphicsDeviceManager != null) && !graphicsDeviceManager.BeginDraw())
             {
@@ -1002,7 +1110,7 @@ namespace Stride.Games
         {
             GraphicsDevice = graphicsDeviceService.GraphicsDevice;
 
-            if (GameSystems.State != GameSystemState.ContentLoaded)
+            if (!IsGraphicsDeviceRecoveryPending && GameSystems.State != GameSystemState.ContentLoaded)
             {
                 LoadContentInternal();
             }
@@ -1010,7 +1118,7 @@ namespace Stride.Games
 
         private void GraphicsDeviceService_DeviceDisposing(object sender, EventArgs e)
         {
-            if (GameSystems.State == GameSystemState.ContentLoaded)
+            if (!IsGraphicsDeviceRecoveryPending && GameSystems.State == GameSystemState.ContentLoaded)
             {
                 UnloadContent();
             }

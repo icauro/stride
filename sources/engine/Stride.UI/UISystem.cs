@@ -15,7 +15,7 @@ namespace Stride.UI
     /// <summary>
     /// Interface of the UI system.
     /// </summary>
-    public class UISystem : GameSystemBase, IService, IInputEventListener<PointerEvent>
+    public partial class UISystem : GameSystemBase, IService, IInputEventListener<PointerEvent>, IGraphicsDeviceRecoveryParticipant
     {
         internal UIBatch Batch { get; private set; }
 
