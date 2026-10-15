@@ -48,7 +48,8 @@ namespace Stride.Rendering.Lights
         /// <value>The size.</value>
         /// <userdoc>The size of texture to use for shadow mapping. Large textures produces better shadows edges but are much more costly.</userdoc>
         [DataMember(30)]
-        [DefaultValue(LightShadowMapSize.Medium)]
+        // Always persist Size: owning lights can initialize a different default
+        // (LightDirectional uses Large), so omitting Medium changes it on reload.
         public LightShadowMapSize Size { get; set; }
 
         /// <summary>
