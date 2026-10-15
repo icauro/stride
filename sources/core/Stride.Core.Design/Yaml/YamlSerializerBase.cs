@@ -42,12 +42,15 @@ public abstract class YamlSerializerBase : IDisposable
     private void AssemblyRegistered(object? sender, AssemblyRegisteredEventArgs e)
     {
         // Process only our own assemblies
-        if (!e.Categories.Contains(AssemblyCommonCategories.Engine))
+        if (!e.Categories.Contains(AssemblyCommonCategories.Engine) && !e.Categories.Contains(AssemblyCommonCategories.Assets))
             return;
 
         lock (Lock)
         {
-            RegisteredAssemblies.Add(e.Assembly);
+            // An assembly can acquire the Assets category after its Engine
+            // registration. Refresh factories for that category change without
+            // registering the same assembly twice in the rebuilt serializer.
+            if (!RegisteredAssemblies.Contains(e.Assembly)) RegisteredAssemblies.Add(e.Assembly);
 
             // Reset the current serializer as the set of assemblies has changed
             ResetCache();
@@ -57,12 +60,12 @@ public abstract class YamlSerializerBase : IDisposable
     private void AssemblyUnregistered(object? sender, AssemblyRegisteredEventArgs e)
     {
         // Process only our own assemblies
-        if (!e.Categories.Contains(AssemblyCommonCategories.Engine))
+        if (!e.Categories.Contains(AssemblyCommonCategories.Engine) && !e.Categories.Contains(AssemblyCommonCategories.Assets))
             return;
 
         lock (Lock)
         {
-            RegisteredAssemblies.Remove(e.Assembly);
+            RegisteredAssemblies.RemoveAll(assembly => ReferenceEquals(assembly, e.Assembly));
 
             // Reset the current serializer as the set of assemblies has changed
             ResetCache();

@@ -1257,15 +1257,18 @@ namespace Stride.Core.Yaml
                             break;
 
                         default:
-                            short code = (short) character;
+                            int code = character;
+                            if (char.IsHighSurrogate(character) && index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]))
+                            {
+                                code = char.ConvertToUtf32(character, value[++index]);
+                            }
                             if (code <= 0xFF)
                             {
                                 Write('x');
                                 Write(code.ToString("X02", CultureInfo.InvariantCulture));
                             }
-                            else
+                            else if (code <= 0xFFFF)
                             {
-                                //if (code <= 0xFFFF) {
                                 Write('u');
                                 Write(code.ToString("X04", CultureInfo.InvariantCulture));
                             }
@@ -1273,6 +1276,11 @@ namespace Stride.Core.Yaml
                             //	Write('U');
                             //	Write(code.ToString("X08"));
                             //}
+                            if (code > 0xFFFF)
+                            {
+                                Write('U');
+                                Write(code.ToString("X08", CultureInfo.InvariantCulture));
+                            }
                             break;
                     }
                     previous_space = false;

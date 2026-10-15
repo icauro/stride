@@ -1688,7 +1688,10 @@ namespace Stride.Core.Yaml
                                 throw new SyntaxErrorException(start, mark, "While parsing a quoted scalar, find invalid Unicode character escape code.");
                             }
 
-                            scanScalarValue.Append((char) character);
+                            if (character > 0xFFFF)
+                                scanScalarValue.Append(char.ConvertFromUtf32((int)character));
+                            else
+                                scanScalarValue.Append((char)character);
 
                             // Advance the pointer.
 
