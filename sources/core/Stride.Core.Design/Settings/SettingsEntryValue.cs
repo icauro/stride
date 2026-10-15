@@ -38,6 +38,8 @@ internal class SettingsEntryValue : SettingsEntry
         parsingEvents = [];
         SettingsYamlSerializer.Default.Serialize(new ParsingEventListEmitter(parsingEvents), Value, type);
 
+        if (RetainedSerializedValue != null && SettingsEntrySnapshot.Fingerprint(parsingEvents) == RetainedTypedFingerprint)
+            return new List<ParsingEvent>(RetainedSerializedValue);
         return parsingEvents;
     }
 }

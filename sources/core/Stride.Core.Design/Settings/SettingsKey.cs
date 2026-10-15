@@ -105,6 +105,7 @@ public abstract class SettingsKey
     /// <param name="value">The value to convert.</param>
     /// <returns>The converted value if the conversion is possible, the default value otherwise.</returns>
     internal abstract object ConvertValue(List<ParsingEvent> value);
+    internal virtual object ConvertValueStrict(List<ParsingEvent> value) => ConvertValue(value);
 
     /// <summary>
     /// Notifes that the changes have been validated by <see cref="SettingsProfile.ValidateSettingsChanges"/>.
@@ -182,7 +183,7 @@ public class SettingsKey<T> : SettingsKey
     public Func<IEnumerable<T>> GetAcceptableValues { get; set; }
 
     /// <inheritdoc/>
-    public override IEnumerable<object> AcceptableValues { get { return GetAcceptableValues != null ? (IEnumerable<object>)GetAcceptableValues() : Enumerable.Empty<object>(); } }
+    public override IEnumerable<object> AcceptableValues { get { return GetAcceptableValues != null ? GetAcceptableValues().Cast<object>() : Enumerable.Empty<object>(); } }
 
     /// <summary>
     /// Gets the value of this settings key in the given profile.
@@ -261,6 +262,12 @@ public class SettingsKey<T> : SettingsKey
     /// <inheritdoc/>
     internal override object ConvertValue(List<ParsingEvent> parsingEvents)
     {
+        try { return ConvertValueStrict(parsingEvents); }
+        catch { return DefaultValue; }
+    }
+    internal override object ConvertValueStrict(List<ParsingEvent> parsingEvents)
+    {
+        Exception? failure = null;
         // First use default deserializer to deserialize value.
         try
         {
@@ -269,6 +276,7 @@ public class SettingsKey<T> : SettingsKey
         }
         catch (Exception e)
         {
+            failure = e;
             e.Ignore();
         }
 
@@ -282,11 +290,12 @@ public class SettingsKey<T> : SettingsKey
             }
             catch (Exception e)
             {
+                failure = e;
                 e.Ignore();
             }
         }
 
         // Can't decode back, use default value
-        return DefaultValue;
+        throw new InvalidDataException("The setting cannot be converted to its registered type: " + Name, failure);
     }
 }

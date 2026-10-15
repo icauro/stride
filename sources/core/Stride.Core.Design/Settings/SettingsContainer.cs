@@ -15,7 +15,7 @@ namespace Stride.Core.Settings;
 /// When a <see cref="SettingsContainer"/> is created, it will contain a default root <see cref="SettingsProfile"/>. This profile has no parent, and every profile created
 /// or loaded afterward will have the default profile as parent, unless another non-null parent is specified.
 /// </summary>
-public class SettingsContainer
+public partial class SettingsContainer
 {
     internal static readonly object SettingsLock = new();
 
@@ -40,6 +40,7 @@ public class SettingsContainer
         profileList.Add(RootProfile);
         currentProfile = RootProfile;
         Logger = new LoggerResult();
+        TrackContainer(this);
     }
 
     /// <summary>
@@ -142,7 +143,10 @@ public class SettingsContainer
         {
             var settingsFile = new SettingsFile(profile);
             using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var loadedSourceHash = System.Security.Cryptography.SHA256.HashData(stream);
+            stream.Position = 0;
             SettingsYamlSerializer.Default.Deserialize(stream, settingsFile);
+            profile.LoadedSourceHash = loadedSourceHash;
         }
         catch (Exception)
         {
@@ -184,7 +188,10 @@ public class SettingsContainer
         {
             var settingsFile = new SettingsFile(profile);
             using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var loadedSourceHash = System.Security.Cryptography.SHA256.HashData(stream);
+            stream.Position = 0;
             SettingsYamlSerializer.Default.Deserialize(stream, settingsFile);
+            profile.LoadedSourceHash = loadedSourceHash;
         }
         catch (Exception e)
         {
@@ -211,11 +218,40 @@ public class SettingsContainer
         }
     }
 
-    /// <summary>
-    /// Saves the given settings profile to a file at the given path.
-    /// </summary>
-    /// <param name="profile">The profile to save.</param>
-    /// <param name="filePath">The path of the file.</param>
+    /// <summary>Serializes an authored settings profile without changing files or its source path.</summary>
+    public byte[] SerializeSettingsProfile(SettingsProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        using var stream = new MemoryStream();
+        SettingsYamlSerializer.Default.Serialize(stream, new SettingsFile(profile));
+        return stream.ToArray();
+    }
+
+    /// <summary>Records a successful externally guarded save of this profile.</summary>
+    public void AcknowledgeSavedSettingsProfile(SettingsProfile profile, UFile filePath, ReadOnlySpan<byte> contentHash)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!ReferenceEquals(profile.Container, this)) throw new ArgumentException("The profile belongs to a different settings container.", nameof(profile));
+        profile.LoadedSourceHash = contentHash.ToArray();
+        profile.FilePath = filePath;
+    }
+
+    /// <summary>Suppresses this profile's own file watcher while a host performs a guarded save.</summary>
+    public IDisposable BeginGuardedProfileSave(SettingsProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!ReferenceEquals(profile.Container, this)) throw new ArgumentException("The profile belongs to a different settings container.", nameof(profile));
+        return new GuardedProfileSave(profile);
+    }
+    private sealed class GuardedProfileSave : IDisposable
+    {
+        private SettingsProfile? profile;
+        private readonly bool previous;
+        public GuardedProfileSave(SettingsProfile profile) { this.profile = profile; previous = profile.Saving; profile.Saving = true; }
+        public void Dispose() { if (profile == null) return; profile.Saving = previous; profile = null; }
+    }
+
+    /// <summary>Saves the given settings profile to a file at the given path.</summary>
     /// <returns><c>true</c> if the file was correctly saved, <c>false</c> otherwise.</returns>
     public bool SaveSettingsProfile(SettingsProfile profile, UFile filePath)
     {
@@ -230,10 +266,14 @@ public class SettingsContainer
             Directory.CreateDirectory(filePath.GetFullDirectory());
 
             var settingsFile = new SettingsFile(profile);
+            using var serialized = new MemoryStream();
+            SettingsYamlSerializer.Default.Serialize(serialized, settingsFile);
+            var serializedBytes = serialized.ToArray();
             using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Write))
             {
-                SettingsYamlSerializer.Default.Serialize(stream, settingsFile);
+                stream.Write(serializedBytes);
             }
+            profile.LoadedSourceHash = System.Security.Cryptography.SHA256.HashData(serializedBytes);
 
             if (filePath != profile.FilePath)
             {
@@ -287,9 +327,11 @@ public class SettingsContainer
                 object finalValue = value;
                 if (settingsKeys.TryGetValue(settings.Key, out var key))
                 {
-                    finalValue = key.ConvertValue(value);
+                    try { finalValue = key.ConvertValueStrict(value); }
+                    catch (Exception error) { Logger.Warning("The settings value remains in its original YAML form: " + settings.Key + ". " + error.Message); }
                 }
                 profile.SetValue(settings.Key, finalValue);
+                if (key != null && finalValue is not List<ParsingEvent>) PreserveRaw(profile.Settings[settings.Key], key, value);
             }
         }
     }
@@ -320,6 +362,7 @@ public class SettingsContainer
             profileList.Clear();
             RootProfile.Settings.Clear();
             settingsKeys.Clear();
+            keyOwners.Clear();
         }
     }
 
@@ -335,13 +378,17 @@ public class SettingsContainer
             if (!settingsKeys.TryGetValue(settingsKey.Name, out var registeredKey) || registeredKey != settingsKey)
                 return false;
 
+            // Prepare serialized values before removing the live key; a serializer failure must leave its generation intact.
+            var prepared = LiveProfiles().Where(x => x != RootProfile)
+                .Where(profile => profile.Settings.ContainsKey(settingsKey.Name))
+                .Select(profile => (Profile: profile, Entry: SettingsEntry.CreateFromValue(profile, settingsKey.Name,
+                    new List<ParsingEvent>(profile.Settings[settingsKey.Name].GetSerializableValue(settingsKey)))))
+                .ToArray();
             settingsKeys.Remove(settingsKey.Name);
+            keyOwners.Remove(settingsKey);
             RootProfile.Settings.Remove(settingsKey.Name);
-            foreach (var profile in Profiles.Where(x => x != RootProfile))
-            {
-                if (profile.Settings.TryGetValue(settingsKey.Name, out var entry))
-                    profile.Settings[settingsKey.Name] = SettingsEntry.CreateFromValue(profile, settingsKey.Name, entry.GetSerializableValue(settingsKey));
-            }
+            foreach (var preparedEntry in prepared)
+                preparedEntry.Profile.Settings[settingsKey.Name] = preparedEntry.Entry;
             return true;
         }
     }
@@ -365,18 +412,26 @@ public class SettingsContainer
         lock (SettingsLock)
         {
             settingsKeys.Add(name, settingsKey);
+            RegisterKeyOwner(settingsKey, defaultValue);
             var entry = SettingsEntry.CreateFromValue(RootProfile, name, defaultValue);
             RootProfile.RegisterEntry(entry);
 
             // Ensure that the value is converted to the key type in each loaded profile.
-            foreach (var profile in Profiles.Where(x => x != RootProfile))
+            foreach (var profile in LiveProfiles().Where(x => x != RootProfile))
             {
                 if (profile.Settings.TryGetValue(name, out entry))
                 {
                     // A value of another type (set through an unregistered key) goes through its serialized form
                     var value = entry.Value is not null and not List<ParsingEvent> && !settingsKey.Type.IsInstanceOfType(entry.Value) ? entry.GetSerializableValue(null) : entry.Value;
-                    var convertedValue = value is List<ParsingEvent> parsingEvents ? settingsKey.ConvertValue(parsingEvents) : value;
+                    var raw = value as List<ParsingEvent>;
+                    object convertedValue = value;
+                    if (raw != null)
+                    {
+                        try { convertedValue = settingsKey.ConvertValueStrict(raw); }
+                        catch (Exception error) { Logger.Warning("The settings value remains in its original YAML form: " + name + ". " + error.Message); }
+                    }
                     entry = SettingsEntry.CreateFromValue(profile, name, convertedValue);
+                    if (raw != null && convertedValue is not List<ParsingEvent>) PreserveRaw(entry, settingsKey, raw);
                     profile.Settings[name] = entry;
                 }
             }

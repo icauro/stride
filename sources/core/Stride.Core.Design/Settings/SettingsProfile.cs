@@ -17,6 +17,10 @@ public class SettingsProfile : IDisposable
 {
     internal ITransactionStack TransactionStack = TransactionStackFactory.Create(int.MaxValue);
     internal bool Saving;
+    internal byte[]? LoadedSourceHash;
+    [DataMemberIgnore]
+    public ReadOnlyMemory<byte> LoadedContentHash => LoadedSourceHash ?? ReadOnlyMemory<byte>.Empty;
+    internal bool AuthoredChangeInProgress { get; private set; }
     private readonly SortedList<UFile, SettingsEntry> settings = [];
     private readonly HashSet<UFile> modifiedSettings = [];
     private readonly SettingsProfile parentProfile;
@@ -33,6 +37,7 @@ public class SettingsProfile : IDisposable
     {
         Container = container;
         this.parentProfile = parentProfile;
+        container.TrackProfile(this);
     }
 
     /// <summary>
@@ -250,6 +255,64 @@ public class SettingsProfile : IDisposable
                 Settings[name].Value = value;
             }
         }
+    }
+
+    /// <summary>Applies a value whose undo is owned by an external authoring transaction, without creating a second settings journal.</summary>
+    public void ApplyAuthoredValue<T>(SettingsKey<T> key, T value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (!ReferenceEquals(key.Container, Container)) throw new ArgumentException("The key belongs to a different settings container.", nameof(key));
+        if (!ReferenceEquals(Container.GetSettingsKey(key.Name), key)) throw new InvalidOperationException("The settings key generation is no longer active.");
+        lock (SettingsContainer.SettingsLock)
+        {
+            var previous = AuthoredChangeInProgress;
+            AuthoredChangeInProgress = true;
+            try { key.SetValue(value, this); }
+            finally { AuthoredChangeInProgress = previous; }
+        }
+    }
+    /// <summary>Reads an immutable native YAML snapshot without decoding opaque or inactive values.</summary>
+    public SettingsEntrySnapshot CaptureAuthoredEntry(SettingsKey key)
+    {
+        if (!ReferenceEquals(key.Container, Container)) throw new ArgumentException("The key belongs to a different settings container.", nameof(key));
+        return CaptureAuthoredEntry(key.Name);
+    }
+    internal SettingsEntrySnapshot CaptureAuthoredEntry(UFile name)
+    {
+        lock (SettingsContainer.SettingsLock)
+            return Settings.TryGetValue(name, out var entry)
+                ? new(true, entry.GetSerializableValue(Container.GetSettingsKey(name))) : new(false, Array.Empty<Stride.Core.Yaml.Events.ParsingEvent>());
+    }
+    /// <summary>Restores exact entry presence/YAML through the currently active native key generation.</summary>
+    public void RestoreAuthoredEntry(SettingsKey key, SettingsEntrySnapshot snapshot)
+    {
+        if (!ReferenceEquals(key.Container, Container)) throw new ArgumentException("The key belongs to a different settings container.", nameof(key));
+        RestoreAuthoredEntry(key.Name, snapshot);
+    }
+    internal void RestoreAuthoredEntry(UFile name, SettingsEntrySnapshot snapshot)
+    {
+        lock (SettingsContainer.SettingsLock)
+        {
+            if (!snapshot.IsPresent) Settings.Remove(name);
+            else
+            {
+                var raw = new List<Stride.Core.Yaml.Events.ParsingEvent>(snapshot.Events);
+                var active = Container.GetSettingsKey(name); object value = raw;
+                if (active != null)
+                    try { value = active.ConvertValueStrict(raw); }
+                    catch { /* Keep the exact native YAML when this CLR generation cannot represent it. */ }
+                var entry = SettingsEntry.CreateFromValue(this, name, value);
+                if (active != null && value is not List<Stride.Core.Yaml.Events.ParsingEvent>) SettingsContainer.PreserveRaw(entry, active, raw);
+                Settings[name] = entry;
+            }
+            NotifyEntryChanged(name);
+        }
+    }
+    public bool CanReadRegisteredValue(SettingsKey key)
+    {
+        lock (SettingsContainer.SettingsLock)
+            return ReferenceEquals(Container.GetSettingsKey(key.Name), key) && GetValue(key.Name, out var value, true, false)
+                && (value == null || value is not List<Stride.Core.Yaml.Events.ParsingEvent> && key.Type.IsInstanceOfType(value));
     }
 
     /// <summary>

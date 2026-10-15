@@ -12,8 +12,11 @@ namespace Stride.Core.Settings;
 internal abstract class SettingsEntry
 {
     protected readonly SettingsProfile Profile;
+    internal SettingsProfile OwningProfile => Profile;
     protected bool ShouldNotify;
     private object value;
+    internal List<ParsingEvent>? RetainedSerializedValue;
+    internal string? RetainedTypedFingerprint;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsEntry"/> class.
@@ -74,9 +77,10 @@ internal abstract class SettingsEntry
         bool changed = !Equals(oldValue, newValue);
         if (changed && ShouldNotify && !Profile.IsDiscarding)
         {
-            using (Profile.TransactionStack.CreateTransaction())
+            if (!Profile.AuthoredChangeInProgress)
             {
-                Profile.TransactionStack.PushOperation(new SettingsEntryChangeValueOperation(this, oldValue));
+                using (Profile.TransactionStack.CreateTransaction())
+                    Profile.TransactionStack.PushOperation(new SettingsEntryChangeValueOperation(this, oldValue));
             }
             Profile.NotifyEntryChanged(Name);
         }

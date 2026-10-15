@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 using Stride.Core.Transactions;
+using Stride.Core.IO;
 
 namespace Stride.Core.Settings;
 
@@ -9,29 +10,24 @@ namespace Stride.Core.Settings;
 /// </summary>
 internal sealed class SettingsEntryChangeValueOperation : Operation
 {
-    private readonly SettingsEntry entry;
-    private object oldValue;
+    private readonly SettingsProfile profile;
+    private readonly UFile name;
+    private SettingsEntrySnapshot other;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsEntryChangeValueOperation"/> class.
-    /// </summary>
-    /// <param name="entry">The settings entry that has been modified.</param>
-    /// <param name="oldValue">The value of the settings entry before the modification.</param>
     public SettingsEntryChangeValueOperation(SettingsEntry entry, object oldValue)
     {
-        this.entry = entry;
-        this.oldValue = oldValue;
+        profile = entry.OwningProfile;
+        name = entry.Name;
+        // Construction occurs before entry.UpdateValue installs the new value.
+        other = profile.CaptureAuthoredEntry(name);
     }
 
-    /// <inheritdoc/>
     protected override void Rollback()
     {
-        (entry.Value, oldValue) = (oldValue, entry.Value);
+        var current = profile.CaptureAuthoredEntry(name);
+        profile.RestoreAuthoredEntry(name, other);
+        other = current;
     }
 
-    /// <inheritdoc/>
-    protected override void Rollforward()
-    {
-        Rollback();
-    }
+    protected override void Rollforward() => Rollback();
 }
