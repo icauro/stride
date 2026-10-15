@@ -23,7 +23,7 @@ public class ContentStreamingService : IDisposable
     /// Gets the storage container.
     /// </summary>
     /// <param name="storageHeader">The storage header.</param>
-    /// <returns>Content Storage container.</returns>
+    /// <returns>A service-owned container. Consumers retaining it must acquire their own reference.</returns>
     public ContentStorage GetStorage(ref ContentStorageHeader storageHeader)
     {
         ContentStorage? result;
@@ -33,8 +33,12 @@ public class ContentStreamingService : IDisposable
             {
                 result = new ContentStorage(this);
                 containers.Add(storageHeader.DataUrl, result);
+                result.Init(ref storageHeader);
             }
-            result.Init(ref storageHeader);
+            else if (result.PackageTime != storageHeader.PackageTime || result.GetHashCode() != storageHeader.HashCode)
+            {
+                result.Init(ref storageHeader);
+            }
         }
 
         Debug.Assert(result != null && result.Url == storageHeader.DataUrl);
@@ -60,8 +64,9 @@ public class ContentStreamingService : IDisposable
     {
         lock (containers)
         {
-            containers.ForEach(x => x.Value.ReleaseChunks());
+            var owned = containers.Values.ToArray();
             containers.Clear();
+            foreach (var storage in owned) storage.Dispose();
         }
     }
 

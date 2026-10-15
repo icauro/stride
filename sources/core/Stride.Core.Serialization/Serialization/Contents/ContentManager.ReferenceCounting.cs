@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Stride.Core.Serialization.Contents;
 
@@ -20,6 +21,8 @@ partial class ContentManager
     /// <param name="publicReference">True if public reference.</param>
     internal void IncrementReference(Reference reference, bool publicReference)
     {
+        if (reference.ReleasePending || reference.ObjectReleased)
+            throw new InvalidOperationException($"Content [{reference.Url}] is pending final release.");
         if (publicReference)
         {
             reference.PublicReferenceCount++;
@@ -37,6 +40,12 @@ partial class ContentManager
     /// <param name="publicReference">True if public erefere</param>
     internal void DecrementReference(Reference reference, bool publicReference)
     {
+        if (reference.ReleasePending)
+        {
+            if (reference.ReleaseInProgress || reference.ReleasePublicReference != publicReference)
+                throw new InvalidOperationException("A pending final content release must resume through its original reference category.");
+            CompleteFinalRelease(reference); return;
+        }
         int referenceCount;
         if (publicReference)
         {
@@ -55,14 +64,12 @@ partial class ContentManager
 
         if (referenceCount == 0)
         {
-            // Free the object itself
-            ReleaseAsset(reference);
-
-            // Free all its referenced objects
-            foreach (var childReference in reference.References)
-            {
-                DecrementReference(childReference, false);
-            }
+            // Retain the actual final reference until object and dependency
+            // disposal finish. A failed phase remains retryable via Unload.
+            if (publicReference) reference.PublicReferenceCount++;
+            else reference.PrivateReferenceCount++;
+            reference.ReleasePending = true; reference.ReleasePublicReference = publicReference;
+            CompleteFinalRelease(reference);
         }
         else if (publicReference && reference.PublicReferenceCount == 0)
         {
@@ -77,6 +84,32 @@ partial class ContentManager
     /// <param name="reference">The reference.</param>
     private void ReleaseAsset(Reference reference)
     {
+        ReleaseAssetObject(reference);
+        RemoveReleasedAsset(reference);
+    }
+
+    private void CompleteFinalRelease(Reference reference)
+    {
+        reference.ReleaseInProgress = true;
+        try
+        {
+            ReleaseAssetObject(reference);
+            foreach (var childReference in reference.References.ToArray())
+            {
+                DecrementReference(childReference, false);
+                reference.References.Remove(childReference);
+            }
+            RemoveReleasedAsset(reference);
+            if (reference.ReleasePublicReference) reference.PublicReferenceCount--;
+            else reference.PrivateReferenceCount--;
+            reference.ReleasePending = false;
+        }
+        finally { reference.ReleaseInProgress = false; }
+    }
+
+    private static void ReleaseAssetObject(Reference reference)
+    {
+        if (reference.ObjectReleased) return;
         if (reference.Object is IReferencable referencable)
         {
             referencable.Release();
@@ -88,7 +121,14 @@ partial class ContentManager
                 disposable.Dispose();
             }
         }
+        reference.ObjectReleased = true;
+    }
 
+    private void RemoveReleasedAsset(Reference reference)
+    {
+        // Do the object-key lookup before changing URL/linked-list metadata;
+        // failures preserve the pending owner and its actual reference category.
+        LoadedAssetReferences.Remove(reference.Object);
         // Remove Reference from loaded assets.
         var oldPrev = reference.Prev;
         var oldNext = reference.Next;
@@ -104,13 +144,14 @@ partial class ContentManager
             else
                 LoadedAssetUrls[reference.Url] = oldNext;
         }
-        LoadedAssetReferences.Remove(reference.Object);
-
         reference.Object = null;
     }
 
     internal void CollectUnreferencedCycles()
     {
+        // A failed release leaves its real registry entry for retry. Rebuild
+        // reachability from those entries rather than replay a partial worklist.
+        stack.Clear();
         // Push everything on the stack
         var currentCollectIndex = nextCollectIndex++;
         foreach (var asset in LoadedAssetUrls)
@@ -118,8 +159,8 @@ partial class ContentManager
             var currentAsset = asset.Value;
             do
             {
-                if (asset.Value.PublicReferenceCount > 0)
-                    stack.Push(asset.Value);
+                if (currentAsset.PublicReferenceCount > 0 || currentAsset.ReleasePending)
+                    stack.Push(currentAsset);
                 currentAsset = currentAsset.Next;
             }
             while (currentAsset != null);
@@ -151,9 +192,9 @@ partial class ContentManager
             var currentAsset = asset.Value;
             do
             {
-                if (asset.Value.CollectIndex != currentCollectIndex)
+                if (currentAsset.CollectIndex != currentCollectIndex)
                 {
-                    stack.Push(asset.Value);
+                    stack.Push(currentAsset);
                 }
                 currentAsset = currentAsset.Next;
             }

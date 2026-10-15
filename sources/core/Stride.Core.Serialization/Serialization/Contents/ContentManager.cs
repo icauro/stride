@@ -162,6 +162,8 @@ public sealed partial class ContentManager : IContentManager
         {
             if (!LoadedAssetReferences.TryGetValue(obj, out var reference))
                 return false; // The object is not loaded
+            if (reference.ReleasePending || reference.ObjectReleased)
+                throw new InvalidOperationException($"Content [{reference.Url}] is pending final release.");
 
             var url = newUrl is not null ? ResolveUrl(newUrl) : reference.Url;
 
@@ -352,9 +354,21 @@ public sealed partial class ContentManager : IContentManager
         return result;
     }
 
+    /// <summary>Snapshots the actual cache-owned objects whose native release has not completed.</summary>
+    public object[] GetLoadedAssetsSnapshot()
+    {
+        lock (LoadedAssetUrls)
+        {
+            var values = new List<object>(LoadedAssetReferences.Count);
+            foreach (var pair in LoadedAssetReferences)
+                if (!pair.Value.ObjectReleased) values.Add(pair.Key);
+            return values.ToArray();
+        }
+    }
+
     public bool TryGetLoadedAsset(string url, [NotNullWhen(true)] out object? asset)
     {
-        if (LoadedAssetUrls.TryGetValue(url, out var reference))
+        if (LoadedAssetUrls.TryGetValue(url, out var reference) && !reference.ReleasePending && !reference.ObjectReleased)
         {
             asset = reference.Object;
             return true;
@@ -376,6 +390,8 @@ public sealed partial class ContentManager : IContentManager
 
             if (reference != null)
             {
+                if (reference.ReleasePending || reference.ObjectReleased)
+                    throw new InvalidOperationException($"Content [{reference.Url}] is pending final release.");
                 // TODO: Currently ReferenceSerializer creates a reference, so we will go through DeserializeObject later to add the reference
                 // This should be unified at some point
                 return reference;

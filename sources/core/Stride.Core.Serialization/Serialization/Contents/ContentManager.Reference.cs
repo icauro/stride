@@ -18,6 +18,7 @@ partial class ContentManager
         public Reference? Prev;
 
         public bool Deserialized;
+        internal bool ReleasePending, ReleasePublicReference, ReleaseInProgress, ObjectReleased;
 
         /// <summary>
         /// The object being referenced.
