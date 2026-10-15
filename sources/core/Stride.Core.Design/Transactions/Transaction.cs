@@ -101,18 +101,48 @@ internal sealed class Transaction : Operation, ITransaction, IReadOnlyTransactio
     /// <inheritdoc/>
     protected override void Rollback()
     {
-        for (var i = operations.Count - 1; i >= 0; --i)
+        var index = operations.Count - 1;
+        try
         {
-            operations[i].Interface.Rollback();
+            for (; index >= 0; --index) operations[index].Interface.Rollback();
+        }
+        catch (Exception failure)
+        {
+            // Compensate only children that completed. A failing child must restore
+            // its own partial changes; blindly replaying it could apply it twice.
+            List<Exception>? recoveryErrors = null;
+            for (var completed = index + 1; completed < operations.Count; completed++)
+                try { operations[completed].Interface.Rollforward(); }
+                catch (Exception recovery) { (recoveryErrors ??= []).Add(recovery); }
+            if (recoveryErrors != null)
+            {
+                recoveryErrors.Insert(0, failure);
+                throw new AggregateException("Transaction undo failed and could not fully restore completed operations.", recoveryErrors);
+            }
+            throw;
         }
     }
 
     /// <inheritdoc/>
     protected override void Rollforward()
     {
-        foreach (var operation in operations)
+        var index = 0;
+        try
         {
-            operation.Interface.Rollforward();
+            for (; index < operations.Count; index++) operations[index].Interface.Rollforward();
+        }
+        catch (Exception failure)
+        {
+            List<Exception>? recoveryErrors = null;
+            for (var completed = index - 1; completed >= 0; completed--)
+                try { operations[completed].Interface.Rollback(); }
+                catch (Exception recovery) { (recoveryErrors ??= []).Add(recovery); }
+            if (recoveryErrors != null)
+            {
+                recoveryErrors.Insert(0, failure);
+                throw new AggregateException("Transaction redo failed and could not fully restore completed operations.", recoveryErrors);
+            }
+            throw;
         }
     }
 
@@ -122,7 +152,7 @@ internal sealed class Transaction : Operation, ITransaction, IReadOnlyTransactio
         base.FreezeContent();
         foreach (var operation in operations)
         {
-            operation.Interface.Freeze();
+            if (!operation.IsFrozen) operation.Interface.Freeze();
         }
     }
 

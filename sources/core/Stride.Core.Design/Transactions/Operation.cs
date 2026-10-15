@@ -84,8 +84,8 @@ public abstract class Operation : IOperation
             throw new TransactionException("This operation is already in progress");
 
         inProgress = true;
-        Rollback();
-        inProgress = false;
+        try { Rollback(); }
+        finally { inProgress = false; }
     }
 
     /// <inheritdoc/>
@@ -97,7 +97,7 @@ public abstract class Operation : IOperation
             throw new TransactionException("This operation is already in progress");
 
         inProgress = true;
-        Rollforward();
-        inProgress = false;
+        try { Rollforward(); }
+        finally { inProgress = false; }
     }
 }

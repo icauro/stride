@@ -9,6 +9,9 @@ namespace Stride.Core.Transactions;
 internal class TransactionStack : ITransactionStack
 {
     private readonly List<Transaction> transactions = [];
+    private readonly List<Transaction> discardedCleanup = [];
+    private IReadOnlyList<Exception> discardCleanupErrors = Array.Empty<Exception>();
+    private bool cleanupInProgress;
     private readonly Stack<Transaction> transactionsInProgress = new();
     private readonly object lockObject = new();
     private int currentPosition;
@@ -52,6 +55,35 @@ internal class TransactionStack : ITransactionStack
 
     /// <inheritdoc/>
     public bool CanRollforward => currentPosition < transactions.Count;
+
+    public IReadOnlyTransaction? NextUndoTransaction
+    {
+        get { lock (lockObject) return currentPosition > 0 ? transactions[currentPosition - 1] : null; }
+    }
+    public IReadOnlyTransaction? NextRedoTransaction
+    {
+        get { lock (lockObject) return currentPosition < transactions.Count ? transactions[currentPosition] : null; }
+    }
+    public IReadOnlyList<Exception> DiscardCleanupErrors { get { lock (lockObject) return discardCleanupErrors; } }
+    public IReadOnlyList<Exception> RetryDiscardCleanup()
+    {
+        lock (lockObject)
+        {
+            if (cleanupInProgress) return discardCleanupErrors;
+            var errors = new List<Exception>();
+            cleanupInProgress = true;
+            try
+            {
+                foreach (var transaction in discardedCleanup.ToArray())
+                {
+                    try { transaction.Interface.Freeze(); discardedCleanup.Remove(transaction); }
+                    catch (Exception error) { errors.Add(error); }
+                }
+            }
+            finally { cleanupInProgress = false; }
+            return discardCleanupErrors = errors.ToArray();
+        }
+    }
 
     /// <inheritdoc/>
     public event EventHandler<TransactionEventArgs>? TransactionCompleted;
@@ -113,12 +145,10 @@ internal class TransactionStack : ITransactionStack
             if (RollInProgress)
                 throw new TransactionException("Unable to clear. A rollback or rollforward operation is in progress.");
 
-            foreach (var transaction in transactions)
-            {
-                transaction.Interface.Freeze();
-            }
+            discardedCleanup.AddRange(transactions);
             transactions.Clear();
             currentPosition = 0;
+            RetryDiscardCleanup();
             Cleared?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -150,7 +180,11 @@ internal class TransactionStack : ITransactionStack
 
                 // If this transaction has no effect, discard it.
                 if (transaction.Operations.All(x => !x.HasEffect))
+                {
+                    discardedCleanup.Add(transaction);
+                    RetryDiscardCleanup();
                     return;
+                }
 
                 // If we're not the last transaction, consider this transaction as an operation of its parent transaction
                 if (TransactionInProgress)
@@ -170,16 +204,14 @@ internal class TransactionStack : ITransactionStack
                 {
                     // If the stack has a capacity of 0, immediately freeze the new transaction.
                     var oldestTransaction = Capacity > 0 ? transactions[0] : transaction;
-                    oldestTransaction.Interface.Freeze();
+                    discardedCleanup.Add(oldestTransaction);
 
-                    for (var i = 1; i < transactions.Count; ++i)
-                    {
-                        transactions[i - 1] = transactions[i];
-                    }
                     if (Capacity > 0)
                     {
-                        transactions[--currentPosition] = null!;
+                        transactions.RemoveAt(0);
+                        --currentPosition;
                     }
+                    RetryDiscardCleanup();
                     TransactionDiscarded?.Invoke(this, new TransactionsDiscardedEventArgs(oldestTransaction, DiscardReason.StackFull));
                 }
                 if (Capacity > 0)
@@ -224,11 +256,12 @@ internal class TransactionStack : ITransactionStack
             if (transactionsInProgress.Count > 0)
                 throw new TransactionException("Unable to rollback. A transaction is in progress.");
 
-            var lastTransaction = transactions[--currentPosition];
+            var lastTransaction = transactions[currentPosition - 1];
             RollInProgress = true;
             try
             {
                 lastTransaction.Interface.Rollback();
+                --currentPosition;
             }
             finally
             {
@@ -250,11 +283,12 @@ internal class TransactionStack : ITransactionStack
             if (transactionsInProgress.Count > 0)
                 throw new TransactionException("Unable to rollback. A transaction is in progress.");
 
-            var lastTransaction = transactions[currentPosition++];
+            var lastTransaction = transactions[currentPosition];
             RollInProgress = true;
             try
             {
                 lastTransaction.Interface.Rollforward();
+                ++currentPosition;
             }
             finally
             {
@@ -290,10 +324,11 @@ internal class TransactionStack : ITransactionStack
             var discardedTransactions = new IReadOnlyTransaction[transactions.Count - index];
             for (var i = index; i < transactions.Count; ++i)
             {
-                transactions[i].Interface.Freeze();
                 discardedTransactions[i - index] = transactions[i];
+                discardedCleanup.Add(transactions[i]);
             }
             transactions.RemoveRange(index, transactions.Count - index);
+            RetryDiscardCleanup();
             TransactionDiscarded?.Invoke(this, new TransactionsDiscardedEventArgs(discardedTransactions, DiscardReason.StackPurged));
         }
     }

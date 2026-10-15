@@ -56,6 +56,18 @@ public interface ITransactionStack
     /// </summary>
     bool CanRollforward { get; }
 
+    /// <summary>Gets the next transaction that rollback would consume, without modifying history.</summary>
+    IReadOnlyTransaction? NextUndoTransaction => null;
+
+    /// <summary>Gets the next transaction that rollforward would consume, without modifying history.</summary>
+    IReadOnlyTransaction? NextRedoTransaction => null;
+
+    /// <summary>Retries resource release of discarded, non-replayable operations. Failed releases remain retained for retry.</summary>
+    IReadOnlyList<Exception> RetryDiscardCleanup() => Array.Empty<Exception>();
+
+    /// <summary>Failures from the latest discarded-operation cleanup attempt.</summary>
+    IReadOnlyList<Exception> DiscardCleanupErrors => Array.Empty<Exception>();
+
     /// <summary>
     /// Raised when a transaction has been completed and added to the transaction stack.
     /// </summary>
