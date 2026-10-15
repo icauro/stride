@@ -1,0 +1,11 @@
+<Project>
+  <!-- Editor-only watch profile; production references and engine processing remain intact. -->
+  <ItemGroup>
+    <ProjectReference Remove="@(ProjectReference)" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+  <Import Project="$(OutDir)development-references.props" Condition="Exists('$(OutDir)development-references.props')" />
+  <Target Name="RequireDevelopmentReferences" BeforeTargets="ResolveReferences" Condition="!Exists('$(OutDir)development-references.props')">
+    <Error Text="Use tools/editor-development/start-editor.ps1 to prepare the real managed engine references." />
+  </Target>
+</Project>

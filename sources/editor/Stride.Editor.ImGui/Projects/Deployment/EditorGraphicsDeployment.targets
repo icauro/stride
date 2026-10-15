@@ -1,0 +1,88 @@
+<Project>
+  <Target Name="EditorResolveNativeServiceDeployment" DependsOnTargets="ResolveReferences">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)../../../../tools/Stride.ConnectionRouter/Stride.ConnectionRouter.csproj"
+             Targets="GetEditorServiceDeploymentFiles" BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);StrideGraphicsApi=$(StrideGraphicsApi);StrideGraphicsApis=$(StrideGraphicsApis)">
+      <Output TaskParameter="TargetOutputs" ItemName="_EditorRouterDeployment" />
+    </MSBuild>
+    <MSBuild Projects="$(MSBuildThisFileDirectory)../../../../tools/Stride.EffectCompilerServer/Stride.EffectCompilerServer.csproj"
+             Targets="GetEditorServiceDeploymentFiles" BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);StrideGraphicsApi=$(StrideGraphicsApi);StrideGraphicsApis=$(StrideGraphicsApis)">
+      <Output TaskParameter="TargetOutputs" ItemName="_EditorEffectCompilerDeployment" />
+    </MSBuild>
+  </Target>
+  <Target Name="EditorCopyNativeServiceDeployment" AfterTargets="CopyFilesToOutputDirectory" DependsOnTargets="EditorResolveNativeServiceDeployment">
+    <Copy SourceFiles="@(_EditorRouterDeployment)" DestinationFiles="@(_EditorRouterDeployment->'$(OutDir)tools/router/%(TargetPath)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_EditorEffectCompilerDeployment)" DestinationFiles="@(_EditorEffectCompilerDeployment->'$(OutDir)tools/effect-compiler-server/%(TargetPath)')" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <FileWrites Include="@(_EditorRouterDeployment->'$(OutDir)tools/router/%(TargetPath)')" />
+      <FileWrites Include="@(_EditorEffectCompilerDeployment->'$(OutDir)tools/effect-compiler-server/%(TargetPath)')" />
+    </ItemGroup>
+  </Target>
+  <Target Name="EditorPublishNativeServiceDeployment" AfterTargets="ComputeFilesToPublish" DependsOnTargets="EditorResolveNativeServiceDeployment" BeforeTargets="GenerateSingleFileBundle">
+    <ItemGroup>
+      <_EditorFlatServicePublish Include="Stride.ConnectionRouter.exe;Stride.ConnectionRouter.runtimeconfig.json;Stride.ConnectionRouter.deps.json;Stride.EffectCompilerServer.exe;Stride.EffectCompilerServer.runtimeconfig.json;Stride.EffectCompilerServer.deps.json;Stride.Debugger.exe;Stride.Debugger.runtimeconfig.json;Stride.Debugger.deps.json">
+        <RelativePath>%(Identity)</RelativePath>
+      </_EditorFlatServicePublish>
+      <ResolvedFileToPublish Remove="@(_EditorFlatServicePublish)" MatchOnMetadata="RelativePath" />
+      <ResolvedFileToPublish Include="@(_EditorRouterDeployment)">
+        <RelativePath>tools/router/%(_EditorRouterDeployment.TargetPath)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory><ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+      <ResolvedFileToPublish Include="@(_EditorEffectCompilerDeployment)">
+        <RelativePath>tools/effect-compiler-server/%(_EditorEffectCompilerDeployment.TargetPath)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory><ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+  <!-- Managed service references stay available to the parent. Their executable
+       and runtime manifests belong only in the actual isolated tool directories. -->
+  <Target Name="EditorExcludeFlatServiceManifests" BeforeTargets="_CopyOutOfDateSourceItemsToOutputDirectory;_CopyOutOfDateSourceItemsToOutputDirectoryAlways;_CopyOutOfDateSourceItemsToOutputDirectoryIfDifferent;ComputeFilesToPublish">
+    <ItemGroup>
+      <_EditorFlatServiceArtifacts Include="Stride.ConnectionRouter.exe;Stride.ConnectionRouter.runtimeconfig.json;Stride.ConnectionRouter.deps.json;Stride.EffectCompilerServer.exe;Stride.EffectCompilerServer.runtimeconfig.json;Stride.EffectCompilerServer.deps.json;Stride.Debugger.exe;Stride.Debugger.runtimeconfig.json;Stride.Debugger.deps.json">
+        <TargetPath>%(Identity)</TargetPath>
+      </_EditorFlatServiceArtifacts>
+      <_SourceItemsToCopyToOutputDirectory Remove="@(_EditorFlatServiceArtifacts)" MatchOnMetadata="TargetPath" />
+      <_SourceItemsToCopyToOutputDirectoryAlways Remove="@(_EditorFlatServiceArtifacts)" MatchOnMetadata="TargetPath" />
+      <_SourceItemsToCopyToOutputDirectoryIfDifferent Remove="@(_EditorFlatServiceArtifacts)" MatchOnMetadata="TargetPath" />
+    </ItemGroup>
+  </Target>
+  <Target Name="EditorResolveDebuggerDeployment" DependsOnTargets="ResolveReferences">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)../../../../engine/Stride.Debugger/Stride.Debugger.csproj"
+             Targets="GetEditorDebuggerDeploymentFiles" BuildInParallel="false"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);StrideGraphicsApi=$(StrideGraphicsApi);StrideGraphicsApis=$(StrideGraphicsApis)">
+      <Output TaskParameter="TargetOutputs" ItemName="_EditorDebuggerDeployment" />
+    </MSBuild>
+  </Target>
+  <Target Name="EditorCopyDebuggerDeployment" AfterTargets="CopyFilesToOutputDirectory" DependsOnTargets="EditorResolveDebuggerDeployment">
+    <Copy SourceFiles="@(_EditorDebuggerDeployment)" DestinationFiles="@(_EditorDebuggerDeployment->'$(OutDir)tools/debugger/%(TargetPath)')" SkipUnchangedFiles="true" />
+    <ItemGroup><FileWrites Include="@(_EditorDebuggerDeployment->'$(OutDir)tools/debugger/%(TargetPath)')" /></ItemGroup>
+  </Target>
+  <Target Name="EditorPublishDebuggerDeployment" AfterTargets="ComputeFilesToPublish" DependsOnTargets="EditorResolveDebuggerDeployment" BeforeTargets="GenerateSingleFileBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="@(_EditorDebuggerDeployment)">
+        <RelativePath>tools/debugger/%(_EditorDebuggerDeployment.TargetPath)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+  <!-- Retain the SDK's API-isolated layout in published applications as well as local output. -->
+  <Target Name="EditorStageGraphicsForPublish" AfterTargets="ComputeFilesToPublish" BeforeTargets="GenerateSingleFileBundle"
+          Condition="'$(StrideMultiGraphicsApiHost)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(_StrideMultiApiFlat)" />
+      <ResolvedFileToPublish Include="@(_StrideMultiApiStaged)">
+        <RelativePath>%(_StrideMultiApiStaged.StageSubPath)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+  <Target Name="EditorValidateGraphicsDeployment" AfterTargets="_StrideMultiApiStage"
+          Condition="'$(StrideMultiGraphicsApiHost)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup><_EditorRequestedGraphicsApi Include="$(StrideMultiGraphicsApiHostApis)" /></ItemGroup>
+    <Error Condition="!Exists('$(OutDir)%(_EditorRequestedGraphicsApi.Identity)/Stride.Graphics.dll')"
+           Text="Requested editor graphics API %(_EditorRequestedGraphicsApi.Identity) was not staged. Build its engine API variant before deployment, or select only APIs produced by this build." />
+  </Target>
+</Project>
