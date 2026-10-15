@@ -21,15 +21,20 @@ namespace Stride.Assets;
 /// the from-version closure), folds the declared <see cref="CodeUpgrade"/>s over it, and writes the
 /// changed source files back. Registered into <see cref="CodeUpgradeRunner.Instance"/> at module init.
 /// </summary>
-internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
+internal sealed class RoslynCodeUpgradeRunner : ICancellableCodeUpgradeRunner
 {
     public void Run(UFile? solutionPath, IReadOnlyList<PendingCodeUpgrade> pending, UpgradeBackup? backup, ILogger log)
+        => Run(solutionPath, pending, backup, log, CancellationToken.None);
+
+    public void Run(UFile? solutionPath, IReadOnlyList<PendingCodeUpgrade> pending, UpgradeBackup? backup, ILogger log, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Resolve each pending upgrader's applicable code rules up front. If nothing applies, never open
         // the (expensive) workspace — this keeps project-only upgrades at exactly today's cost.
         var plans = new List<(PendingCodeUpgrade Pending, List<CodeUpgrade> Upgrades)>();
         foreach (var item in pending)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (item.Upgrader is not ICodeUpgradeProvider provider)
                 continue;
 
@@ -71,8 +76,9 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
         try
         {
             // Escape any ambient synchronization context; MSBuildWorkspace is async-heavy.
-            Task.Run(() => RunAsync(solutionPath, plans, backup, log)).GetAwaiter().GetResult();
+            Task.Run(() => RunAsync(solutionPath, plans, backup, log, cancellationToken), cancellationToken).GetAwaiter().GetResult();
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (NotImplementedException)
         {
             // Unsupported upgrade output (e.g. project-level changes) is an upgrader-authoring error —
@@ -85,9 +91,8 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
         }
     }
 
-    private static async Task RunAsync(UFile? solutionPath, List<(PendingCodeUpgrade Pending, List<CodeUpgrade> Upgrades)> plans, UpgradeBackup? backup, ILogger log)
+    private static async Task RunAsync(UFile? solutionPath, List<(PendingCodeUpgrade Pending, List<CodeUpgrade> Upgrades)> plans, UpgradeBackup? backup, ILogger log, CancellationToken cancellationToken)
     {
-        var cancellationToken = CancellationToken.None;
 
         // The restore's own messages (NuGet audit, ...) are logged by the restore; replayed here they read as failures
         using var workspace = MSBuildWorkspace.Create(new Dictionary<string, string> { ["EmitAssetsLogMessages"] = "false" });
@@ -118,6 +123,7 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
         var solution = originalSolution;
         foreach (var (pendingItem, upgrades) in plans)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var projectOsPath = pendingItem.ProjectFullPath.ToOSPath();
             var project = solution.Projects.FirstOrDefault(x => PathsEqual(x.FilePath, projectOsPath));
             if (project is null)
@@ -129,12 +135,13 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
             IReadOnlyList<ProjectId> targets = [project.Id];
             foreach (var upgrade in upgrades)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 // A failing migration is skipped alone: the others of the project still apply
                 try
                 {
                     solution = await upgrade(solution, targets, cancellationToken);
                 }
-                catch (Exception e) when (e is not NotImplementedException)
+                catch (Exception e) when (e is not NotImplementedException && e is not OperationCanceledException)
                 {
                     log.Warning($"Code upgrade: a source migration of [{pendingItem.ProjectFullPath.GetFileName()}] failed and was skipped; its code is left unchanged.", e);
                 }
@@ -150,6 +157,7 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
 
             foreach (var documentId in projectChanges.GetChangedDocuments())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var newDocument = solution.GetDocument(documentId);
                 var oldDocument = originalSolution.GetDocument(documentId);
                 if (newDocument?.FilePath is null)
@@ -159,19 +167,26 @@ internal sealed class RoslynCodeUpgradeRunner : ICodeUpgradeRunner
                 var oldText = oldDocument is not null ? await oldDocument.GetTextAsync(cancellationToken) : null;
                 var encoding = oldText?.Encoding ?? new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+                var temporary = Path.Combine(Path.GetDirectoryName(newDocument.FilePath)!, ".stride-code-upgrade-" + Guid.NewGuid().ToString("N") + ".tmp");
                 try
                 {
                     // Snapshot the original before overwriting it (copy-on-write; no-op when no backup is armed).
                     backup?.Snapshot(newDocument.FilePath);
-
-                    using var writer = new StreamWriter(newDocument.FilePath, append: false, encoding);
-                    newText.Write(writer, cancellationToken);
+                    backup?.ValidateWritePath(temporary);
+                    using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    using (var writer = new StreamWriter(stream, encoding)) newText.Write(writer, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    // Cancelled text generation never truncates the source file.
+                    // The final native replacement finishes before returning.
+                    File.Move(temporary, newDocument.FilePath, overwrite: true);
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception e)
                 {
                     log.Warning($"Code upgrade: could not write migrated file [{newDocument.FilePath}]; left unchanged.", e);
                     continue;
                 }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
 
                 log.Info($"Code upgrade: migrated [{Path.GetFileName(newDocument.FilePath)}]");
                 changedCount++;

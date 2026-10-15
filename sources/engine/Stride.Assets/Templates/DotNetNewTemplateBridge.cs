@@ -70,6 +70,9 @@ public static class DotNetNewTemplateBridge
     /// </summary>
     public static DotNetNewTemplateRegistry? Registry => registry;
 
+    private static long projectTemplateVersion;
+    public static long ProjectTemplateVersion => Interlocked.Read(ref projectTemplateVersion);
+
     /// <summary>Identities of the templates already registered with <see cref="TemplateManager"/> (guarded by <see cref="InitLock"/>).</summary>
     private static readonly HashSet<string> RegisteredTemplateIdentities = new(StringComparer.Ordinal);
 
@@ -241,7 +244,10 @@ public static class DotNetNewTemplateBridge
 
         // Registering the same package again signals the new descriptions to an open template list.
         if (added > 0)
+        {
+            Interlocked.Increment(ref projectTemplateVersion);
             TemplateManager.RegisterPackage(SyntheticPackage);
+        }
     }
 
     /// <summary>

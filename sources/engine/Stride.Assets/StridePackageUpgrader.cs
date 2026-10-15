@@ -329,6 +329,8 @@ namespace Stride.Assets
 
                 try
                 {
+                    context.Backup?.Snapshot(file);
+                    context.Backup?.Snapshot(file + ".bak");
                     File.Move(file, file + ".bak", overwrite: true);
                     log.Info($"Renamed legacy generated shader file: {rel} -> {rel}.bak");
                     renamedCount++;

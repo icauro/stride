@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.TemplateEngine.Abstractions;
 using Microsoft.TemplateEngine.Edge.Template;
@@ -38,6 +39,15 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     /// <summary>Identities of the asset-pack item templates to instantiate into the generated game library.</summary>
     private static readonly PropertyKey<IReadOnlyList<string>> AssetPacksKey
         = new("AssetPacks", typeof(DotNetNewTemplateGenerator));
+
+    private static readonly PropertyKey<CancellationToken> CancellationKey
+        = new("Cancellation", typeof(DotNetNewTemplateGenerator));
+
+    public static void SetCancellation(SessionTemplateGeneratorParameters parameters, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        parameters.SetTag(CancellationKey, cancellation);
+    }
 
     private readonly IDotNetNewParameterPrompt? prompt;
 
@@ -125,11 +135,15 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     /// </summary>
     public bool GenerateFilesOnly(SessionTemplateGeneratorParameters parameters)
     {
+        parameters.TryGetTag(CancellationKey).ThrowIfCancellationRequested();
         var sdpkg = InstantiateFiles(parameters);
         if (sdpkg == null)
             return false;
         InstantiateAssetPacks(parameters, sdpkg);
-        return UpgradeGeneratedProjects(parameters);
+        parameters.TryGetTag(CancellationKey).ThrowIfCancellationRequested();
+        var result = UpgradeGeneratedProjects(parameters);
+        parameters.TryGetTag(CancellationKey).ThrowIfCancellationRequested();
+        return result;
     }
 
     /// <summary>
@@ -140,6 +154,8 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     /// </summary>
     protected virtual void InstantiateAssetPacks(SessionTemplateGeneratorParameters parameters, string sdpkgPath)
     {
+        var cancellation = parameters.TryGetTag(CancellationKey);
+        cancellation.ThrowIfCancellationRequested();
         var identities = parameters.TryGetTag(AssetPacksKey);
         if (identities == null || identities.Count == 0)
             return;
@@ -152,9 +168,10 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
         }
 
         var outputDir = Path.GetDirectoryName(sdpkgPath)!;
-        var templates = DotNetNewTemplateBridge.Registry.GetTemplatesAsync().GetAwaiter().GetResult();
+        var templates = DotNetNewTemplateBridge.Registry.GetTemplatesAsync(cancellation).GetAwaiter().GetResult();
         foreach (var identity in identities)
         {
+            cancellation.ThrowIfCancellationRequested();
             var packTemplate = templates.FirstOrDefault(t => string.Equals(t.Identity, identity, StringComparison.Ordinal));
             if (packTemplate == null)
             {
@@ -164,13 +181,14 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
             try
             {
                 var creation = DotNetNewTemplateBridge.Registry
-                    .InstantiateAsync(packTemplate, packTemplate.ShortNameList.FirstOrDefault() ?? "asset-pack", outputDir, new Dictionary<string, string>())
+                    .InstantiateAsync(packTemplate, packTemplate.ShortNameList.FirstOrDefault() ?? "asset-pack", outputDir, new Dictionary<string, string>(), cancellation)
                     .GetAwaiter().GetResult();
                 if (creation.Status != CreationResultStatus.Success)
                     log.Error($"Asset pack '{packTemplate.Name}' failed: {creation.Status} — {creation.ErrorMessage}");
                 else
                     log.Info($"Added asset pack '{packTemplate.Name}'.");
             }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 log.Error($"Asset pack '{packTemplate.Name}' failed: {ex.Message}", ex);
@@ -186,6 +204,8 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     protected virtual string? InstantiateFiles(SessionTemplateGeneratorParameters parameters, bool skipSolution = false)
     {
         ArgumentNullException.ThrowIfNull(parameters);
+        var cancellation = parameters.TryGetTag(CancellationKey);
+        cancellation.ThrowIfCancellationRequested();
         parameters.Validate();
 
         var description = (TemplateDotNetNewDescription)parameters.Description;
@@ -197,7 +217,7 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
             return null;
         }
 
-        var template = ResolveTemplate(description).GetAwaiter().GetResult();
+        var template = ResolveTemplate(description, cancellation).GetAwaiter().GetResult();
         if (template == null)
         {
             log.Error($"Template '{description.TemplateIdentity}' could not be resolved from the bootstrapper.");
@@ -216,9 +236,10 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
         ITemplateCreationResult creation;
         try
         {
-            creation = DotNetNewTemplateBridge.Registry.InstantiateAsync(template, parameters.Name, outputDir, values)
+            creation = DotNetNewTemplateBridge.Registry.InstantiateAsync(template, parameters.Name, outputDir, values, cancellation)
                 .GetAwaiter().GetResult();
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             log.Error($"Template instantiation failed: {ex.Message}", ex);
@@ -254,6 +275,8 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     /// </param>
     protected virtual bool UpgradeGeneratedProjects(SessionTemplateGeneratorParameters parameters, bool stampOlderContent = true)
     {
+        var cancellation = parameters.TryGetTag(CancellationKey);
+        cancellation.ThrowIfCancellationRequested();
         var log = parameters.Logger;
         var csprojs = Directory.EnumerateFiles(parameters.OutputDirectory, "*.csproj", SearchOption.AllDirectories).ToList();
 
@@ -266,6 +289,7 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
 
         foreach (var csproj in csprojs)
         {
+            cancellation.ThrowIfCancellationRequested();
             StridePackageUpgrader.UpgradeProjectVersions(csproj, log);
         }
         return true;
@@ -406,11 +430,11 @@ public class DotNetNewTemplateGenerator : SessionTemplateGenerator
     /// via the registry. The bridge populates one description per installed template; the bootstrapper
     /// is the source of truth for the live <see cref="ITemplateInfo"/>.
     /// </summary>
-    private static async Task<ITemplateInfo?> ResolveTemplate(TemplateDotNetNewDescription description)
+    private static async Task<ITemplateInfo?> ResolveTemplate(TemplateDotNetNewDescription description, CancellationToken cancellation = default)
     {
         if (DotNetNewTemplateBridge.Registry == null)
             return null;
-        var templates = await DotNetNewTemplateBridge.Registry.GetTemplatesAsync().ConfigureAwait(true);
+        var templates = await DotNetNewTemplateBridge.Registry.GetTemplatesAsync(cancellation).ConfigureAwait(true);
         return templates.FirstOrDefault(t => string.Equals(t.Identity, description.TemplateIdentity, StringComparison.Ordinal));
     }
 }

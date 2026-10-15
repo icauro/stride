@@ -52,6 +52,13 @@ public sealed class UpdatePlatformsGenerator : TemplateGeneratorBase<PackageTemp
         parameters.SetTag(ForceRegenerationKey, forceRegeneration);
     }
 
+    /// <summary>The stock Package-scope descriptor also used by Game Studio registration.</summary>
+    public static TemplateDescription CreateDescription() => new()
+    {
+        Id = TemplateId, Name = "Update platforms", Description = "Add or update per-platform executable projects for the current game",
+        Group = "General", Scope = TemplateScope.Package, DefaultOutputName = "MyGame", FullPath = new UFile("Stride.UpdatePlatforms.synthetic.sdtpl"),
+    };
+
     public override bool IsSupportingTemplate(TemplateDescription templateDescription)
     {
         ArgumentNullException.ThrowIfNull(templateDescription);
@@ -90,29 +97,17 @@ public sealed class UpdatePlatformsGenerator : TemplateGeneratorBase<PackageTemp
         parameters.Validate();
 
         var log = parameters.Logger;
-        var package = parameters.Package;
-        var sessionDir = package.RootDirectory.GetParent();
-        var baseName = StripGameSuffix(parameters.Name);
-
-        var selected = new HashSet<PlatformType>(parameters.GetTag(SelectedPlatformsKey));
-        var forceRegen = parameters.GetTag(ForceRegenerationKey);
-        var installed = new HashSet<PlatformType>(GetInstalledPlatforms(parameters));
-
-        var toRemove = installed.Where(p => !selected.Contains(p)).ToList();
-        var toAdd = selected.Where(p => !installed.Contains(p)).ToList();
-        var toRegenerate = forceRegen
-            ? selected.Where(p => installed.Contains(p)).ToList()
-            : new List<PlatformType>();
+        var plan = CreatePlan(parameters);
+        if (plan == null) return false;
+        var package = plan.GameLibrary;
+        var sessionDir = plan.SessionDirectory;
+        var baseName = plan.BaseName;
+        var toRemove = plan.ProjectsToRemove.Select(removal => removal.Platform).ToList();
+        var toInstantiate = plan.PlatformsToInstantiate.ToList();
 
         foreach (var type in toRemove)
             RemovePlatformProject(parameters, type, baseName, sessionDir);
 
-        foreach (var type in toRegenerate)
-        {
-            RemovePlatformProject(parameters, type, baseName, sessionDir);
-        }
-
-        var toInstantiate = toAdd.Concat(toRegenerate).ToList();
         if (toInstantiate.Count > 0)
         {
             if (!InstantiatePlatforms(parameters, toInstantiate, baseName, sessionDir))
@@ -122,6 +117,46 @@ public sealed class UpdatePlatformsGenerator : TemplateGeneratorBase<PackageTemp
         package.Session.LoadMissingReferences(log);
         package.IsDirty = true;
         return true;
+    }
+
+    /// <summary>Captures the actual native selection without removing files or registering projects.</summary>
+    public static PlatformUpdatePlan? CreatePlan(PackageTemplateGeneratorParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        parameters.Validate();
+        if (parameters.Description.Id != TemplateId || !ResolveGameLibrary(parameters)) return null;
+        if (!parameters.HasTag(SelectedPlatformsKey)) return null;
+        var selected = new HashSet<PlatformType>(parameters.GetTag(SelectedPlatformsKey));
+        foreach (var type in selected)
+            if (!AssetRegistry.SupportedPlatforms.Any(platform => platform.Type == type))
+                throw new NotSupportedException($"Platform {type} is not in AssetRegistry.SupportedPlatforms.");
+        var installed = new HashSet<PlatformType>(GetInstalledPlatforms(parameters));
+        var regenerate = parameters.GetTag(ForceRegenerationKey)
+            ? selected.Where(installed.Contains).ToArray() : [];
+        var remove = installed.Where(type => !selected.Contains(type)).Concat(regenerate).ToArray();
+        var instantiate = selected.Where(type => !installed.Contains(type)).Concat(regenerate).ToArray();
+        var package = parameters.Package;
+        var directory = package.RootDirectory.GetParent();
+        var baseName = StripGameSuffix(parameters.Name);
+        var removals = remove.Select(type => new PlatformProjectRemoval(type,
+            package.Session.Projects.OfType<SolutionProject>().FirstOrDefault(project => project.Type == ProjectType.Executable && project.Platform == type),
+            new UDirectory(Path.Combine(directory.ToOSPath(), $"{baseName}.{type}")))).ToArray();
+        return new(package, baseName, directory, selected.ToArray(), instantiate, removals);
+    }
+
+    /// <summary>
+    /// Emits the exact native updateOnly template files without deleting any existing
+    /// directory, loading produced projects, or changing session membership. The caller
+    /// supplies a privately staged native package/session for isolated preparation.
+    /// </summary>
+    public static bool GeneratePlatformFilesOnly(PackageTemplateGeneratorParameters parameters, PlatformUpdatePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(parameters); ArgumentNullException.ThrowIfNull(plan);
+        parameters.Validate();
+        if (parameters.Description.Id != TemplateId || !plan.IsCurrent(parameters.Package))
+            throw new InvalidOperationException("The native platform update target changed.");
+        return plan.PlatformsToInstantiate.Count == 0 || InstantiatePlatforms(parameters,
+            plan.PlatformsToInstantiate.ToList(), plan.BaseName, plan.SessionDirectory, registerProjects: false);
     }
 
     /// <summary>
@@ -200,7 +235,7 @@ public sealed class UpdatePlatformsGenerator : TemplateGeneratorBase<PackageTemp
         }
     }
 
-    private static bool InstantiatePlatforms(PackageTemplateGeneratorParameters parameters, List<PlatformType> platforms, string baseName, UDirectory sessionDir)
+    private static bool InstantiatePlatforms(PackageTemplateGeneratorParameters parameters, List<PlatformType> platforms, string baseName, UDirectory sessionDir, bool registerProjects = true)
     {
         var log = parameters.Logger;
         if (DotNetNewTemplateBridge.Registry == null)
@@ -272,6 +307,7 @@ public sealed class UpdatePlatformsGenerator : TemplateGeneratorBase<PackageTemp
                 else
                     File.WriteAllText(csprojPath, rewritten);
             }
+            if (!registerProjects) continue;
             var project = (SolutionProject)Package.LoadProject(log, csprojPath);
             project.Type = ProjectType.Executable;
             project.Platform = type;

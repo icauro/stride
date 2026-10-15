@@ -47,10 +47,10 @@ namespace Stride.Assets
         /// <returns>The <see cref="GameSettingsAsset"/> from either the given package or the session if available. A new default instance otherwise.</returns>
         public static GameSettingsAsset GetGameSettingsAssetOrDefault(this Package package)
         {
-            var gameSettings = package.GetGameSettingsAsset();
+            var gameSettings = package?.GetGameSettingsAsset();
             if (gameSettings == null)
             {
-                gameSettings = package.Session.CurrentProject?.Package.GetGameSettingsAsset();
+                gameSettings = package?.Session?.CurrentProject?.Package.GetGameSettingsAsset();
             }
             return gameSettings ?? GameSettingsFactory.Create();
         }

@@ -22,12 +22,13 @@ public delegate void ProjectUpgrade(ProjectUpgradeContext context);
 /// </summary>
 public sealed class ProjectUpgradeContext
 {
-    internal ProjectUpgradeContext(Project project, SolutionProject solutionProject, UFile projectFullPath, ILogger log)
+    internal ProjectUpgradeContext(Project project, SolutionProject solutionProject, UFile projectFullPath, ILogger log, UpgradeBackup? backup = null)
     {
         Project = project;
         SolutionProject = solutionProject;
         ProjectFullPath = projectFullPath;
         Log = log;
+        Backup = backup;
     }
 
     /// <summary>The loaded MSBuild project to mutate.</summary>
@@ -41,6 +42,7 @@ public sealed class ProjectUpgradeContext
 
     /// <summary>The logger.</summary>
     public ILogger Log { get; }
+    public UpgradeBackup? Backup { get; }
 
     /// <summary>Raised by an action when it changed the project XML, so the runner saves it once at the end.</summary>
     public bool IsDirty { get; set; }
