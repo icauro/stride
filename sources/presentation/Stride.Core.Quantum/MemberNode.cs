@@ -125,6 +125,18 @@ public class MemberNode : GraphNodeBase, IMemberNode, IGraphNodeInternal
         NodeContainer?.UpdateReferences(this);
     }
 
+    internal void RestoreContentWithoutNotification(object? restoredValue)
+    {
+        var containerValue = Parent.Retrieve() ?? throw new InvalidOperationException("Container's value is null");
+        if (!GraphNodeContentSnapshot.SameValue(Retrieve(), restoredValue))
+        {
+            MemberDescriptor.Set(containerValue, restoredValue);
+            if (containerValue.GetType().GetTypeInfo().IsValueType)
+                ((GraphNodeBase)Parent).UpdateFromMember(containerValue, NodeIndex.Empty);
+        }
+        UpdateReferences();
+    }
+
     public override string ToString()
     {
         return $"{{Node: Member {Name} = [{Value}]}}";

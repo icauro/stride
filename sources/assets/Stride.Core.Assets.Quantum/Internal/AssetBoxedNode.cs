@@ -53,6 +53,10 @@ internal class AssetBoxedNode : BoxedNode, IAssetObjectNodeInternal
 
     public OverrideType GetKeyOverride(NodeIndex index) => ex.GetKeyOverride(index);
 
+    public void RestoreItemOverrides(NodeIndex index, OverrideType itemOverride, OverrideType keyOverride) => ex.RestoreItemOverrides(index, itemOverride, keyOverride);
+
+    (Action Restore, Func<bool> IsCurrent) IAssetObjectNodeInternal.CaptureOverrideState() => ex.CaptureOverrideState();
+
     public bool IsItemInherited(NodeIndex index) => ex.IsItemInherited(index);
 
     public bool IsKeyInherited(NodeIndex index) => ex.IsKeyInherited(index);

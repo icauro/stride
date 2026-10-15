@@ -17,6 +17,7 @@ public interface IAssetMemberNode : IAssetNode, IMemberNode
     new IAssetObjectNode? Target { get; }
 
     void OverrideContent(bool isOverridden);
+    void RestoreContentOverride(OverrideType overrideType);
 
     OverrideType GetContentOverride();
 

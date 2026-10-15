@@ -37,6 +37,34 @@ internal struct AssetObjectNodeExtended
 
     internal bool ResettingOverride { get; set; }
 
+    internal (Action Restore, Func<bool> IsCurrent) CaptureOverrideState()
+    {
+        var savedItems = new Dictionary<ItemId, OverrideType>(itemOverrides);
+        var savedKeys = new Dictionary<ItemId, OverrideType>(keyOverrides);
+        var savedDisconnected = new HashSet<ItemId>(disconnectedDeletedIds);
+        var hasIds = TryGetCollectionItemIds(node.Retrieve(), out var ids);
+        var savedIds = new CollectionItemIdentifiers();
+        if (hasIds) ids!.CloneInto(savedIds, null);
+        // Capture reference fields rather than this mutable struct.
+        var owner = node; var items = itemOverrides; var keys = keyOverrides; var disconnected = disconnectedDeletedIds;
+        bool Current()
+            => items.Count == savedItems.Count && savedItems.All(pair => items.TryGetValue(pair.Key, out var value) && value == pair.Value)
+            && keys.Count == savedKeys.Count && savedKeys.All(pair => keys.TryGetValue(pair.Key, out var value) && value == pair.Value)
+            && disconnected.SetEquals(savedDisconnected)
+            && (!hasIds || ids!.KeyCount == savedIds.KeyCount && ids.DeletedItems.ToHashSet().SetEquals(savedIds.DeletedItems)
+                && savedIds.All(pair => ids.TryGet(pair.Key, out var value) && value == pair.Value));
+        void Restore()
+        {
+            owner.NotifyOverrideChanging();
+            items.Clear(); foreach (var pair in savedItems) items.Add(pair.Key, pair.Value);
+            keys.Clear(); foreach (var pair in savedKeys) keys.Add(pair.Key, pair.Value);
+            disconnected.Clear(); disconnected.UnionWith(savedDisconnected);
+            if (hasIds) savedIds.CloneInto(ids!, null);
+            owner.NotifyOverrideChanged();
+        }
+        return (Restore, Current);
+    }
+
     public readonly void SetContent(string key, IGraphNode node)
     {
         contents[key] = node;
@@ -60,6 +88,15 @@ internal struct AssetObjectNodeExtended
         node.NotifyOverrideChanging();
         var id = IndexToId(index);
         SetOverride(isOverridden ? OverrideType.New : OverrideType.Base, id, itemOverrides);
+        node.NotifyOverrideChanged();
+    }
+
+    public void RestoreItemOverrides(NodeIndex index, OverrideType itemOverride, OverrideType keyOverride)
+    {
+        var id = IndexToId(index);
+        node.NotifyOverrideChanging();
+        SetOverride(itemOverride, id, itemOverrides);
+        SetOverride(keyOverride, id, keyOverrides);
         node.NotifyOverrideChanged();
     }
 
@@ -122,25 +159,26 @@ internal struct AssetObjectNodeExtended
 
     public void Restore(object restoredItem, ItemId id)
     {
-        if (TryGetCollectionItemIds(node.Retrieve(), out var ids))
+        var previousRestoringId = restoringId;
+        restoringId = id;
+        try
         {
-            // Remove the item from deleted ids if it was here.
-            ids.UnmarkAsDeleted(id);
+            node.Add(restoredItem);
+            if (TryGetCollectionItemIds(node.Retrieve(), out var ids)) ids.UnmarkAsDeleted(id);
         }
-        // Actually restore the item.
-        node.Add(restoredItem);
+        finally { restoringId = previousRestoringId; }
     }
 
     public void Restore(object restoredItem, NodeIndex index, ItemId id)
     {
+        var previousRestoringId = restoringId;
         restoringId = id;
-        node.Add(restoredItem, index);
-        restoringId = ItemId.Empty;
-        if (TryGetCollectionItemIds(node.Retrieve(), out var ids))
+        try
         {
-            // Remove the item from deleted ids if it was here.
-            ids.UnmarkAsDeleted(id);
+            node.Add(restoredItem, index);
+            if (TryGetCollectionItemIds(node.Retrieve(), out var ids)) ids.UnmarkAsDeleted(id);
         }
+        finally { restoringId = previousRestoringId; }
     }
 
     public void RemoveAndDiscard(object item, NodeIndex itemIndex, ItemId id)
@@ -273,7 +311,7 @@ internal struct AssetObjectNodeExtended
 
     public ItemId IndexToId(NodeIndex index)
     {
-        if (!TryIndexToId(index, out var id)) throw new InvalidOperationException("No Collection item identifier associated to the given collection.");
+        if (!TryIndexToId(index, out var id)) throw new InvalidOperationException($"No collection item identifier for index {index} in {node.Type.FullName}.");
         return id;
     }
 

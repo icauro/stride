@@ -20,7 +20,7 @@ public class MemberNodePresenter : NodePresenterBase
         Name = member.Name;
         CombineKey = Name;
         DisplayName = Name;
-        IsReadOnly = !Member.MemberDescriptor.HasSet;
+        InitializeReadOnlyDefault(!Member.MemberDescriptor.HasSet);
         memberAttributes.AddRange(TypeDescriptorFactory.Default.AttributeRegistry.GetAttributes(member.MemberDescriptor.MemberInfo));
 
         member.ValueChanging += OnMemberChanging;
@@ -36,6 +36,10 @@ public class MemberNodePresenter : NodePresenterBase
 
         AttachCommands();
     }
+
+    /// <summary>True only for the default inability to replace a getter-only member value.</summary>
+    /// <remarks>Any explicit read-only assignment, even to the existing value, establishes provider policy.</remarks>
+    public bool IsReadOnlyForGetterAssignmentOnly => IsReadOnly && !Member.MemberDescriptor.HasSet && !HasExplicitReadOnlyAssignment;
 
     protected override void Dispose(bool disposing)
     {

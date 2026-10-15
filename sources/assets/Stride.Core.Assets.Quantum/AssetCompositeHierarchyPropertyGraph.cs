@@ -9,7 +9,7 @@ using Stride.Core.Quantum;
 
 namespace Stride.Core.Assets.Quantum;
 
-public abstract class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAssetPart> : AssetCompositePropertyGraph
+public abstract partial class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAssetPart> : AssetCompositePropertyGraph
     where TAssetPart : class, IIdentifiable
     where TAssetPartDesign : class, IAssetPartDesign<TAssetPart>
 {
@@ -77,6 +77,73 @@ public abstract class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAs
     public event EventHandler<AssetPartChangeEventArgs>? PartRemoved;
 
     public abstract bool IsChildPartReference(IGraphNode node, NodeIndex index);
+    public IEnumerable<AssetId> RetainedBaseAssetIds => basePartAssets.Keys.Select(graph => graph.Id).Distinct();
+
+    public void RebindRetainedBaseGraph(AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAssetPart> source, bool prepareTopologyDelta = true)
+    {
+        if (!prepareTopologyDelta) pendingGenerationTopology.Remove(source.Id);
+        foreach (var previous in basePartAssets.Keys.Where(graph => graph.Id == source.Id && !ReferenceEquals(graph, source)).ToArray())
+        {
+            if (prepareTopologyDelta) PrepareGenerationTopologyDelta(previous, source);
+            if (!basePartAssets.TryGetValue(source, out var instances))
+            {
+                basePartAssets.Add(source, instances = []);
+                source.PartAdded += PartAddedInBaseAsset; source.PartRemoved += PartRemovedInBaseAsset;
+            }
+            instances.UnionWith(basePartAssets[previous]);
+            previous.PartAdded -= PartAddedInBaseAsset; previous.PartRemoved -= PartRemovedInBaseAsset;
+            basePartAssets.Remove(previous);
+        }
+    }
+
+    /// <summary>Reconciles missing and removed base parts after a canonical base generation changes, preserving authored placement.</summary>
+    public void ReconcileHierarchyWithBase()
+    {
+        foreach (var source in basePartAssets.Keys.ToArray())
+        {
+            ValidateGenerationTopologyDelta(source.Id);
+            foreach (var stale in Asset.Hierarchy.Parts.Values.Where(part => part.Base?.BasePartAsset.Id == source.Id
+                && !source.Asset.Hierarchy.Parts.ContainsKey(part.Base.BasePartId)).Select(part => part.Base!.BasePartId).Distinct().ToArray())
+                ApplyPartRemovedInBaseAsset(source, new AssetPartChangeEventArgs(source.AssetItem, stale));
+            var orderedParts = source.Asset.Hierarchy.RootParts.SelectMany(root => root.Yield().Concat(source.Asset.EnumerateChildParts(root, true)))
+                .Select(part => source.Asset.Hierarchy.Parts[part.Id]).ToArray();
+            foreach (var part in orderedParts)
+            {
+                // Existing parts carry the authored placement, including local inherited moves.
+                // Only missing parts are inserted; native live base events handle source moves.
+                ApplyPartAddedInBaseAsset(source, new AssetPartChangeEventArgs(source.AssetItem, part.Part.Id), generationOnly: true);
+            }
+            ApplyGenerationTopologyDelta(source);
+        }
+        RefreshBase(); ReconcileWithBase();
+    }
+
+    public override (Action Restore, Func<bool> IsCurrent) CaptureReconciliationState()
+    {
+        var savedMapping = new Dictionary<Tuple<Guid, Guid>, TAssetPartDesign>(baseInstanceMapping);
+        var savedDeleted = new HashSet<Tuple<Guid, Guid>>(deletedPartsInstanceMapping);
+        var savedAncestors = new Dictionary<Guid, Guid>(instancesCommonAncestors);
+        var savedRegisteredChildren = registeredChildParts.ToArray();
+        var savedGenerationTopology = pendingGenerationTopology.ToDictionary(pair => pair.Key, pair => pair.Value);
+        void Restore()
+        {
+            baseInstanceMapping.Clear(); foreach (var pair in savedMapping) baseInstanceMapping.Add(pair.Key, pair.Value);
+            deletedPartsInstanceMapping.Clear(); deletedPartsInstanceMapping.UnionWith(savedDeleted);
+            instancesCommonAncestors.Clear(); foreach (var pair in savedAncestors) instancesCommonAncestors.Add(pair.Key, pair.Value);
+            foreach (var node in registeredChildParts.Except(savedRegisteredChildren).ToArray()) UnregisterChildPartNode(node);
+            foreach (var node in savedRegisteredChildren) RegisterChildPartNode(node);
+            pendingGenerationTopology.Clear(); foreach (var pair in savedGenerationTopology) pendingGenerationTopology.Add(pair.Key, pair.Value);
+        }
+        bool Current() => baseInstanceMapping.Count == savedMapping.Count
+            && savedMapping.All(pair => baseInstanceMapping.TryGetValue(pair.Key, out var value) && ReferenceEquals(value, pair.Value))
+            && deletedPartsInstanceMapping.SetEquals(savedDeleted)
+            && registeredChildParts.SetEquals(savedRegisteredChildren)
+            && pendingGenerationTopology.Count == savedGenerationTopology.Count
+            && savedGenerationTopology.All(pair => pendingGenerationTopology.TryGetValue(pair.Key, out var value) && ReferenceEquals(value, pair.Value))
+            && instancesCommonAncestors.Count == savedAncestors.Count
+            && savedAncestors.All(pair => instancesCommonAncestors.TryGetValue(pair.Key, out var value) && value == pair.Value);
+        return (Restore, Current);
+    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
@@ -604,7 +671,7 @@ public abstract class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAs
     private void UpdateAssetPartBases()
     {
         // Unregister deleted base assets
-        var deletedBaseParts = basePartAssets.Keys.Where(g => g.AssetItem.IsDeleted).ToList();
+        var deletedBaseParts = basePartAssets.Keys.Where(g => g.AssetItem.IsDeleted || !ReferenceEquals(Container.TryGetGraph(g.Id), g)).ToList();
         foreach (var basePartAsset in deletedBaseParts)
         {
             basePartAsset.PartAdded -= PartAddedInBaseAsset;
@@ -673,39 +740,77 @@ public abstract class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAs
 
     private void PartAddedInBaseAsset(object? sender, AssetPartChangeEventArgs e)
     {
+        if (!Container.PropagateHierarchyChangesFromBase) return;
+        if (Container.BaseHierarchyReconciliation is { } reconcile)
+        {
+            var source = Container.TryGetGraph(e.Asset.Id) ?? throw new InvalidOperationException("The base hierarchy graph is unavailable.");
+            reconcile(source, () => ApplyPartAddedInBaseAsset(sender, e));
+        }
+        else ApplyPartAddedInBaseAsset(sender, e);
+    }
+    private void ApplyPartAddedInBaseAsset(object? sender, AssetPartChangeEventArgs e, bool generationOnly = false)
+    {
+        var previousUpdating = UpdatingPropertyFromBase;
         UpdatingPropertyFromBase = true;
+        try
+        {
 
         var baseAsset = (AssetCompositeHierarchy<TAssetPartDesign, TAssetPart>)e.Asset;
-        var newPart = baseAsset.Hierarchy.Parts[e.PartId];
+        // Deferred propagation can observe an add that was removed again before recording.
+        if (!baseAsset.Hierarchy.Parts.TryGetValue(e.PartId, out var newPart)) return;
         var newPartParent = baseAsset.GetParent(newPart.Part);
         if (Container.TryGetGraph(baseAsset.Id) is not AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAssetPart> baseAssetGraph) throw new InvalidOperationException("Unable to find the graph corresponding to the base part");
 
         foreach (var instanceId in basePartAssets[baseAssetGraph])
         {
+            if (Asset.Hierarchy.Parts.Values.Any(part => part.Base?.BasePartAsset.Id == baseAsset.Id
+                && part.Base.BasePartId == newPart.Part.Id && part.Base.InstanceId == instanceId)) continue;
             // Discard the part if this asset don't want it
             if (!ShouldAddNewPartFromBase(baseAssetGraph, newPart, newPartParent, instanceId))
                 continue;
 
             var insertIndex = FindBestInsertIndex(baseAsset, newPart, newPartParent, instanceId, out var instanceParent);
+            if (generationOnly && !TryGenerationInsertLocation(baseAssetGraph, newPart, newPartParent, instanceId, out instanceParent, out insertIndex))
+                continue;
             if (insertIndex < 0)
                 continue;
 
             // Now we know where to insert, let's clone the new part.
             const SubHierarchyCloneFlags flags = SubHierarchyCloneFlags.GenerateNewIdsForIdentifiableObjects | SubHierarchyCloneFlags.RemoveOverrides;
             var baseHierarchy = CloneSubHierarchies(baseAssetGraph.Container.NodeContainer, baseAssetGraph.Asset, newPart.Part.Id.Yield(), flags, out Dictionary<Guid, Guid> mapping);
+            if (generationOnly)
+            {
+                // Insert one missing part at a time; existing children have their own
+                // authored placement and must not be duplicated by this clone.
+                var root = baseHierarchy.RootParts.Single();
+                Container.NodeContainer.GetOrCreateNode(root);
+                foreach (var child in baseAsset.EnumerateChildParts(root, false).ToArray()) RemoveChildPartFromParentPart(root, child);
+                foreach (var id in baseHierarchy.Parts.Keys.Where(id => id != root.Id).ToArray()) baseHierarchy.Parts.Remove(id);
+            }
             foreach (var ids in mapping)
             {
                 // Process only ids that correspond to parts
                 if (!baseHierarchy.Parts.TryGetValue(ids.Value, out var clone))
                     continue;
 
-                clone.Base = new BasePart(new AssetReference(e.AssetItem.Id, e.AssetItem.Location), ids.Key, instanceId);
+                clone.Base = new BasePart(baseAssetGraph.AssetItem.ToReference(), ids.Key, instanceId);
 
                 // This add could actually be a move (remove + add). So we compare to the existing baseInstanceMapping and reuse the existing part if necessary
                 var mappingKey = Tuple.Create(ids.Key, instanceId);
                 if (!deletedPartsInstanceMapping.Contains(mappingKey) && baseInstanceMapping.TryGetValue(mappingKey, out var existingPart))
                 {
-                    ReuseExistingPart(baseHierarchy, clone, existingPart);
+                    if (!generationOnly) ReuseExistingPart(baseHierarchy, clone, existingPart);
+                    else
+                    {
+                        baseHierarchy.RootParts.Remove(clone.Part); baseHierarchy.RootParts.Add(existingPart.Part);
+                        baseHierarchy.Parts.Remove(clone.Part.Id); baseHierarchy.Parts.Add(existingPart);
+                        foreach (var child in Asset.EnumerateChildParts(existingPart.Part, true))
+                        {
+                            var owner = ((IAssetNode)Container.NodeContainer.GetOrCreateNode(child)).GetContent(NodesToOwnerPartVisitor.OwnerPartContentName)?.Retrieve() as TAssetPartDesign
+                                ?? throw new InvalidOperationException("A retained hierarchy child has no authored owner.");
+                            if (!baseHierarchy.Parts.ContainsKey(owner.Part.Id)) baseHierarchy.Parts.Add(owner);
+                        }
+                    }
                 }
             }
 
@@ -721,17 +826,32 @@ public abstract class AssetCompositeHierarchyPropertyGraph<TAssetPartDesign, TAs
         RefreshBase();
         ReconcileWithBase();
 
-        UpdatingPropertyFromBase = false;
+        }
+        finally { UpdatingPropertyFromBase = previousUpdating; }
     }
 
     private void PartRemovedInBaseAsset(object? sender, AssetPartChangeEventArgs e)
     {
+        if (!Container.PropagateHierarchyChangesFromBase) return;
+        if (Container.BaseHierarchyReconciliation is { } reconcile)
+        {
+            var source = Container.TryGetGraph(e.Asset.Id) ?? throw new InvalidOperationException("The base hierarchy graph is unavailable.");
+            reconcile(source, () => ApplyPartRemovedInBaseAsset(sender, e));
+        }
+        else ApplyPartRemovedInBaseAsset(sender, e);
+    }
+    private void ApplyPartRemovedInBaseAsset(object? sender, AssetPartChangeEventArgs e)
+    {
+        var previousUpdating = UpdatingPropertyFromBase;
         UpdatingPropertyFromBase = true;
-        foreach (var part in Asset.Hierarchy.Parts.Values.Where(x => x.Base?.BasePartId == e.PartId).ToList())
+        try
+        {
+        foreach (var part in Asset.Hierarchy.Parts.Values.Where(x => x.Base?.BasePartAsset.Id == e.Asset.Id && x.Base.BasePartId == e.PartId).ToList())
         {
             RemovePartFromAsset(part);
         }
-        UpdatingPropertyFromBase = false;
+        }
+        finally { UpdatingPropertyFromBase = previousUpdating; }
     }
 
     private void InsertPartInPartsCollection(AssetPartCollection<TAssetPartDesign, TAssetPart> newPartCollection, TAssetPartDesign rootPart)

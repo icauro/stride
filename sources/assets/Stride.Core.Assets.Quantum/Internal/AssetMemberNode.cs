@@ -61,6 +61,14 @@ internal class AssetMemberNode : MemberNode, IAssetMemberNode, IAssetNodeInterna
             OverrideChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+    public void RestoreContentOverride(OverrideType overrideType)
+    {
+        if ((overrideType & ~(OverrideType.New | OverrideType.Sealed)) != 0) throw new ArgumentOutOfRangeException(nameof(overrideType));
+        if (!CanOverride) return;
+        OverrideChanging?.Invoke(this, EventArgs.Empty);
+        contentOverride = overrideType;
+        OverrideChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <inheritdoc/>
     public void ResetOverrideRecursively()

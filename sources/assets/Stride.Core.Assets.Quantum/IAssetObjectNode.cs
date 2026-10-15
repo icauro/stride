@@ -16,6 +16,13 @@ public interface IAssetObjectNode : IAssetNode, IObjectNode
 
     void OverrideKey(bool isOverridden, NodeIndex index);
 
+    OverrideType GetItemOverride(NodeIndex index);
+
+    OverrideType GetKeyOverride(NodeIndex index);
+
+    /// <summary>Restores complete authored item/key flags without changing the current item identity or position.</summary>
+    void RestoreItemOverrides(NodeIndex index, OverrideType itemOverride, OverrideType keyOverride);
+
     void OverrideDeletedItem(bool isOverridden, ItemId deletedId);
 
     bool IsItemDeleted(ItemId itemId);

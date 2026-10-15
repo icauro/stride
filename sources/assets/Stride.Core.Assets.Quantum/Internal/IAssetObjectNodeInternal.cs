@@ -11,9 +11,7 @@ namespace Stride.Core.Assets.Quantum.Internal;
 /// </summary>
 internal interface IAssetObjectNodeInternal : IAssetObjectNode, IAssetNodeInternal
 {
-    OverrideType GetItemOverride(NodeIndex index);
-
-    OverrideType GetKeyOverride(NodeIndex index);
+    (Action Restore, Func<bool> IsCurrent) CaptureOverrideState();
 
     /// <summary>
     /// Removes the given <see cref="ItemId"/> from the list of overridden deleted items in the underlying <see cref="CollectionItemIdentifiers"/>, but keep

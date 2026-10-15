@@ -50,6 +50,13 @@ public class GraphNodeChangeListener : INotifyNodeValueChange, INotifyNodeItemCh
         RegisterAllNodes();
     }
 
+    /// <summary>Rebinds subscriptions after recovery from an incomplete node mutation.</summary>
+    public void Refresh()
+    {
+        foreach (var node in RegisteredNodes.ToArray()) UnregisterNode(node);
+        RegisterAllNodes();
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -135,11 +142,14 @@ public class GraphNodeChangeListener : INotifyNodeValueChange, INotifyNodeItemCh
             case ContentChangeType.CollectionRemove:
                 if (node.IsReference && e.OldValue != null)
                 {
-                    var removedNode = (node as IObjectNode)?.ItemReferences[((ItemChangeEventArgs)e).Index].TargetNode;
-                    if (removedNode != null)
+                    var collection = node as IObjectNode;
+                    var index = ((ItemChangeEventArgs)e).Index;
+                    var removedNode = collection?.ItemReferences[index].TargetNode;
+                    if (removedNode != null && visitor.ShouldVisitTargetItem(collection!, index))
                     {
-                        // TODO: review this
-                        visitor.Visit(removedNode, node as MemberNode);
+                        var path = new GraphNodePath(node);
+                        path.PushIndex(index);
+                        visitor.Visit(removedNode, node as MemberNode, path);
                     }
                 }
                 break;

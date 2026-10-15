@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using Stride.Core.Diagnostics;
+using Stride.Core.Quantum;
 
 namespace Stride.Core.Assets.Quantum;
 
@@ -15,8 +16,13 @@ public class AssetPropertyGraphContainer
     }
 
     public AssetNodeContainer NodeContainer { get; }
+    internal IReadOnlyCollection<AssetPropertyGraph> RegisteredGraphs => registeredGraphs.Values;
 
     public bool PropagateChangesFromBase { get; set; } = true;
+    public bool PropagateHierarchyChangesFromBase { get; set; } = true;
+    public Func<INodeChangeEventArgs, IGraphNode, bool>? BaseChangeFilter { get; set; }
+    public Action<IAssetNode, Action>? BaseReconciliation { get; set; }
+    public Action<AssetPropertyGraph, Action>? BaseHierarchyReconciliation { get; set; }
 
     public AssetPropertyGraph? InitializeAsset(AssetItem assetItem, ILogger logger)
     {

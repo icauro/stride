@@ -45,6 +45,8 @@ public abstract class GraphNodeBase : IInitializingGraphNode
     /// <inheritdoc/>
     public object? Retrieve() => Retrieve(NodeIndex.Empty);
 
+    internal void RefreshContentReferences() => NodeContainer.UpdateReferences(this);
+
     /// <inheritdoc/>
     public virtual object? Retrieve(NodeIndex index)
     {

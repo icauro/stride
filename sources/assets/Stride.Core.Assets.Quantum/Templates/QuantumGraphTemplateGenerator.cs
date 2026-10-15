@@ -19,10 +19,13 @@ namespace Stride.Core.Assets.Quantum.Templates;
 /// wrapped generator, matching the original (pre-decoration) per-instance semantics exactly.
 /// </para>
 /// </summary>
-public class QuantumGraphTemplateGenerator : SessionTemplateGenerator
+public class QuantumGraphTemplateGenerator : SessionTemplateGenerator, IDisposable
 {
     private readonly SessionTemplateGenerator inner;
     private readonly AssetPropertyGraphContainer graphContainer = new(new AssetNodeContainer { NodeBuilder = { NodeFactory = new AssetNodeFactory() } });
+    private bool disposed;
+    /// <summary>The real registered generator decorated by this native graph owner.</summary>
+    public SessionTemplateGenerator Inner => inner;
 
     public QuantumGraphTemplateGenerator(SessionTemplateGenerator inner)
     {
@@ -31,13 +34,19 @@ public class QuantumGraphTemplateGenerator : SessionTemplateGenerator
     }
 
     public override bool IsSupportingTemplate(TemplateDescription templateDescription)
-        => inner.IsSupportingTemplate(templateDescription);
+        => !disposed && inner.IsSupportingTemplate(templateDescription);
 
     public override Task<bool> PrepareForRun(SessionTemplateGeneratorParameters parameters)
-        => inner.PrepareForRun(parameters);
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        return inner.PrepareForRun(parameters);
+    }
 
     public override bool Generate(SessionTemplateGeneratorParameters parameters)
-        => inner.Generate(parameters);
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        return inner.Generate(parameters);
+    }
 
     public override Task<bool> AfterSave(SessionTemplateGeneratorParameters parameters)
         => inner.AfterSave(parameters);
@@ -81,6 +90,7 @@ public class QuantumGraphTemplateGenerator : SessionTemplateGenerator
 
     private void EnsureGraphs(SessionTemplateGeneratorParameters parameters)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         foreach (var package in parameters.Session.Packages)
         {
             foreach (var asset in package.Assets)
@@ -89,5 +99,18 @@ public class QuantumGraphTemplateGenerator : SessionTemplateGenerator
                     graphContainer.InitializeAsset(asset, parameters.Logger);
             }
         }
+    }
+
+    /// <summary>Releases only this wrapper's graphs; the shared inner generator remains caller-owned.</summary>
+    public void Dispose()
+    {
+        if (disposed) return;
+        foreach (var graph in graphContainer.RegisteredGraphs.ToArray())
+        {
+            graph.Dispose();
+            graphContainer.UnregisterGraph(graph.Id);
+        }
+        graphContainer.NodeContainer.Clear();
+        disposed = true;
     }
 }

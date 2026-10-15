@@ -17,7 +17,17 @@ namespace Stride.Core.Assets.Quantum;
 // ReSharper disable once RequiredBaseTypesIsNotInherited - due to a limitation on how ReSharper checks this requirement (see https://youtrack.jetbrains.com/issue/RSRP-462598)
 public class AssetPropertyGraph : IDisposable
 {
-    protected readonly AssetItem AssetItem;
+    protected AssetItem AssetItem;
+    public AssetItem AuthoredItem => AssetItem;
+    public void UpdateAssetItemIdentity(AssetItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Id != Id) throw new ArgumentException("The canonical item belongs to another asset.", nameof(item));
+        if (item.Location == AssetItem.Location && ReferenceEquals(item.Package, AssetItem.Package)) return;
+        var next = item.Clone(keepPackage: true, newAsset: Asset);
+        AssetItem.YamlMetadata.CopyInto(next.YamlMetadata);
+        AssetItem = next;
+    }
 
     public readonly struct NodeOverride
     {
@@ -148,6 +158,9 @@ public class AssetPropertyGraph : IDisposable
 
     public event EventHandler<AssetItemNodeChangeEventArgs> ItemChanged;
 
+    /// <summary>Rebinds the real node listener after restoring an incomplete Quantum mutation.</summary>
+    public void RefreshNodeListener() => nodeListener.Refresh();
+
     /// <summary>
     /// Raised when a base content has changed, after updating the related content of this graph.
     /// </summary>
@@ -194,6 +207,7 @@ public class AssetPropertyGraph : IDisposable
             Archetype = Container.TryGetGraph(AssetItem.Asset.Archetype.Id)
                 ?? throw new InvalidOperationException($"Unable to find the base [{AssetItem.Asset.Archetype.Location}] of asset [{AssetItem.Location}].");
         }
+        else Archetype = null!;
 
         // Unlink previously linked nodes
         ClearAllBaseLinks();
@@ -213,6 +227,42 @@ public class AssetPropertyGraph : IDisposable
     public void ReconcileWithBase()
     {
         ReconcileWithBase(RootNode);
+    }
+    public void ReconcileNodeWithBase(IAssetNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        if (!ReferenceEquals(node.PropertyGraph, this)) throw new ArgumentException("The node belongs to another graph.", nameof(node));
+        var previous = UpdatingPropertyFromBase;
+        try { UpdatingPropertyFromBase = true; ReconcileWithBase(node); }
+        finally { UpdatingPropertyFromBase = previous; }
+    }
+    public virtual (Action Restore, Func<bool> IsCurrent) CaptureReconciliationState() => (() => { }, () => true);
+    public bool IsInheritedNodeSealed(IAssetNode node, NodeIndex index = default)
+    {
+        if (node.BaseNode is IAssetMemberNode member) return member.GetContentOverride().HasFlag(OverrideType.Sealed);
+        if (!index.IsEmpty && node is IAssetObjectNode collection && node.BaseNode is IAssetObjectNodeInternal source
+            && collection.TryIndexToId(index, out var id) && source.TryIdToIndex(id, out var sourceIndex))
+            return source.GetItemOverride(sourceIndex).HasFlag(OverrideType.Sealed) || source.GetKeyOverride(sourceIndex).HasFlag(OverrideType.Sealed);
+        return false;
+    }
+    public void ReconcileScalarWithBase(IAssetMemberNode member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        if (!ReferenceEquals(member.PropertyGraph, this) || !(member.Type.IsValueType || member.Type == typeof(string)))
+            throw new ArgumentException("The node must be a scalar member of this graph.", nameof(member));
+        var previous = UpdatingPropertyFromBase;
+        try { UpdatingPropertyFromBase = true; ReconcileWithBase(member); }
+        finally { UpdatingPropertyFromBase = previous; }
+    }
+    public void ReconcileScalarInheritance()
+    {
+        var visitor = CreateReconcilerVisitor();
+        visitor.Visiting += (node, _) =>
+        {
+            if (node is IAssetMemberNode { BaseNode: not null, CanOverride: true } member
+                && (member.Type.IsValueType || member.Type == typeof(string))) ReconcileScalarWithBase(member);
+        };
+        visitor.Visit(RootNode);
     }
 
     private void ReconcileWithBase(IAssetNode rootNode, Dictionary<IGraphNode, NodeIndex>? nodesToReset = null)
@@ -707,22 +757,30 @@ public class AssetPropertyGraph : IDisposable
         // Ignore base change if propagation is disabled.
         if (!Container.PropagateChangesFromBase)
             return;
+        if (Container.BaseChangeFilter?.Invoke(e, node) == false) return;
 
+        void Reconcile()
+        {
         if (node.IsReference && e.OldValue?.GetType().IsValueType == false)
         {
             var oldNode = (IAssetNode?)Container.NodeContainer.GetNode(e.OldValue);
             UnlinkFromBase(oldNode);
         }
-
-        UpdatingPropertyFromBase = true;
-        var baseNode = assetNode.BaseNode;
-        if (assetNode.BaseNode is null)
-            throw new InvalidOperationException("The base is unset for the current node.");
-        RefreshBase(assetNode, (IAssetNode)baseNode);
-        ReconcileWithBase((IAssetNode)node);
-        UpdatingPropertyFromBase = false;
+        var previouslyUpdating = UpdatingPropertyFromBase;
+        try
+        {
+            UpdatingPropertyFromBase = true;
+            var baseNode = assetNode.BaseNode;
+            if (assetNode.BaseNode is null) throw new InvalidOperationException("The base is unset for the current node.");
+            RefreshBase(assetNode, (IAssetNode)baseNode);
+            ReconcileWithBase((IAssetNode)node);
+        }
+        finally { UpdatingPropertyFromBase = previouslyUpdating; }
 
         BaseContentChanged?.Invoke(e, node);
+        }
+        if (Container.BaseReconciliation is { } reconcile) reconcile(assetNode, Reconcile);
+        else Reconcile();
     }
 
     private void ReconcileWithBaseNode(IAssetNode assetNode, GraphNodePath currentPath, bool reconcileObjectReference, Dictionary<IGraphNode, NodeIndex>? nodesToReset)
@@ -746,7 +804,8 @@ public class AssetPropertyGraph : IDisposable
                 if (memberNode.MemberDescriptor.HasSet)
                 {
                     memberNode.ResettingOverride = true;
-
+                    try
+                    {
                     object clonedValue;
                     // Object references
                     if (baseValue is IIdentifiable && Definition.IsMemberTargetObjectReference((IMemberNode)memberNode.BaseNode, memberNode.BaseNode.Retrieve()))
@@ -758,7 +817,8 @@ public class AssetPropertyGraph : IDisposable
                     memberNode.Update(clonedValue);
                     memberNode.OverrideContent(false);
 
-                    memberNode.ResettingOverride = false;
+                    }
+                    finally { memberNode.ResettingOverride = false; }
                 }
             }
         }
@@ -766,6 +826,8 @@ public class AssetPropertyGraph : IDisposable
         {
             var baseNode = (IAssetObjectNodeInternal)assetNode.BaseNode;
             objectNode.ResettingOverride = true;
+            try
+            {
             // Handle collection and dictionary cases
             if ((assetNode.Descriptor is CollectionDescriptor || assetNode.Descriptor is DictionaryDescriptor) && CollectionItemIdHelper.HasCollectionItemIds(objectNode.Retrieve()))
             {
@@ -923,7 +985,8 @@ public class AssetPropertyGraph : IDisposable
                 }
             }
 
-            objectNode.ResettingOverride = false;
+            }
+            finally { objectNode.ResettingOverride = false; }
         }
     }
 

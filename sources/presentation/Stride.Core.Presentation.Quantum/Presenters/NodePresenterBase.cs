@@ -60,7 +60,16 @@ public abstract class NodePresenterBase : IInitializingNodePresenter
 
     public bool IsVisible { get; set; } = true;
 
-    public bool IsReadOnly { get; set; }
+    private bool isReadOnly;
+    protected bool HasExplicitReadOnlyAssignment { get; private set; }
+    public bool IsReadOnly
+    {
+        get => isReadOnly;
+        set { isReadOnly = value; HasExplicitReadOnlyAssignment = true; }
+    }
+
+    /// <summary>Initializes reflection-derived defaults without treating them as provider policy.</summary>
+    protected void InitializeReadOnlyDefault(bool value) => isReadOnly = value;
 
     public int? Order { get; set; }
 
