@@ -48,10 +48,12 @@ namespace Stride.Assets.Presentation.View.Behaviors
             if (e.Delta > 0)
             {
                 Viewport.ZoomIn(position.X, position.Y);
+                e.Handled = true;
             }
             if (e.Delta < 0)
             {
                 Viewport.ZoomOut(position.X, position.Y);
+                e.Handled = true;
             }
         }
     }

@@ -44,13 +44,21 @@ namespace Stride.Core.MostRecentlyUsedFiles
 
         private readonly SettingsKey<MRUDictionary> settingsKey;
         private readonly Action save;
+        private readonly bool strictLoading;
         private readonly ObservableSet<MostRecentlyUsedFile> mostRecentlyUsedFiles = new ObservableSet<MostRecentlyUsedFile>(new MostRecentlyUsedFileEqualityComparer());
 
         public MostRecentlyUsedFileCollection([NotNull] Func<SettingsProfile> loadLatestProfile, [NotNull] SettingsKey<MRUDictionary> settingsKey, Action save)
+            : this(loadLatestProfile, settingsKey, save, false)
+        {
+        }
+
+        /// <summary>Allows guarded hosts to reject a failed reload before publishing an MRU mutation.</summary>
+        public MostRecentlyUsedFileCollection([NotNull] Func<SettingsProfile> loadLatestProfile, [NotNull] SettingsKey<MRUDictionary> settingsKey, Action save, bool strictLoading)
         {
             LoadLatestProfile = loadLatestProfile ?? throw new ArgumentNullException(nameof(loadLatestProfile));
             this.settingsKey = settingsKey ?? throw new ArgumentNullException(nameof(settingsKey));
             this.save = save;
+            this.strictLoading = strictLoading;
         }
 
         public Func<SettingsProfile> LoadLatestProfile;
@@ -110,6 +118,7 @@ namespace Stride.Core.MostRecentlyUsedFiles
             }
             catch (Exception e)
             {
+                if (strictLoading) throw;
                 e.Ignore();
             }
         }

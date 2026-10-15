@@ -229,7 +229,7 @@
               </StackPanel>
             </DockPanel>
             <Border DockPanel.Dock="Bottom">
-              <Slider Height="16" Margin="5" Minimum="1" Maximum="{Binding PreviewFrameCount, Mode=OneWay}" TickFrequency="1" TickPlacement="BottomRight" Value="{Binding PreviewCurrentFrame}" IsMoveToPointEnabled="True">
+              <Slider Height="16" Margin="5" Minimum="1" Maximum="{Binding PreviewFrameCount, Mode=OneWay}" SmallChange="1" LargeChange="1" TickFrequency="1" TickPlacement="BottomRight" Value="{Binding PreviewCurrentFrame}" IsMoveToPointEnabled="True">
                 <i:Interaction.Behaviors>
                   <sd:SliderDragFromTrackBehavior/>
                 </i:Interaction.Behaviors>

@@ -489,7 +489,7 @@
         <DockPanel.Resources>
           <Style TargetType="{x:Type Separator}" BasedOn="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}"/>
         </DockPanel.Resources>
-        <Border Background="{StaticResource BackgroundBrush}" DockPanel.Dock="Top" Padding="8,2">
+        <Border x:Name="ViewportToolbar" Background="{StaticResource BackgroundBrush}" DockPanel.Dock="Top" Padding="8,2">
           <DockPanel>
             <WrapPanel HorizontalAlignment="Right" DockPanel.Dock="Right">
               <!-- Grid -->

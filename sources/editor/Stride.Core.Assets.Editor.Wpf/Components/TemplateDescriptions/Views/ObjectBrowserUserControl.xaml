@@ -31,6 +31,7 @@
     <GridSplitter Grid.Column="1" ResizeBehavior="PreviousAndNext" VerticalAlignment="Stretch" Width="5"/>
 
     <ListBox Grid.Column="2"
+             TextSearch.TextPath="Name"
              ItemsSource="{Binding ObjectItemsSource, ElementName=ObjectBrowser, Mode=TwoWay}"
              SelectedItem="{Binding SelectedObjectItem, ElementName=ObjectBrowser, Mode=TwoWay}"
              ItemTemplateSelector="{Binding ObjectItemTemplateSelector, ElementName=ObjectBrowser, Mode=TwoWay }"

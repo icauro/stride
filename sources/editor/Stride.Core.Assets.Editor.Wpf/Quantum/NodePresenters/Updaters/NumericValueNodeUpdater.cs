@@ -13,7 +13,7 @@ namespace Stride.Core.Assets.Editor.Quantum.NodePresenters.Updaters
     {
         public override void UpdateNode(INodePresenter node)
         {
-            var modelNode = node as AssetMemberNodePresenter;
+            var modelNode = node as MemberNodePresenter;
             var memberDescriptor = modelNode?.MemberDescriptor;
             if (memberDescriptor == null)
                 return;

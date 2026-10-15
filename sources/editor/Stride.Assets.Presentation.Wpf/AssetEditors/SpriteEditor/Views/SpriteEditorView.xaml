@@ -143,7 +143,7 @@
         <TextBlock Text="{sd:Localize Sprites:}" VerticalAlignment="Center"/>
       </DockPanel>
       <Grid Background="Transparent" Margin="8">
-        <sd:EditableContentListBox x:Name="ImageList" Margin="0" ItemsSource="{Binding Sprites}" SelectionMode="Extended">
+        <sd:EditableContentListBox x:Name="ImageList" Margin="0" ItemsSource="{Binding Sprites}" SelectionMode="Extended" TextSearch.TextPath="Name">
           <sd:EditableContentListBox.ItemContainerStyle>
             <Style TargetType="sd:EditableContentListBoxItem" BasedOn="{StaticResource {x:Type sd:EditableContentListBoxItem}}">
               <Setter Property="IsEditing" Value="{Binding IsEditing, Mode=TwoWay}" d:DataContext="{d:DesignInstance sevm:SpriteInfoViewModel}"/>

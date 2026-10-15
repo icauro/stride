@@ -138,7 +138,12 @@ namespace Stride.Core.Assets.Editor.ViewModel.CopyPasteProcessors
             // Fixup external references
             FixupObjectReferences.FixupReferences(container, visitor.Result, referenceableObjects, true);
 
-            data = (container as FixupContainer)?.Data ?? data;
+            if (container is FixupContainer fixedReference)
+            {
+                if (fixedReference.Data == null)
+                    throw new InvalidOperationException("The copied object reference cannot be resolved in the destination asset.");
+                data = fixedReference.Data;
+            }
             return true;
         }
 
