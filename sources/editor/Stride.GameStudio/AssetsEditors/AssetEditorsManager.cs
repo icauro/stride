@@ -27,7 +27,7 @@ using Stride.GameStudio.Layout;
 
 namespace Stride.GameStudio.AssetsEditors
 {
-    internal sealed class AssetEditorsManager : IAssetEditorsManager, IDestroyable
+    internal sealed partial class AssetEditorsManager : IAssetEditorsManager, IDestroyable
     {
         private readonly ConditionalWeakTable<IMultipleAssetEditorViewModel, NotifyCollectionChangedEventHandler> registeredHandlers = [];
         private readonly Dictionary<IAssetEditorViewModel, LayoutAnchorable> assetEditors = [];

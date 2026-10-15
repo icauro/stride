@@ -1,4 +1,9 @@
 <Project>
+  <ItemGroup>
+    <!-- Startup must select graphics before loading Debugger's engine module initializer. -->
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
+  </ItemGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'Directory.Build.props'))/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.props" />
   <Import Project="..\..\shared\Stride.Core.ShellHelper\Stride.Core.ShellHelper.projitems" Label="Shared" />
   <PropertyGroup>
@@ -24,6 +29,7 @@
     <StrideSTAThreadOnMain>true</StrideSTAThreadOnMain>
     <!-- Lay graphics-API DLLs into per-API subfolders so the API is chosen at launch. -->
     <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
     <!-- Desktop-only tool: drop non-desktop runtimes/<rid>/ from the no-RID output. -->
     <StrideToolingHost>true</StrideToolingHost>
     <UseWPF>true</UseWPF>
@@ -65,9 +71,11 @@
   </ItemGroup>
   <ItemGroup>
     <AppDesigner Include="Properties\" />
+    <Content Include="..\..\..\tools\editor-visual-capture\catalog.json" Link="VisualCapture\catalog.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\engine\Stride.Debugger\Stride.Debugger.csproj" />
+    <ProjectReference Include="..\Stride.Editor.VisualCapture.Windows\Stride.Editor.VisualCapture.Windows.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" AdditionalProperties="OutDir=$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(OutDir)', 'VisualCapture', 'Windows'))" />
     <ProjectReference Include="..\..\tools\Stride.ConnectionRouter\Stride.ConnectionRouter.csproj" /> 
     <ProjectReference Include="..\..\tools\Stride.PackageInstall\Stride.PackageInstall.csproj">
       <Private>false</Private>
@@ -257,6 +265,18 @@
   <Target Name="_StrideGameStudioCopyPackageInstall" BeforeTargets="_GetPackageFiles">
     <ItemGroup>
       <None Include="..\..\tools\Stride.PackageInstall\bin\$(Configuration)\*.*" PackagePath="tools\" Pack="true" />
+    </ItemGroup>
+  </Target>
+  <Target Name="IncludeWindowsVisualCaptureBackend" BeforeTargets="ComputeFilesToPublish;_GetPackageFiles" AfterTargets="Build">
+    <ItemGroup>
+      <VisualCaptureBackendFiles Include="$(TargetDir)VisualCapture\Windows\**\*.*" />
+      <ResolvedFileToPublish Include="@(VisualCaptureBackendFiles)">
+        <RelativePath>VisualCapture\Windows\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+      <BuildOutputInPackage Include="@(VisualCaptureBackendFiles)">
+        <TargetPath>VisualCapture\Windows\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      </BuildOutputInPackage>
     </ItemGroup>
   </Target>
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />

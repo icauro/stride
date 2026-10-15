@@ -24,8 +24,12 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <!-- Same per-API layout as Game Studio, so a test run can pick the API at launch. -->
     <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Select graphics before any referenced engine host module initializer executes. -->
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
     <Compile Include="..\..\shared\SharedAssemblyInfo.cs">
       <Link>Properties\SharedAssemblyInfo.cs</Link>
     </Compile>
@@ -48,8 +52,6 @@
          [STAThread] Main, so the runner's bin needs all of GS's deps. Private=true (default) lets
          them propagate. The runner is a test-only artefact, never shipped. -->
     <ProjectReference Include="..\Stride.GameStudio\Stride.GameStudio.csproj" />
-    <!-- For GraphicsApiHostResolver; Game Studio references it privately. -->
-    <ProjectReference Include="..\..\shared\Stride.NuGetResolver.UI\Stride.NuGetResolver.UI.csproj" />
   </ItemGroup>
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
 </Project>

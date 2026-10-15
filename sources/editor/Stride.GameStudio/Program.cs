@@ -54,6 +54,7 @@ public static partial class Program
     private static App app;
     private static IntPtr windowHandle;
     private static bool terminating;
+    private static bool backgroundLaunch;
     private static Dispatcher mainDispatcher;
     private static RenderDocManager renderDocManager;
     private static readonly ConcurrentQueue<string> LogRingbuffer = new();
@@ -125,6 +126,7 @@ public static partial class Program
     /// </summary>
     public static void Run(IList<string> args, Action<Application, Dispatcher>? appHosted = null)
     {
+        string visualCaptureDirectory = null;
         diagLogEnabled = appHosted != null;
         DiagLog($"Run entered. args=[{string.Join(", ", args)}]");
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
@@ -190,6 +192,22 @@ public static partial class Program
                     // Consumed at startup by GraphicsApiSelector; skip the following value here.
                     Forward(args[i], args[i + 1]);
                     i++;
+                }
+                else if (args[i] == "--capture-directory")
+                {
+                    if (i + 1 >= args.Count || string.IsNullOrWhiteSpace(args[i + 1]))
+                        throw new ArgumentException("--capture-directory requires a directory path.");
+                    visualCaptureDirectory = System.IO.Path.GetFullPath(args[++i]);
+                    Forward("--capture-directory", visualCaptureDirectory);
+                }
+                else if (args[i] == "--matched-benchmark")
+                {
+                    Forward(args[i]);
+                }
+                else if (args[i] == "--background-launch")
+                {
+                    backgroundLaunch = true;
+                    Forward(args[i]);
                 }
                 else if (args[i] == "/DisableThumbnails")
                 {
@@ -299,6 +317,9 @@ public static partial class Program
                 };
 
                 app.InitializeComponent();
+                using var visualCapture = visualCaptureDirectory != null
+                    ? new Diagnostics.VisualCapture.VisualCaptureEndpoint(mainDispatcher, visualCaptureDirectory)
+                    : null;
                 appHosted?.Invoke(app, mainDispatcher);
                 DiagLog("calling app.Run");
                 app.Run();
@@ -422,7 +443,7 @@ public static partial class Program
                 var sessionLoaded = await editor.OpenInitialSession(initialSessionPath);
                 if (sessionLoaded == true)
                 {
-                    var mainWindow = new GameStudioWindow(editor);
+                    var mainWindow = new GameStudioWindow(editor) { ShowActivated = !backgroundLaunch };
                     Application.Current.MainWindow = mainWindow;
                     WindowManager.ShowMainWindow(mainWindow);
                     CompilerCrashRouting.SetOwnerWindow(mainWindow);
@@ -501,7 +522,7 @@ public static partial class Program
             if (editor.Session != null)
             {
                 // If a session was correctly loaded, show the main window
-                var mainWindow = new GameStudioWindow(editor);
+                var mainWindow = new GameStudioWindow(editor) { ShowActivated = !backgroundLaunch };
                 Application.Current.MainWindow = mainWindow;
                 WindowManager.ShowMainWindow(mainWindow);
                 CompilerCrashRouting.SetOwnerWindow(mainWindow);
