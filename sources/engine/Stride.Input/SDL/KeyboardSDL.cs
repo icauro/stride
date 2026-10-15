@@ -36,6 +36,9 @@ namespace Stride.Input
         {
             window.KeyDownActions -= OnKeyEvent;
             window.KeyUpActions -= OnKeyEvent;
+            window.TextInputActions -= OnTextInputActions;
+            window.TextEditingActions -= OnTextEditingActions;
+            textEvents.Clear();
         }
 
         public override string Name => "SDL Keyboard";
@@ -60,6 +63,13 @@ namespace Stride.Input
         public void DisableTextInput()
         {
             SDL.StopTextInput();
+        }
+
+        public unsafe void SetTextInputRectangle(Stride.Core.Mathematics.Rectangle rectangle, bool showNativeComposition = false)
+        {
+            SDL.SetHint("SDL_IME_SHOW_UI", showNativeComposition ? "1" : "0");
+            var area = new Silk.NET.Maths.Rectangle<int>(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+            SDL.SetTextInputRect(&area);
         }
 
         private void OnKeyEvent(KeyboardEvent e)

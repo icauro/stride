@@ -99,6 +99,7 @@ namespace Stride.Games
         protected override void Initialize(GameContext<Window> gameContext)
         {
             window = gameContext.Control;
+            window.Closing += OnClosing;
 
             // Setup the initial size of the window
             var width = gameContext.RequestedWidth;
@@ -126,7 +127,6 @@ namespace Stride.Games
                 //gameForm.AppActivated += OnActivated;
                 //gameForm.AppDeactivated += OnDeactivated;
                 gameForm.SizeChanged += OnClientSizeChanged;
-                gameForm.CloseActions += GameForm_CloseActions;
                 gameForm.FullscreenToggle += OnFullscreenToggle;
                 
             }
@@ -136,10 +136,6 @@ namespace Stride.Games
             }
         }
 
-        private void GameForm_CloseActions()
-        {
-            OnClosing(this, new EventArgs());
-        }
 
         internal override void Run()
         {
@@ -416,6 +412,7 @@ namespace Stride.Games
         {
             if (window != null)
             {
+                window.Closing -= OnClosing;
                 window.Dispose();
                 window = null;
             }

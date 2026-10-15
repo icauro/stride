@@ -138,6 +138,9 @@ namespace Stride.Graphics.SDL
                 // with focus. In the future, we could even add events handled at the application level.
             switch ((EventType)e.Type)
             {
+                case EventType.Quit:
+                    Windows.ForEach(window => window.ProcessEvent(e));
+                    break;
                 case EventType.Mousebuttondown:
                 case EventType.Mousebuttonup:
                     ctrl = WindowFromSdlHandle(SDL.GetWindowFromID(e.Button.WindowID));

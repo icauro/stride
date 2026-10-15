@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 #if STRIDE_UI_SDL
 using System;
+using System.ComponentModel;
 using Stride.Core;
 using Stride.Core.Mathematics;
 using Silk.NET.SDL;
@@ -502,6 +503,17 @@ namespace Stride.Graphics.SDL
         public event TextEditingDelegate TextEditingActions;
         public event TextInputDelegate TextInputActions;
         public event NotificationDelegate CloseActions;
+        /// <summary>Allows an owner to defer native close while its resources drain.</summary>
+        public event EventHandler<CancelEventArgs> Closing;
+        public bool CloseRequestCanceled { get; private set; }
+
+        private void RequestClose()
+        {
+            var request = new CancelEventArgs();
+            Closing?.Invoke(this, request);
+            CloseRequestCanceled = request.Cancel;
+            if (!request.Cancel) CloseActions?.Invoke();
+        }
         public event JoystickDeviceChangedDelegate JoystickDeviceAdded;
         public event JoystickDeviceChangedDelegate JoystickDeviceRemoved;
         public event TouchFingerDelegate FingerMoveActions;
@@ -529,7 +541,7 @@ namespace Stride.Graphics.SDL
             {
                 case EventType.Quit:
                         // When SDL sends a SDL_QUIT message, we have actually clicked on the close button.
-                    CloseActions?.Invoke();
+                    RequestClose();
                     break;
 
                 case EventType.Mousebuttondown:
@@ -601,7 +613,7 @@ namespace Stride.Graphics.SDL
                             break;
 
                         case WindowEventID.Close:
-                            CloseActions?.Invoke();
+                            RequestClose();
                             break;
 
                         case WindowEventID.Shown:

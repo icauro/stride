@@ -96,7 +96,7 @@ namespace Stride.Games
                 while (SDL.PollEvent(&e) != 0)
                 {
                     Application.ProcessEvent(e);
-                    if ((EventType)e.Type == EventType.Quit)
+                    if ((EventType)e.Type == EventType.Quit && !control.CloseRequestCanceled)
                     {
                         isControlAlive = false;
                     }

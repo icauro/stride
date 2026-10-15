@@ -12,7 +12,7 @@ using Stride.Games;
 
 namespace Stride.Input
 {
-    internal class KeyboardWinforms : KeyboardDeviceBase, ITextInputDevice, IDisposable
+    internal partial class KeyboardWinforms : KeyboardDeviceBase, ITextInputDevice, IDisposable
     {
         private const int MaxStackCompositionBytes = 512;
 
@@ -50,6 +50,7 @@ namespace Stride.Input
 
         public void Dispose()
         {
+            DisableTextInput();
             richTextBox?.Dispose();
         }
          
@@ -96,6 +97,7 @@ namespace Stride.Input
                 textInputEnabled = true;
                 richTextBox.TextChanged += RichTextBoxOnTextChanged;
                 richTextBox.Focus();
+                PositionNativeComposition();
             }
         }
 
@@ -124,6 +126,8 @@ namespace Stride.Input
 
         private IntPtr WndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam)
         {
+            if (msg == 0x281 && nativeTextRectangleSet && !showNativeTextComposition)
+                lParam = new IntPtr(lParam.ToInt64() & ~0x80000000L); // WM_IME_SETCONTEXT / ISC_SHOWUICOMPOSITIONWINDOW
             switch (msg)
             {
                 case 0x118: // Cursor blink message
@@ -163,14 +167,17 @@ namespace Stride.Input
                     Win32Native.EndPaint(hWnd, ref paintStruct);
                     return new IntPtr(0); // Don't paint the control
             }
-            return Win32Native.CallWindowProc(oldWndProc, hWnd, msg, wParam, lParam);
+            var result = Win32Native.CallWindowProc(oldWndProc, hWnd, msg, wParam, lParam);
+            if (msg == 0x10D || msg == Win32Native.WM_IME_COMPOSITION || msg == 0x281) PositionNativeComposition();
+            return result;
         }
 
         private unsafe string GetCompositionString(IntPtr context, int type)
         {
+            if (context == IntPtr.Zero) return null;
             int len = Win32Native.ImmGetCompositionString(context, type, IntPtr.Zero, 0);
-            if (len <= 0)
-                return string.Empty;
+            if (len < 0 || (len & 1) != 0) return null;
+            if (len == 0) return string.Empty;
 
             byte[] rented = null;
             Span<byte> data = len <= MaxStackCompositionBytes ? stackalloc byte[len] : (rented = ArrayPool<byte>.Shared.Rent(len)).AsSpan(0, len);
@@ -178,7 +185,7 @@ namespace Stride.Input
             {
                 fixed (byte* dataPtr = data)
                 {
-                    Win32Native.ImmGetCompositionString(context, type, (nint)dataPtr, len);
+                    if (Win32Native.ImmGetCompositionString(context, type, (nint)dataPtr, len) != len) return null;
                 }
 
                 return TextInputStrings.FromUtf16(MemoryMarshal.Cast<byte, char>(data));
@@ -210,25 +217,30 @@ namespace Stride.Input
                 // Update the composition string
                 var context = Win32Native.ImmGetContext(hWnd);
 
-                var compString = GetCompositionString(context, Win32Native.GCS_COMPSTR);
-
-                compEvent = InputEventPool<TextInputEvent>.GetOrCreate(this);
-                compEvent.Type = TextInputEventType.Composition;
-                compEvent.Text = compString;
-                compEvent.CompositionStart = 0;
-                compEvent.CompositionLength = 0;
-                textEvents.Add(compEvent);
-
-                Win32Native.ImmReleaseContext(hWnd, context);
+                if (context == IntPtr.Zero) return;
+                try
+                {
+                    var compString = GetCompositionString(context, Win32Native.GCS_COMPSTR);
+                    if (compString == null) return;
+                    compEvent = InputEventPool<TextInputEvent>.GetOrCreate(this);
+                    compEvent.Type = TextInputEventType.Composition;
+                    compEvent.Text = compString;
+                    compEvent.CompositionStart = 0;
+                    compEvent.CompositionLength = 0;
+                    textEvents.Add(compEvent);
+                }
+                finally { Win32Native.ImmReleaseContext(hWnd, context); }
             }
         }
 
         public void DisableTextInput()
         {
+            if (richTextBox.IsDisposed) { textInputEnabled = false; return; }
             if (textInputEnabled)
             {
+                CancelNativeComposition();
                 richTextBox.TextChanged -= RichTextBoxOnTextChanged;
-                uiControl.Focus();
+                if (richTextBox.ContainsFocus && !uiControl.IsDisposed && uiControl.CanFocus) uiControl.Focus();
                 uiControl.Controls.Remove(richTextBox);
                 textInputEnabled = false;
             }

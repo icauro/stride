@@ -17,5 +17,10 @@ namespace Stride.Input
         /// Disallows text input to be entered, will close any IME active and stop sending text events
         /// </summary>
         void DisableTextInput();
+
+        /// <summary>Positions native text composition in window client coordinates.</summary>
+        /// <param name="rectangle">The active text caret area.</param>
+        /// <param name="showNativeComposition">Show native composition UI instead of drawing preedit text in the application.</param>
+        void SetTextInputRectangle(Stride.Core.Mathematics.Rectangle rectangle, bool showNativeComposition = false) { }
     }
 }
