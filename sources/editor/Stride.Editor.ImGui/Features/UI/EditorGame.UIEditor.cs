@@ -304,7 +304,7 @@ internal sealed partial class EditorGame
                     var target = document.AcquireUICollectionAddTarget(collections); var transferred = false;
                     try
                     {
-                        var command = target == null ? null : Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "AddNewItem");
+                        var command = target == null ? null : NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "AddNewItem");
                         if (command != null)
                         {
                             if (target!.Presenters.Any(presenter => presenter.IsReadOnly)) throw new InvalidOperationException("The native collection is read-only.");
@@ -327,7 +327,7 @@ internal sealed partial class EditorGame
                 var target = document.AcquireUICollectionAddTarget(collections); var transferred = false;
                 try
                 {
-                    var command = target == null ? null : Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters)
+                    var command = target == null ? null : NodePresenterCombination.Commands(target.Presenters)
                         .FirstOrDefault(command => command.Name == "AddNewItem");
                     if (command != null)
                     {
@@ -359,7 +359,7 @@ internal sealed partial class EditorGame
                 var target = document.AcquireUICollectionFactoryTarget(items); var transferred = false;
                 try
                 {
-                    var command = target == null ? null : Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
+                    var command = target == null ? null : NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
                     if (command != null)
                     {
                         if (target!.Presenters.Any(presenter => presenter.IsReadOnly)) throw new InvalidOperationException("The native item is read-only.");
@@ -379,7 +379,7 @@ internal sealed partial class EditorGame
                 var target = document.AcquireCombinedVirtualTarget(presenters); var transferred = false;
                 try
                 {
-                    var command = Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
+                    var command = NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
                     if (command != null) { editor.StartEditorExtensionCommand(document, target, command, entry); transferred = true; return; }
                 }
                 finally { if (!transferred) target.Dispose(); }
@@ -395,7 +395,7 @@ internal sealed partial class EditorGame
                 var target = document.AcquireAttachedFactoryTarget(ids, key); var transferred = false;
                 try
                 {
-                    var command = target == null ? null : Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
+                    var command = target == null ? null : NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
                     if (command != null)
                     {
                         if (target!.Presenters.Any(presenter => presenter.IsReadOnly)) throw new InvalidOperationException("The native property is read-only.");
@@ -419,7 +419,7 @@ internal sealed partial class EditorGame
                     var target = document.AcquireCombinedMemberTarget(nodes); var transferred = false;
                     try
                     {
-                        var command = Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
+                        var command = NodePresenterCombination.Commands(target.Presenters).FirstOrDefault(command => command.Name == "CreateNewInstance");
                         if (command != null) { editor.StartEditorExtensionCommand(document, target, command, entry); transferred = true; return; }
                     }
                     finally { if (!transferred) target.Dispose(); }

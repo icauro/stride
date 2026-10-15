@@ -22,7 +22,7 @@ internal sealed partial class EditorGame
     {
         if (!settings.TryGetSavedGameOrientationChange(out var orientation, out var version)
             || workspace?.Session.CurrentProject is not { } project || authoring == null || sessionHistory == null) return;
-        var target = GameSettingsAssetCompiler.GetPlatformOrientationFile(project);
+        var target = PlatformOrientation.GetPlatformOrientationFile(project);
         if (target == null || !File.Exists(target.ToOSPath()))
         {
             // The production save hook is a successful no-op for other platforms
@@ -41,7 +41,7 @@ internal sealed partial class EditorGame
             throw new InvalidOperationException("The platform orientation file cannot be saved.");
         var text = source.EditorText;
         var updated = project.Platform == PlatformType.Android
-            ? GameSettingsAssetCompiler.UpdateAndroidActivityOrientation(text, orientation)
+            ? PlatformOrientation.UpdateAndroidActivityOrientation(text, orientation)
             : UpdateIosOrientationText(text, orientation);
         using (sessionHistory.CreateTransaction("Synchronize platform orientation")) source.UpdateEditorText(updated);
         source.Save();
@@ -55,7 +55,7 @@ internal sealed partial class EditorGame
         var spacing = new List<XText>();
         while (orientationKey?.NextNode is XText whitespace && string.IsNullOrWhiteSpace(whitespace.Value))
         { spacing.Add(whitespace); whitespace.Remove(); }
-        try { GameSettingsAssetCompiler.UpdateIosOrientation(xml, orientation); }
+        try { PlatformOrientation.UpdateIosOrientation(xml, orientation); }
         finally { if (orientationKey != null && spacing.Count != 0) orientationKey.AddAfterSelf(spacing); }
         var after = xml.ToString(SaveOptions.DisableFormatting);
         if (before == after) return text;

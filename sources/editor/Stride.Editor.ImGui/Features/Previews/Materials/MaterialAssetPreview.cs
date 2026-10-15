@@ -79,7 +79,7 @@ internal sealed class MaterialAssetPreview : IDisposable, IMaterialPreviewConten
         var generationCache = generationResources.Content;
         try
         {
-            var result = MaterialAssetGeneration.Generate(asset, finder, generationCache, settings.DefaultGraphicsProfile, settings.ColorSpace, url);
+            var result = MaterialPreviewGeneration.Generate(asset, finder, generationCache, settings.DefaultGraphicsProfile, settings.ColorSpace, url);
             if (result.HasErrors) throw new InvalidOperationException(result.ToText());
             // A separate loading cache is essential: Save retains its input object, whereas
             // this preview needs the GPU resources produced by the normal content serializers.

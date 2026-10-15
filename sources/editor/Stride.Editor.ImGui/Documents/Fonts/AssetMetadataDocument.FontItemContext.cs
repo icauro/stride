@@ -54,10 +54,10 @@ internal partial class AssetMetadataDocument
         => CanEditFontSettings && CanCopyAssetProperty(member.Node) && !IsExtensionPropertyReadOnly(member.Node)
             && !PropertyClipboardRules.IsReadOnly(member.Node) && member.Collection is { } collection
             && CanEditAssetSettingNode(collection) && NativePropertyClipboard.HasAdd(collection)
-            && collection.Descriptor is CollectionDescriptor descriptor && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(descriptor.ElementType);
+            && collection.Descriptor is CollectionDescriptor descriptor && AssetCollectionCommandRules.CanAdd(descriptor.ElementType);
     internal bool CanRemoveFontItem(FontSettingField member, FontSettingItem item)
         => TryGetFontItemAccessor(member, item, out var accessor) && CanEditFontSettings
             && !IsExtensionPropertyReadOnly(member.Node) && !PropertyClipboardRules.IsReadOnly(member.Node)
             && CanEditAssetSettingItem((IAssetObjectNode)accessor.Node, accessor.Index) && NativePropertyClipboard.HasRemove((IObjectNode)accessor.Node)
-            && accessor.Node.Descriptor is CollectionDescriptor descriptor && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(descriptor.ElementType);
+            && accessor.Node.Descriptor is CollectionDescriptor descriptor && AssetCollectionCommandRules.CanAdd(descriptor.ElementType);
 }

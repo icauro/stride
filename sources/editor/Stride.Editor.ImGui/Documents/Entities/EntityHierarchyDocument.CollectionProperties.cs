@@ -59,10 +59,10 @@ internal abstract partial class EntityHierarchyDocument
 
     internal bool CanAddCollection(ComponentField field) => CanEditCollection(field) && field.CollectionRules?.ReadOnly != true
         && NativePropertyClipboard.HasAdd((IAssetObjectNode)field.Node.Target!)
-        && (field.IsDictionary || Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(field.CollectionElementType!));
+        && (field.IsDictionary || AssetCollectionCommandRules.CanAdd(field.CollectionElementType!));
     internal bool CanRemoveCollection(ComponentField field) => CanEditCollection(field) && field.CollectionRules?.ReadOnly != true
         && NativePropertyClipboard.HasRemove((IAssetObjectNode)field.Node.Target!)
-        && (field.IsDictionary || Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(field.CollectionElementType!));
+        && (field.IsDictionary || AssetCollectionCommandRules.CanAdd(field.CollectionElementType!));
     internal bool CanResizeCollection(ComponentField field) => CanAddCollection(field) && CanRemoveCollection(field);
 
     internal bool CanReorderCollection(ComponentField field) => CanResizeCollection(field) && field.CollectionRules?.CanReorderItems == true

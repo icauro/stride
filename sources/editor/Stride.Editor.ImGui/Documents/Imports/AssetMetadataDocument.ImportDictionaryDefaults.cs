@@ -16,7 +16,7 @@ internal partial class AssetMetadataDocument
         var instance = AssetCollectionCommandRules.CreateItemInstance(field.ElementType!);
         var parent = importSettingsItems.FirstOrDefault(item => ReferenceEquals(item.NestedCollection?.Collection, field.Collection));
         var accessor = parent != null ? new NodeAccessor(parent.Collection, parent.Index) : new NodeAccessor(field.Node, NodeIndex.Empty);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(field.ElementType!) || importSettingsGraph!.Definition.IsObjectReference(accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(field.ElementType!) || importSettingsGraph!.Definition.IsObjectReference(accessor, instance)
             ? field.ElementType!.Default() : instance;
         if (value == null && field.CollectionRules?.NotNullItems == true) throw new InvalidOperationException("This collection cannot contain null.");
         if (!CanAddImportCollection(field)) throw new InvalidOperationException("The collection changed during item construction.");
@@ -40,7 +40,7 @@ internal partial class AssetMetadataDocument
         var instance = AssetCollectionCommandRules.CreateItemInstance(descriptor.ValueType);
         var parent = importSettingsItems.FirstOrDefault(item => ReferenceEquals(item.NestedCollection?.Collection, collection));
         var accessor = parent != null ? new NodeAccessor(parent.Collection, parent.Index) : new NodeAccessor(field.Node, NodeIndex.Empty);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || importSettingsGraph!.Definition.IsObjectReference(accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || importSettingsGraph!.Definition.IsObjectReference(accessor, instance)
             ? descriptor.ValueType.Default() : instance;
         if (value == null && field.CollectionRules?.NotNullItems == true) throw new InvalidOperationException("This collection cannot contain null.");
         if (!CanAddImportDictionaryKey(field)) throw new InvalidOperationException("The dictionary changed during item construction.");

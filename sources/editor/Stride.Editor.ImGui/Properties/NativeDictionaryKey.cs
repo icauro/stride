@@ -6,7 +6,7 @@ namespace Stride.Editor.ImGui;
 internal static class NativeDictionaryKey
 {
     internal static bool SupportsText(Type keyType) => keyType == typeof(string) || TypeDescriptor.GetConverter(keyType).CanConvertFrom(typeof(string));
-    // Original Stride.Core.Assets.AssetCollectionCommandRules.CanConstruct and AddPrimitiveKeyCommand default-key branch.
+    // Original AssetCollectionCommandRules.CanConstruct and AddPrimitiveKeyCommand default-key branch.
     internal static bool CanAdd(Type keyType) => !keyType.IsClass || keyType.GetConstructor(Type.EmptyTypes) != null || keyType == typeof(string);
     internal static object CreateForAdd(Type keyType, string? text)
     {

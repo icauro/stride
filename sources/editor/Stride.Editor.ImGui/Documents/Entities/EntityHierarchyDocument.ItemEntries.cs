@@ -79,7 +79,7 @@ internal abstract partial class EntityHierarchyDocument
             throw new InvalidOperationException("The default collection command changed.");
         var instance = ObjectFactoryRegistry.NewInstance(context.ElementType!);
         var accessor = context.Parent is { } parent ? new NodeAccessor(parent.Collection, parent.Index) : new NodeAccessor(context.Origin.Node, NodeIndex.Empty);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(context.ElementType!) || HierarchyGraph.Definition.IsObjectReference(accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(context.ElementType!) || HierarchyGraph.Definition.IsObjectReference(accessor, instance)
             ? null : instance;
         ValidateNestedHierarchyValue(context, value);
         return () =>

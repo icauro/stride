@@ -1,0 +1,27 @@
+<Project>
+  <!-- Explicit opt-in only. The default package DLL remains available until the native ABI build succeeds. -->
+  <PropertyGroup>
+    <StrideBuildNativeImGui Condition="'$(StrideBuildNativeImGui)' == ''">false</StrideBuildNativeImGui>
+    <StrideNativeImGuiConfiguration Condition="'$(StrideNativeImGuiConfiguration)' == ''">Release</StrideNativeImGuiConfiguration>
+    <StrideNativeImGuiBuildDirectory Condition="'$(StrideNativeImGuiBuildDirectory)' == ''">$(IntermediateOutputPath)native-imgui</StrideNativeImGuiBuildDirectory>
+    <StrideNativeImGuiCMake Condition="'$(StrideNativeImGuiCMake)' == ''">cmake</StrideNativeImGuiCMake>
+    <StrideNativeImGuiBinary>$(StrideNativeImGuiBuildDirectory)/cimgui-build/$(StrideNativeImGuiConfiguration)/cimgui.dll</StrideNativeImGuiBinary>
+  </PropertyGroup>
+  <Target Name="BuildStrideNativeImGui" BeforeTargets="CopyFilesToOutputDirectory" Condition="'$(StrideBuildNativeImGui)' == 'true'">
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64'" Text="The native ImGui text hook currently requires win-x64." />
+    <Error Condition="'$(StrideNativeImGuiSource)' == ''" Text="Set StrideNativeImGuiSource to the approved cimgui directory emitted by Prepare-NativeImGui.ps1." />
+    <Error Condition="!Exists('$(StrideNativeImGuiSource)/stride-abi-approved.json')" Text="Exact pinned-header ABI approval is absent; refusing native library replacement." />
+    <Error Condition="'$(StrideNativeImGuiFreeTypePrefix)' == ''" Text="Set StrideNativeImGuiFreeTypePrefix to a Windows x64 static FreeType CMake package installation." />
+    <Exec Command="&quot;$(StrideNativeImGuiCMake)&quot; -S &quot;$(MSBuildThisFileDirectory)&quot; -B &quot;$(StrideNativeImGuiBuildDirectory)&quot; -A x64 -DSTRIDE_CIMGUI_SOURCE=&quot;$(StrideNativeImGuiSource)&quot; -DCMAKE_PREFIX_PATH=&quot;$(StrideNativeImGuiFreeTypePrefix)&quot;" />
+    <Exec Command="&quot;$(StrideNativeImGuiCMake)&quot; --build &quot;$(StrideNativeImGuiBuildDirectory)&quot; --config &quot;$(StrideNativeImGuiConfiguration)&quot;" />
+    <Error Condition="!Exists('$(StrideNativeImGuiBinary)')" Text="Approved native build produced no cimgui.dll." />
+  </Target>
+  <Target Name="StageStrideNativeImGui" AfterTargets="CopyFilesToOutputDirectory" DependsOnTargets="BuildStrideNativeImGui" Condition="'$(StrideBuildNativeImGui)' == 'true'">
+    <Copy SourceFiles="$(StrideNativeImGuiBinary)" DestinationFiles="$(TargetDir)cimgui.dll" />
+    <Copy SourceFiles="$(StrideNativeImGuiSource)/stride-abi-approved.json" DestinationFiles="$(TargetDir)stride-imgui-native-abi.json" />
+  </Target>
+  <Target Name="PublishStrideNativeImGui" AfterTargets="Publish" DependsOnTargets="BuildStrideNativeImGui" Condition="'$(StrideBuildNativeImGui)' == 'true'">
+    <Copy SourceFiles="$(StrideNativeImGuiBinary)" DestinationFiles="$(PublishDir)cimgui.dll" />
+    <Copy SourceFiles="$(StrideNativeImGuiSource)/stride-abi-approved.json" DestinationFiles="$(PublishDir)stride-imgui-native-abi.json" />
+  </Target>
+</Project>

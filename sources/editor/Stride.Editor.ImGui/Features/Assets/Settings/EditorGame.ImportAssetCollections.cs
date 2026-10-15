@@ -141,7 +141,7 @@ internal sealed partial class EditorGame
             if (field.Collection!.Descriptor is DictionaryDescriptor) DrawImportDictionaryAdd(settings, field);
             else if (settings.CanAddImportCollection(field) && settings.ExtensionCollectionAbstractEntries(field.Collection) == null)
             {
-                Gui.BeginDisabled(!Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(field.ElementType!));
+                Gui.BeginDisabled(!AssetCollectionCommandRules.CanAdd(field.ElementType!));
                 if (Gui.Button("Add")) action = () => AddDefaultImportCollectionItem(settings, field);
                 Gui.EndDisabled();
             }

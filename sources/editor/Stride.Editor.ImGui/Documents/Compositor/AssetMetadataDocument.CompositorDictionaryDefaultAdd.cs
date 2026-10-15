@@ -26,7 +26,7 @@ internal partial class AssetMetadataDocument
             if (key == null || !descriptor.KeyType.IsInstanceOfType(key)) throw new ArgumentException("The dictionary key is incompatible.");
             if (descriptor.ContainsKey(property.Collection.Retrieve()!, key)) continue;
             var instance = AssetCollectionCommandRules.CreateItemInstance(descriptor.ValueType);
-            var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(property.Accessor, instance)
+            var value = AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(property.Accessor, instance)
                 ? descriptor.ValueType.IsValueType ? Activator.CreateInstance(descriptor.ValueType) : null : instance;
             if (value == null ? descriptor.ValueType.IsValueType && Nullable.GetUnderlyingType(descriptor.ValueType) == null || property.Rules?.NotNullItems == true
                 : !(Nullable.GetUnderlyingType(descriptor.ValueType) ?? descriptor.ValueType).IsInstanceOfType(value))

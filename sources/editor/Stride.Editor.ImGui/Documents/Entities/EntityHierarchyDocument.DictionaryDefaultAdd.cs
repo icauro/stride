@@ -21,7 +21,7 @@ internal abstract partial class EntityHierarchyDocument
         if (descriptor.ContainsKey(context.Node.Retrieve()!, key)) return () => { };
         var instance = AssetCollectionCommandRules.CreateItemInstance(descriptor.ValueType);
         var accessor = context.Parent is { } parent ? new NodeAccessor(parent.Collection, parent.Index) : new NodeAccessor(context.Origin.Node, NodeIndex.Empty);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || HierarchyGraph.Definition.IsObjectReference(accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || HierarchyGraph.Definition.IsObjectReference(accessor, instance)
             ? descriptor.ValueType.IsValueType ? Activator.CreateInstance(descriptor.ValueType) : null : instance;
         ValidateNestedHierarchyValue(context, value);
         return () =>

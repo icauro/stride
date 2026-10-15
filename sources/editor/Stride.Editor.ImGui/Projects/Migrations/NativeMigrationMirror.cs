@@ -197,7 +197,7 @@ internal sealed partial class NativeMigrationMirror : IDisposable
                     if (!string.IsNullOrWhiteSpace(hint) && !IsPrivateProjectInput(Path.GetFullPath(hint, Path.GetDirectoryName(path)!)))
                         throw new IOException("The native reference file is outside its private ownership scope: " + hint);
                 }
-                foreach (var name in Stride.Core.Assets.AuthoredProjectProperties.NativeCompilerFileProperties)
+                foreach (var name in AuthoredProjectProperties.NativeCompilerFileProperties)
                 {
                     var value = evaluated.GetPropertyValue(name);
                     if (string.IsNullOrWhiteSpace(value)) continue;

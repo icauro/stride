@@ -44,7 +44,7 @@ internal partial class AssetMetadataDocument
                     : memberName != null ? field.Accessor.Node is IMemberNode member && member.Name == memberName
                     : field.Accessor.Index == first.Accessor.Index);
                 if (next == null || (first.NativePresenter != null
-                    ? next.NativePresenter == null || !Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.CanConstruct([first.NativePresenter, next.NativePresenter])
+                    ? next.NativePresenter == null || !NodePresenterCombination.CanConstruct([first.NativePresenter, next.NativePresenter])
                     : next.DeclaredType != first.DeclaredType || first.Accessor.Node is IMemberNode original
                         && (next.Accessor.Node is not IMemberNode member || !Equals(member.MemberDescriptor.MemberInfo, original.MemberDescriptor.MemberInfo)))) break;
                 fields.Add(next);
@@ -70,9 +70,9 @@ internal partial class AssetMetadataDocument
         return result;
         void Visit(IReadOnlyList<Stride.Core.Presentation.Quantum.Presenters.INodePresenter> owners)
         {
-            foreach (var group in Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.CombineChildren(owners))
+            foreach (var group in NodePresenterCombination.CombineChildren(owners))
             {
-                if (!Stride.Core.Presentation.Quantum.Presenters.NodePresenterCombination.CanConstruct(group)) continue;
+                if (!NodePresenterCombination.CanConstruct(group)) continue;
                 if (group.All(NativePresenterCategories.IsCategory)) { Visit(group); continue; }
                 if (group.Any(presenter => presenter is Stride.Core.Presentation.Quantum.Presenters.VirtualNodePresenter)) continue;
                 result.AddRange(MergeCompositorProperties(group.Select(presenter => (IReadOnlyList<CompositorProperty>)new[] { GetCompositorNativeChildProperty(presenter) }).ToArray(), "native"));

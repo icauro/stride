@@ -58,7 +58,7 @@ internal sealed partial class ProceduralAssetDocument
             && (CollectionItemPresenter(item) is not { } presenter || !EditorPresenterItemMetadata.IsReadOnly(presenter));
     internal bool CanAddCollection(ProceduralCollectionContext context)
         => CanEditCollection(context) && context.Rules?.ReadOnly != true && NativePropertyClipboard.HasAdd(context.Node)
-            && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(context.ElementType)
+            && AssetCollectionCommandRules.CanAdd(context.ElementType)
             && (context.Node.Descriptor is not DictionaryDescriptor dictionary || NativeDictionaryKey.CanAdd(dictionary.KeyType));
     internal bool CanRemoveCollectionItem(ProceduralCollectionItem item)
         => CanEditCollectionItem(item) && item.Context.Rules?.ReadOnly != true && NativePropertyClipboard.HasRemove(item.Context.Node);

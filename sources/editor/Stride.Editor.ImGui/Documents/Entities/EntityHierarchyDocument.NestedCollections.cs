@@ -62,10 +62,10 @@ internal abstract partial class EntityHierarchyDocument
         && (context.Descriptor is not DictionaryDescriptor dictionary || !dictionary.IsReadOnly(context.Node.Retrieve()!));
     internal bool CanAddNestedHierarchyCollection(HierarchyCollectionContext context)
         => CanEditNestedHierarchyCollection(context) && context.Rules?.ReadOnly != true && NativePropertyClipboard.HasAdd(context.Node)
-        && (context.Descriptor is DictionaryDescriptor || Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(context.ElementType!));
+        && (context.Descriptor is DictionaryDescriptor || AssetCollectionCommandRules.CanAdd(context.ElementType!));
     internal bool CanRemoveNestedHierarchyCollection(HierarchyCollectionContext context)
         => CanEditNestedHierarchyCollection(context) && context.Rules?.ReadOnly != true && NativePropertyClipboard.HasRemove(context.Node)
-        && (context.Descriptor is DictionaryDescriptor || Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(context.ElementType!));
+        && (context.Descriptor is DictionaryDescriptor || AssetCollectionCommandRules.CanAdd(context.ElementType!));
     internal bool CanResizeNestedHierarchyCollection(HierarchyCollectionContext context)
         => CanAddNestedHierarchyCollection(context) && CanRemoveNestedHierarchyCollection(context);
     internal bool CanReorderNestedHierarchyCollection(HierarchyCollectionContext context)

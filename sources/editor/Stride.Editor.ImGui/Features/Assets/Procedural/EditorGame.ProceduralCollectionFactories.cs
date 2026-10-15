@@ -31,7 +31,7 @@ internal sealed partial class EditorGame
                     if (dictionary == null) asset.AddDefaultCollectionItem(context);
                     else
                     {
-                        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(context.ElementType) ? null : ObjectFactoryRegistry.NewInstance(context.ElementType);
+                        var value = AssetCollectionCommandRules.IsReferenceType(context.ElementType) ? null : ObjectFactoryRegistry.NewInstance(context.ElementType);
                         asset.AddCollectionItem(context, value, actualKey);
                     }
                 }

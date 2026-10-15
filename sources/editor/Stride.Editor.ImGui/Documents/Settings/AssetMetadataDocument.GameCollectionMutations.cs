@@ -14,13 +14,13 @@ internal partial class AssetMetadataDocument
         => CanEditPresentedGameSettingItem(item) && item.Context.CollectionRules?.ReadOnly != true
             && (item.Context.CollectionDescriptor is DictionaryDescriptor
                 || item.Context.CollectionDescriptor is CollectionDescriptor list && (list.HasRemoveAt || list.HasRemove)
-                    && !list.IsReadOnly(item.Collection.Retrieve()!) && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(list.ElementType));
+                    && !list.IsReadOnly(item.Collection.Retrieve()!) && AssetCollectionCommandRules.CanAdd(list.ElementType));
     internal bool CanAddGameSettingCollection(GameSettingCollection field)
         => CanEditGameSettingCollection(field) && field.CollectionRules?.ReadOnly != true
             && (field.CollectionDescriptor is DictionaryDescriptor dictionary
-                ? NativeDictionaryKey.CanAdd(dictionary.KeyType) && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(dictionary.ValueType)
+                ? NativeDictionaryKey.CanAdd(dictionary.KeyType) && AssetCollectionCommandRules.CanAdd(dictionary.ValueType)
                 : field.CollectionDescriptor is CollectionDescriptor { HasAdd: true } list
-                    && !list.IsReadOnly(field.Node.Retrieve()!) && Stride.Core.Assets.AssetCollectionCommandRules.CanAdd(list.ElementType));
+                    && !list.IsReadOnly(field.Node.Retrieve()!) && AssetCollectionCommandRules.CanAdd(list.ElementType));
 
     internal EditorPresenterTarget? AcquireGameCollectionCommandTarget(GameSettingCollection field)
         => IsKnownGameSettingCollection(field) ? AcquireExtensionFactoryTarget(new NodeAccessor(field.Node, NodeIndex.Empty)) : null;

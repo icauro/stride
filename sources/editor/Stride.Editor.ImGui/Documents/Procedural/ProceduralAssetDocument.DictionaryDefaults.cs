@@ -21,7 +21,7 @@ internal sealed partial class ProceduralAssetDocument
         var instance = AssetCollectionCommandRules.CreateItemInstance(descriptor.ValueType);
         var accessor = context.Parent is { } parent ? new NodeAccessor(parent.Context.Node, parent.Index)
             : new NodeAccessor(context.Origin.Node, NodeIndex.Empty);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(accessor, instance)
             ? descriptor.ValueType.Default() : instance;
         if (!CanAddCollection(context)) throw new InvalidOperationException("The dictionary changed during item construction.");
         if (!descriptor.ContainsKey(context.Node.Retrieve()!, key)) AddCollectionItem(context, value, key);

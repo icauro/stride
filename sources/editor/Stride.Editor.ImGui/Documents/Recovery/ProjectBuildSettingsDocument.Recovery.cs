@@ -9,7 +9,7 @@ internal sealed partial class ProjectBuildSettingsDocument
     internal void RestoreRecovery(EditorRecoveryRecord record)
     {
         if (!CanSave || IsDirty || !string.Equals(Path, record.Path, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The current project settings cannot be replaced by recovery.");
-        using var restored = new Stride.Core.Assets.AuthoredProjectProperties(record.Payload, Path);
+        using var restored = new AuthoredProjectProperties(record.Payload, Path);
         var before = properties.Snapshot; var after = restored.Snapshot;
         var beforeRevision = revision; var afterRevision = ++nextRevision; var previousBaseline = savedDiskHash.ToArray();
         var operation = new RecoveryProjectOperation(this, before, after, beforeRevision, afterRevision, previousBaseline, record.BaselineHash.ToArray());

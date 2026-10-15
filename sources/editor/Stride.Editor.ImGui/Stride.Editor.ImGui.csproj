@@ -30,6 +30,7 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" ExcludeAssets="runtime" PrivateAssets="all" />
     <ProjectReference Include="../../engine/Stride.Engine/Stride.Engine.csproj" />
     <ProjectReference Include="../../engine/Stride.Debugger/Stride.Debugger.csproj" />
     <ProjectReference Include="../../engine/Stride.UI/Stride.UI.csproj" />
@@ -93,11 +94,11 @@
     <Content Include="../../data/images/Logo/stride-logo-readme-white.png" Link="Icons/about-logo.png" TargetPath="Icons/about-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../../LICENSE.md;../../../THIRD PARTY.md;../../../BACKERS.md" Link="%(Filename)%(Extension)" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../engine/**/*.sdsl;../../engine/**/*.sdfx" Exclude="../../engine/**/bin/**;../../engine/**/obj/**" Link="Shaders/Engine/%(RecursiveDir)%(Filename)%(Extension)" TargetPath="Shaders/Engine/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Thumbnails/Rendering/Editor/*.sdfx" Link="Shaders/Engine/Stride.Rendering/Rendering/Editor/%(Filename)%(Extension)" TargetPath="Shaders/Engine/Stride.Rendering/Rendering/Editor/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Stride.GameStudio/Helpers/StrideGameStudio.cs" Link="Properties/Shared/StrideGameStudio.cs" />
     <Compile Include="../../shared/SharedAssemblyInfo.cs" Link="Properties/SharedAssemblyInfo.cs" />
-    <Compile Include="../../presentation/Stride.Core.Presentation.Quantum/Presenters/NodePresenterCombination.cs" Link="Properties/Shared/NodePresenterCombination.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/DisplayAttributeNodeUpdater.cs" Link="Properties/Shared/DisplayAttributeNodeUpdater.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/NumericValueNodeUpdater.cs" Link="Properties/Shared/NumericValueNodeUpdater.cs" />
     <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Keys/MaterialData.cs" Link="Properties/Shared/MaterialData.cs" />
@@ -110,11 +111,6 @@
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/DictionaryNodeUpdater.cs" Link="Properties/Shared/DictionaryNodeUpdater.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/InlineMemberNodeUpdater.cs" Link="Properties/Shared/InlineMemberNodeUpdater.cs" />
     <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Updaters/FXAAEffectNodeUpdater.cs" Link="Properties/Shared/FXAAEffectNodeUpdater.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/CameraComponentNodeRules.cs" Link="Properties/Shared/CameraComponentNodeRules.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/ModelMaterialNodeRules.cs" Link="Properties/Shared/ModelMaterialNodeRules.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/CameraSlotChoices.cs" Link="Properties/Shared/CameraSlotChoices.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/ParticleTransformNodeRules.cs" Link="Properties/Shared/ParticleTransformNodeRules.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/GameSettingsConfigurationRules.cs" Link="Properties/Shared/GameSettingsConfigurationRules.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/NumericData.cs" Link="Properties/Shared/NumericData.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/InlineData.cs" Link="Properties/Shared/InlineData.cs" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/DisplayData.cs" Link="Properties/Shared/DisplayData.cs" />
@@ -126,9 +122,6 @@
     <EmbeddedResource Include="../Stride.Assets.Presentation.Wpf/Resources/Gizmos/*.png" LogicalName="Stride.Editor.ImGui.Gizmos.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../engine/Stride.Audio.Editor/Resources/*Gizmo.png;../../engine/Stride.Particles.Editor/Resources/ParticleGizmo.png" LogicalName="Stride.Editor.ImGui.Gizmos.%(Filename)%(Extension)" />
     <Compile Include="../Stride.Core.Assets.Editor.Wpf/ViewModel/ColorPaletteViewModel.cs" Link="Features/Inspector/Shared/ColorPaletteViewModel.cs" />
-    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Rules/InlineMemberRules.cs" Link="Properties/Shared/InlineMemberRules.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/SpriteSheetNodeRules.cs" Link="Properties/Shared/SpriteSheetNodeRules.cs" />
-    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/NavigationNodeRules.cs" Link="Properties/Shared/NavigationNodeRules.cs" />
     <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/PackageSceneSettings.cs" Link="Features/Scene/Shared/PackageSceneSettings.cs" />
     <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/HighlightRenderFeature.cs" Link="Features/Scene/Materials/Shared/HighlightRenderFeature.cs" />
     <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/HighlightRenderState.cs" Link="Features/Scene/Materials/Shared/HighlightRenderState.cs" />
@@ -167,7 +160,7 @@
   <Import Project="Infrastructure/Graphics/EditorGraphicsBootstrap.targets" />
   <Import Project="Projects/Deployment/EditorGraphicsDeployment.targets" />
   <Import Project="Infrastructure/Presentation/EditorLocalization.targets" />
-  <Import Project="../../../build/native/editor-imgui/Stride.Editor.NativeImGui.targets" />
+  <Import Project="Native/Stride.Editor.NativeImGui.targets" />
   <Import Project="../../shared/Stride.Core.ShellHelper/Stride.Core.ShellHelper.projitems" Label="Shared" />
   <ItemGroup>
     <Compile Include="../../shared/Process/AndroidDeviceEnumerator.cs" Link="Projects/Deployment/Shared/AndroidDeviceEnumerator.cs" />

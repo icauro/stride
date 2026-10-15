@@ -143,7 +143,7 @@ internal sealed partial class UIDocument
         EndEdit();
         if (!CanDefaultUICollectionAdd(collection)) throw new InvalidOperationException("The native default UI collection command changed.");
         var instance = Stride.Core.Reflection.ObjectFactoryRegistry.NewInstance(collection.ElementType);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(collection.ElementType) || AuthoringGraph.Definition.IsObjectReference(collection.Accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(collection.ElementType) || AuthoringGraph.Definition.IsObjectReference(collection.Accessor, instance)
             ? null : instance;
         ValidateCollectionValue(collection, value);
         if (value != null) AssetCollectionItemIdHelper.GenerateMissingItemIds(value);

@@ -22,7 +22,7 @@ internal sealed partial class UIDocument
         if (key == null || !descriptor.KeyType.IsInstanceOfType(key)) throw new ArgumentException("The dictionary key is incompatible.");
         if (descriptor.ContainsKey(collection.Collection.Retrieve()!, key)) return null;
         var instance = AssetCollectionCommandRules.CreateItemInstance(descriptor.ValueType);
-        var value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(collection.Accessor, instance)
+        var value = AssetCollectionCommandRules.IsReferenceType(descriptor.ValueType) || AuthoringGraph.Definition.IsObjectReference(collection.Accessor, instance)
             ? descriptor.ValueType.IsValueType ? Activator.CreateInstance(descriptor.ValueType) : null : instance;
         ValidateCollectionValue(collection, value);
         if (value != null) AssetCollectionItemIdHelper.GenerateMissingItemIds(value);

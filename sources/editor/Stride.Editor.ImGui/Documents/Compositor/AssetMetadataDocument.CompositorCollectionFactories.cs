@@ -27,7 +27,7 @@ internal partial class AssetMetadataDocument
             else
             {
                 var instance = ObjectFactoryRegistry.NewInstance(type);
-                value = Stride.Core.Assets.AssetCollectionCommandRules.IsReferenceType(type) || AuthoringGraph.Definition.IsObjectReference(property.Accessor, instance) ? null : instance;
+                value = AssetCollectionCommandRules.IsReferenceType(type) || AuthoringGraph.Definition.IsObjectReference(property.Accessor, instance) ? null : instance;
             }
             if (value == null ? type.IsValueType && Nullable.GetUnderlyingType(type) == null || property.Rules?.NotNullItems == true
                 : !(Nullable.GetUnderlyingType(type) ?? type).IsInstanceOfType(value))
