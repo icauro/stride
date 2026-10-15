@@ -1,4 +1,4 @@
-// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
+﻿// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System;
@@ -12,6 +12,21 @@ namespace Stride.AssetCompiler
         {
             try
             {
+                if (args.Length == 2 && args[0] == "preview-texture") return TexturePreviewCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "preview-sprite-sheet") return SpriteSheetPreviewCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "preview-skybox") return SkyboxPreviewCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "preview-font") return FontPreviewCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "preview-media")
+                {
+                    // This entry bypasses PackageBuilderApp, whose ordinary
+                    // path registers MSBuild before constructing a native session.
+                    Stride.Core.Assets.PackageSessionPublicHelper.FindAndSetMSBuildVersion();
+                    return MediaPreviewCompiler.Run(args[1]);
+                }
+                if (args.Length == 2 && args[0] == "preview-thumbnail") return NativeThumbnailPreviewCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "preview-thumbnail-session") return NativeThumbnailWorkerServer.Run(args[1]);
+                if (args.Length == 2 && args[0] == "probe-media") return AssetMediaProbeCompiler.Run(args[1]);
+                if (args.Length == 2 && args[0] == "import-source") return AssetSourceImporter.Run(args[1]);
                 // Running first time? If yes, create nuget redirect package.
                 //var packageVersion = new PackageVersion(StrideVersion.NuGetVersion);
                 //if (PackageStore.Instance.IsDevelopmentStore)

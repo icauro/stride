@@ -83,6 +83,15 @@ namespace Stride.AssetCompiler
                     RemoveUnloadableObjects = true,
                     BuildConfiguration = builderOptions.ProjectConfiguration,
                 };
+                // Editor migration preparation owns original-file publication. Ordinary
+                // compiler callers retain the native automatic upgrade behavior.
+                if (builderOptions.ExtraCompileProperties != null && builderOptions.ExtraCompileProperties.TryGetValue("StrideEditorSkipPackageUpgrade", out var skipUpgrade)
+                    && bool.TryParse(skipUpgrade, out var editorSkipUpgrade) && editorSkipUpgrade)
+                    sessionLoadParameters.PackageUpgradeRequested = (_, _) =>
+                    {
+                        builderOptions.Logger.Error("STRIDE_EDITOR_NATIVE_MIGRATION_REQUIRED");
+                        return PackageUpgradeRequestedAnswer.DoNotUpgradeAny;
+                    };
 
                 // Load the root Package from the .sdbuild manifest chain.
                 if (string.IsNullOrEmpty(builderOptions.PackageManifestFile))

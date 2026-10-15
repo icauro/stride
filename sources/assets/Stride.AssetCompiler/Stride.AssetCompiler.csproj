@@ -9,6 +9,7 @@
     <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
     <!-- Lay graphics-API DLLs into per-API subfolders so the API is chosen at launch. -->
     <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
     <!-- Desktop-only tool: drop non-desktop runtimes/<rid>/ (mobile, ~250 MB) from the no-RID output. -->
     <StrideToolingHost>true</StrideToolingHost>
     <TargetFrameworks>$(StrideXplatEditorTargetFramework)</TargetFrameworks>
@@ -21,6 +22,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Mono.Options" />
+    <!-- Standalone thumbnail bootstrap owns its graphics state; do not expose it through editor references. -->
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\shared\SharedAssemblyInfo.cs">
@@ -52,6 +56,9 @@
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\engine\Stride.Assets.Models\Stride.Assets.Models.csproj" />
+    <ProjectReference Include="..\..\editor\Stride.Editor.Thumbnails\Stride.Editor.Thumbnails.csproj" />
+    <ProjectReference Include="..\..\editor\Stride.Assets.Thumbnails\Stride.Assets.Thumbnails.csproj" />
+    <ProjectReference Include="..\..\engine\Stride.Video\Stride.Video.csproj" />
     <ProjectReference Include="..\..\core\Stride.Core.MicroThreading\Stride.Core.MicroThreading.csproj" />
   </ItemGroup>
   <Import Project="..\..\shared\Stride.NuGetResolver.Targets\Stride.NuGetResolver.Targets.projitems" Label="Shared" />

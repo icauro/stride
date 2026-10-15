@@ -52,6 +52,7 @@ namespace Stride.AssetCompiler
 
         public int Run(string[] args)
         {
+            EditorAssetDiagnosticLog editorDiagnostics = null;
             clock = Stopwatch.StartNew();
 
             // TODO this is hardcoded. Check how to make this dynamic instead.
@@ -249,6 +250,7 @@ namespace Stride.AssetCompiler
                     globalLoggerOnGlobalMessageLogged = new ConsoleLogListener { LogMode = ConsoleLogMode.Always };
                     globalLoggerOnGlobalMessageLogged.TextFormatter = FormatLog;
                     GlobalLogger.GlobalMessageLogged += globalLoggerOnGlobalMessageLogged;
+                    editorDiagnostics = EditorAssetDiagnosticLog.Create();
                 }
 
                 if (mode == BuilderMode.AdoptCrashes)
@@ -493,6 +495,7 @@ namespace Stride.AssetCompiler
             }
             finally
             {
+                editorDiagnostics?.Dispose();
                 if (fileLogListener != null)
                 {
                     GlobalLogger.GlobalMessageLogged -= fileLogListener;
