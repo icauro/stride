@@ -20,6 +20,7 @@ namespace Stride.Core;
 public abstract class DisposeBase : IDisposable, IReferencable
 {
     private int refCount = 1;
+    private bool destructionFailed;
 
     /// <summary>
     ///   Gets a value indicating whether the object has been disposed.
@@ -64,11 +65,14 @@ public abstract class DisposeBase : IDisposable, IReferencable
     {
         OnAddReference();
 
-        var newCounter = Interlocked.Increment(ref refCount);
-        if (newCounter <= 1)
-            throw new InvalidOperationException(FrameworkResources.AddReferenceError);
-
-        return newCounter;
+        while (true)
+        {
+            var current = Volatile.Read(ref refCount);
+            if (current <= 0 || current == int.MaxValue || Volatile.Read(ref destructionFailed))
+                throw new InvalidOperationException(FrameworkResources.AddReferenceError);
+            if (Interlocked.CompareExchange(ref refCount, current + 1, current) == current)
+                return current + 1;
+        }
     }
 
     /// <inheritdoc/>
@@ -76,15 +80,29 @@ public abstract class DisposeBase : IDisposable, IReferencable
     {
         OnReleaseReference();
 
-        var newCounter = Interlocked.Decrement(ref refCount);
+        int newCounter;
+        while (true)
+        {
+            var current = Volatile.Read(ref refCount);
+            if (current <= 0) throw new InvalidOperationException(FrameworkResources.ReleaseReferenceError);
+            newCounter = current - 1;
+            if (Interlocked.CompareExchange(ref refCount, newCounter, current) == current) break;
+        }
         if (newCounter == 0)
         {
-            Destroy();
-            IsDisposed = true;
-        }
-        else if (newCounter < 0)
-        {
-            throw new InvalidOperationException(FrameworkResources.ReleaseReferenceError);
+            try
+            {
+                Destroy();
+                IsDisposed = true;
+            }
+            catch
+            {
+                // Retain the final owner's cleanup obligation. A partially
+                // destroyed object may retry Release, but cannot be borrowed.
+                Volatile.Write(ref destructionFailed, true);
+                Volatile.Write(ref refCount, 1);
+                throw;
+            }
         }
         return newCounter;
     }

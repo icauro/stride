@@ -29,7 +29,7 @@ namespace Stride.Core;
 /// <remarks>
 /// This class uses a dictionary to store services by their types. It is thread-safe.
 /// </remarks>
-public class ServiceRegistry : IServiceRegistry
+public class ServiceRegistry : IServiceRegistry, IDisposable
 {
     /// <summary>
     /// The key used to identify the <see cref="ServiceRegistry"/> instance.
@@ -37,6 +37,32 @@ public class ServiceRegistry : IServiceRegistry
     public static readonly PropertyKey<IServiceRegistry> ServiceRegistryKey = new(nameof(ServiceRegistryKey), typeof(IServiceRegistry));
 
     private readonly Dictionary<Type, object> registeredService = [];
+    private readonly IServiceRegistry? parent;
+    private readonly HashSet<Type> isolatedServices = [];
+    private bool parentAddedSubscribed, parentRemovedSubscribed, disposed;
+
+    public ServiceRegistry() { }
+
+    /// <summary>Creates a local service scope borrowing unshadowed services from its parent.</summary>
+    /// <remarks>Neither parent nor registered service objects are disposed by this registry.</remarks>
+    public ServiceRegistry(IServiceRegistry parent, IEnumerable<Type>? isolatedServices = null)
+    {
+        this.parent = parent ?? throw new ArgumentNullException(nameof(parent));
+        if (isolatedServices != null) this.isolatedServices.UnionWith(isolatedServices);
+        try
+        {
+            parent.ServiceAdded += ForwardAdded; parentAddedSubscribed = true;
+            parent.ServiceRemoved += ForwardRemoved; parentRemovedSubscribed = true;
+        }
+        catch { Dispose(); throw; }
+    }
+
+    private void ForwardAdded(object? sender, ServiceEventArgs args)
+    { if (CanBorrow(args.ServiceType)) OnServiceAdded(args); }
+    private void ForwardRemoved(object? sender, ServiceEventArgs args)
+    { if (CanBorrow(args.ServiceType)) OnServiceRemoved(args); }
+    private bool CanBorrow(Type type)
+    { lock (registeredService) return !disposed && !isolatedServices.Contains(type) && !registeredService.ContainsKey(type); }
 
     /// <inheritdoc />
     public event EventHandler<ServiceEventArgs>? ServiceAdded;
@@ -51,11 +77,13 @@ public class ServiceRegistry : IServiceRegistry
         var type = typeof(T);
         lock (registeredService)
         {
+            if (disposed) return null;
             if (registeredService.TryGetValue(type, out var service))
                 return (T)service;
+            if (isolatedServices.Contains(type)) return null;
         }
 
-        return null;
+        return parent?.GetService<T>();
     }
 
     /// <inheritdoc />
@@ -79,6 +107,7 @@ public class ServiceRegistry : IServiceRegistry
 
         lock (registeredService)
         {
+            ObjectDisposedException.ThrowIf(disposed, this);
             if (!registeredService.TryAdd(serviceType, service))
                 throw new ArgumentException("Service is already registered with this type", nameof(serviceType));
         }
@@ -108,7 +137,7 @@ public class ServiceRegistry : IServiceRegistry
     {
         lock (registeredService)
         {
-            if (ReferenceEquals(GetService<T>(), serviceObject))
+            if (registeredService.TryGetValue(typeof(T), out var local) && ReferenceEquals(local, serviceObject))
             {
                 RemoveService<T>();
                 return true;
@@ -125,6 +154,7 @@ public class ServiceRegistry : IServiceRegistry
     {
         lock (registeredService)
         {
+            ObjectDisposedException.ThrowIf(disposed, this);
             var t = GetService<T>();
             if (t is null)
             {
@@ -144,5 +174,17 @@ public class ServiceRegistry : IServiceRegistry
     private void OnServiceRemoved(ServiceEventArgs e)
     {
         ServiceRemoved?.Invoke(this, e);
+    }
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        if (parentAddedSubscribed) { parent!.ServiceAdded -= ForwardAdded; parentAddedSubscribed = false; }
+        if (parentRemovedSubscribed) { parent!.ServiceRemoved -= ForwardRemoved; parentRemovedSubscribed = false; }
+        lock (registeredService)
+        {
+            registeredService.Clear(); disposed = true;
+            ServiceAdded = null; ServiceRemoved = null;
+        }
     }
 }
