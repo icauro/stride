@@ -1,0 +1,164 @@
+﻿[
+    {
+        "assembly":  "Stride.Graphics",
+        "type":  "Stride.Graphics.Font.FontStyle",
+        "value":  "Bold",
+        "icon":  "enum-stride-graphics-stride-graphics-font-fontstyle-bold"
+    },
+    {
+        "assembly":  "Stride.Graphics",
+        "type":  "Stride.Graphics.Font.FontStyle",
+        "value":  "Italic",
+        "icon":  "enum-stride-graphics-stride-graphics-font-fontstyle-italic"
+    },
+    {
+        "assembly":  "Stride.Particles",
+        "type":  "Stride.Particles.Components.StateControl",
+        "value":  "Play",
+        "icon":  "enum-stride-particles-stride-particles-components-statecontrol-play"
+    },
+    {
+        "assembly":  "Stride.Particles",
+        "type":  "Stride.Particles.Components.StateControl",
+        "value":  "Pause",
+        "icon":  "enum-stride-particles-stride-particles-components-statecontrol-pause"
+    },
+    {
+        "assembly":  "Stride.Particles",
+        "type":  "Stride.Particles.Components.StateControl",
+        "value":  "Stop",
+        "icon":  "enum-stride-particles-stride-particles-components-statecontrol-stop"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Sphere",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-sphere"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Cube",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-cube"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Cylinder",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-cylinder"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Torus",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-torus"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Plane",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-plane"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Teapot",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-teapot"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Cone",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-cone"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.Preview.MaterialPreviewPrimitive",
+        "value":  "Capsule",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-preview-materialpreviewprimitive-capsule"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.Transformation",
+        "value":  "Translation",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformation-translation"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.Transformation",
+        "value":  "Rotation",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformation-rotation"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.Transformation",
+        "value":  "Scale",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformation-scale"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "Android",
+        "icon":  "enum-stride-core-stride-core-platformtype-android"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "iOS",
+        "icon":  "enum-stride-core-stride-core-platformtype-ios"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "Linux",
+        "icon":  "enum-stride-core-stride-core-platformtype-linux"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "macOS",
+        "icon":  "enum-stride-core-stride-core-platformtype-macos"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "Windows",
+        "icon":  "enum-stride-core-stride-core-platformtype-windows"
+    },
+    {
+        "assembly":  "Stride.Core",
+        "type":  "Stride.Core.PlatformType",
+        "value":  "UWP",
+        "icon":  "enum-stride-core-stride-core-platformtype-uwp"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.TransformationSpace",
+        "value":  "WorldSpace",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformationspace-worldspace"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.TransformationSpace",
+        "value":  "ObjectSpace",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformationspace-objectspace"
+    },
+    {
+        "assembly":  "Stride.Assets.Presentation.Wpf",
+        "type":  "Stride.Assets.Presentation.AssetEditors.GameEditor.TransformationSpace",
+        "value":  "ViewSpace",
+        "icon":  "enum-stride-assets-presentation-wpf-stride-assets-presentation-asseteditors-gameeditor-transformationspace-viewspace"
+    },
+    {
+        "assembly":  "Stride.Core.Assets",
+        "type":  "Stride.Core.Assets.ProjectType",
+        "value":  "Executable",
+        "icon":  "enum-stride-core-assets-stride-core-assets-projecttype-executable"
+    },
+    {
+        "assembly":  "Stride.Core.Assets",
+        "type":  "Stride.Core.Assets.ProjectType",
+        "value":  "Library",
+        "icon":  "enum-stride-core-assets-stride-core-assets-projecttype-library"
+    }
+]

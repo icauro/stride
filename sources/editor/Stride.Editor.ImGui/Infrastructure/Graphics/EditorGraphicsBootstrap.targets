@@ -1,0 +1,72 @@
+<Project>
+  <!-- The upstream assembly scan precedes ordinary C# module initializers. Keep
+       this host's resolver ahead of that scan without changing shared processing. -->
+  <UsingTask TaskName="EditorPrependGraphicsBootstrap" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <AssemblyPath Required="true" />
+      <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Reference Include="$(StrideAssemblyProcessorBasePath)Mono.Cecil.dll" />
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="Mono.Cecil" />
+      <Using Namespace="Mono.Cecil.Cil" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var path = Path.GetFullPath(AssemblyPath);
+        var symbols = File.Exists(Path.ChangeExtension(path, ".pdb"));
+        using (var resolver = new DefaultAssemblyResolver())
+        {
+        foreach (var directory in resolver.GetSearchDirectories()) resolver.RemoveSearchDirectory(directory);
+        foreach (var directory in References.Select(r => Path.GetDirectoryName(r.GetMetadata("FullPath")))
+            .Where(d => !string.IsNullOrEmpty(d)).Distinct(StringComparer.OrdinalIgnoreCase))
+            resolver.AddSearchDirectory(directory);
+        using (var assembly = AssemblyDefinition.ReadAssembly(path,
+            new ReaderParameters { InMemory = true, ReadSymbols = symbols, AssemblyResolver = resolver }))
+        {
+            if (assembly.Name.Name != "Stride.Editor.ImGui")
+                throw new InvalidOperationException("Graphics bootstrap may only modify the ImGui host.");
+            if (assembly.Name.HasPublicKey)
+                throw new InvalidOperationException("Signed ImGui hosts require bootstrap insertion before signing.");
+            var bootstrap = assembly.MainModule.Types.Single(t => t.FullName == "Stride.Editor.ImGui.EditorGraphicsBackend")
+                .Methods.Single(m => m.Name == "InitializeResolverBeforeAssemblyScan" && m.IsStatic
+                    && m.Parameters.Count == 0 && m.ReturnType.FullName == "System.Void");
+            var constructor = assembly.MainModule.Types.Single(t => t.Name == "<Module>")
+                .Methods.Single(m => m.Name == ".cctor");
+            var calls = constructor.Body.Instructions.Where(i => i.OpCode == OpCodes.Call
+                && i.Operand is MethodReference && ((MethodReference)i.Operand).FullName == bootstrap.FullName).ToArray();
+            if (calls.Length == 1 && calls[0] == constructor.Body.Instructions[0]) return true;
+            if (calls.Length != 0) throw new InvalidOperationException("Unexpected duplicate or reordered graphics bootstrap.");
+            if (!constructor.Body.Instructions.Any(i => i.Operand is MethodReference
+                && ((MethodReference)i.Operand).DeclaringType.FullName == "Stride.Core.Serialization.AssemblyScan.Stride_Editor_ImGuiAssemblyScan"))
+                throw new InvalidOperationException("Expected processed ImGui assembly scan was not found.");
+            constructor.Body.GetILProcessor().InsertBefore(constructor.Body.Instructions[0], Instruction.Create(OpCodes.Call, bootstrap));
+            using (var image = new MemoryStream())
+            using (var pdb = new MemoryStream())
+            {
+                assembly.Write(image, new WriterParameters
+                {
+                    WriteSymbols = symbols,
+                    SymbolStream = symbols ? pdb : null,
+                    SymbolWriterProvider = symbols ? new PortablePdbWriterProvider() : null,
+                });
+                // InMemory readers have released both original files. Keep the output
+                // PDB paired with the rewritten image for normal native debugging.
+                File.WriteAllBytes(path, image.ToArray());
+                if (symbols) File.WriteAllBytes(Path.ChangeExtension(path, ".pdb"), pdb.ToArray());
+            }
+        }
+        }
+        return true;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="EditorOrderGraphicsBootstrap" AfterTargets="StrideRunAssemblyProcessor"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(StrideAssemblyProcessor)' == 'true'">
+    <EditorPrependGraphicsBootstrap AssemblyPath="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', '$(TargetName)$(TargetExt)'))"
+                                   References="@(ReferencePath)" />
+  </Target>
+</Project>

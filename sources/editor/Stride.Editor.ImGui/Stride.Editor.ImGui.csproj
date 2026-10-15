@@ -1,0 +1,186 @@
+<Project>
+  <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'Directory.Build.props'))/sdk/Stride.Build.Sdk/Sdk/Sdk.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <StrideGraphicsApi Condition="'$(StrideGraphicsApi)' == ''">Direct3D11</StrideGraphicsApi>
+    <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <DefineConstants>$(DefineConstants);STRIDE_NUGET_RESOLVER_UI;STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
+    <StrideAssemblyProcessorOptions>--auto-module-initializer --serialization</StrideAssemblyProcessorOptions>
+  </PropertyGroup>
+  <Import Project="../Stride.Core.MostRecentlyUsedFiles/Stride.Core.MostRecentlyUsedFiles.projitems" Label="Shared" />
+  <ItemGroup>
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="Infrastructure/Graphics/Shared/GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="Infrastructure/Graphics/Shared/GraphicsApiHostResolver.cs" />
+    <Compile Include="../../shared/AttachedChildProcessJob.cs" Link="Projects/Debugging/Shared/AttachedChildProcessJob.cs" />
+    <Compile Include="../../engine/Stride.UI.Editor/UIRenderFeatureProvider.cs" Link="Infrastructure/Plugins/Shared/UIRenderFeatureProvider.cs" />
+    <Compile Include="../../engine/Stride.Particles.Editor/ParticleRenderFeatureProvider.cs" Link="Infrastructure/Plugins/Shared/ParticleRenderFeatureProvider.cs" />
+    <Compile Include="../../engine/Stride.SpriteStudio.Editor/SpriteStudioRenderFeatureProvider.cs" Link="Infrastructure/Plugins/Shared/SpriteStudioRenderFeatureProvider.cs" />
+    <PackageReference Include="Hexa.NET.ImGui" />
+    <PackageReference Include="DotRecast.Detour" />
+    <PackageReference Include="DotRecast.Recast.Toolset" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/CategoryData.cs" Link="Properties/Shared/CategoryData.cs" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
+    <PackageReference Include="SSH.NET" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <ProjectReference Include="../../engine/Stride.Engine/Stride.Engine.csproj" />
+    <ProjectReference Include="../../engine/Stride.Debugger/Stride.Debugger.csproj" />
+    <ProjectReference Include="../../engine/Stride.UI/Stride.UI.csproj" />
+    <ProjectReference Include="../../engine/Stride.Particles/Stride.Particles.csproj" />
+    <ProjectReference Include="../../engine/Stride.Navigation/Stride.Navigation.csproj" />
+    <ProjectReference Include="../../engine/Stride.Physics/Stride.Physics.csproj" />
+    <ProjectReference Include="../../engine/Stride.Voxels/Stride.Voxels.csproj" />
+    <ProjectReference Include="../../engine/Stride.Video/Stride.Video.csproj" />
+    <ProjectReference Include="../../engine/Stride.SpriteStudio.Runtime/Stride.SpriteStudio.Runtime.csproj" />
+    <ProjectReference Include="../../engine/Stride.SpriteStudio.Assets/Stride.SpriteStudio.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Assets/Stride.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Assets.Models/Stride.Assets.Models.csproj" />
+    <ProjectReference Include="../../engine/Stride.Physics.Assets/Stride.Physics.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.BepuPhysics/Stride.BepuPhysics.Assets/Stride.BepuPhysics.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Video.Assets/Stride.Video.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.UI.Assets/Stride.UI.Assets.csproj" />
+    <ProjectReference Include="../../engine/Stride.Audio.Assets/Stride.Audio.Assets.csproj" />
+    <ProjectReference Include="../../core/Stride.Core.Design/Stride.Core.Design.csproj" />
+    <ProjectReference Include="../../core/Stride.Core.Translation/Stride.Core.Translation.csproj" />
+    <ProjectReference Include="../Stride.Editor.Thumbnails/Stride.Editor.Thumbnails.csproj" />
+    <ProjectReference Include="../Stride.Editor.Previews/Stride.Editor.Previews.csproj" />
+    <ProjectReference Include="../Stride.Assets.Thumbnails/Stride.Assets.Thumbnails.csproj" />
+    <ProjectReference Include="../../tools/Stride.ConnectionRouter/Stride.ConnectionRouter.csproj" />
+    <ProjectReference Include="../../tools/Stride.EffectCompilerServer/Stride.EffectCompilerServer.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="../../presentation/Stride.Core.Quantum/Stride.Core.Quantum.csproj" />
+    <ProjectReference Include="../../assets/Stride.Core.Assets.Quantum/Stride.Core.Assets.Quantum.csproj" />
+    <ProjectReference Include="../../presentation/Stride.Core.Presentation.Quantum/Stride.Core.Presentation.Quantum.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Resources/Icons/*.png" Link="Icons/%(Filename)%(Extension)" TargetPath="Icons/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../presentation/Stride.Core.Presentation.Wpf/Resources/Images/error-32.png" Link="Icons/dialog-error.png" TargetPath="Icons/dialog-error.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../presentation/Stride.Core.Presentation.Wpf/Resources/Images/info-32.png" Link="Icons/dialog-information.png" TargetPath="Icons/dialog-information.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../presentation/Stride.Core.Presentation.Wpf/Resources/Images/question-32.png" Link="Icons/dialog-question.png" TargetPath="Icons/dialog-question.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Resources/Icons/native-enum-images.json" Link="Icons/native-enum-images.json" TargetPath="Icons/native-enum-images.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/ColorPicker.cur" Link="Icons/sprite-color-picker.cur" TargetPath="Icons/sprite-color-picker.cur" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/MagicWand.cur" Link="Icons/sprite-magic-wand.cur" TargetPath="Icons/sprite-magic-wand.cur" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Compile Include="../../engine/Stride.UI.Editor/Game/UILayoutHelper.cs" Link="Features/UI/Shared/UILayoutHelper.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/ViewModel/IResizingTarget.cs" Link="Features/UI/Shared/IResizingTarget.cs" />
+    <Content Include="../../engine/Stride.Audio.Editor/Resources/SoundThumbnail.png" Link="Icons/thumbnail-sound.png" TargetPath="Icons/thumbnail-sound.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../engine/Stride.Video.Editor/Resources/VideoThumbnail.png" Link="Icons/thumbnail-video.png" TargetPath="Icons/thumbnail-video.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/SkeletonThumbnail.png" Link="Icons/thumbnail-skeleton.png" TargetPath="Icons/thumbnail-skeleton.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/AnimationThumbnail.png" Link="Icons/thumbnail-animation.png" TargetPath="Icons/thumbnail-animation.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../engine/Stride.UI.Editor/Resources/UILibraryThumbnail.png" Link="Icons/thumbnail-ui-library.png" TargetPath="Icons/thumbnail-ui-library.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Wpf/Resources/appbar.checkmark.cross.png" Link="Icons/thumbnail-broken.png" TargetPath="Icons/thumbnail-broken.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Wpf/Resources/appbar.page.delete.png" Link="Icons/thumbnail-no-source.png" TargetPath="Icons/thumbnail-no-source.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Wpf/Resources/ThumbnailDependencyError.png" Link="Icons/thumbnail-error.png" TargetPath="Icons/thumbnail-error.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Wpf/Resources/ThumbnailDependencyWarning.png" Link="Icons/thumbnail-warning.png" TargetPath="Icons/thumbnail-warning.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/SkyboxThumbnail.png" Link="Thumbnails/SkyboxThumbnail.png" TargetPath="Thumbnails/SkyboxThumbnail.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/SkyboxThumbnail.png" Link="Icons/thumbnail-skybox.png" TargetPath="Icons/thumbnail-skybox.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Editor.Wpf/Resources/appbar.resource.png" Link="Icons/thumbnail-user-asset.png" TargetPath="Icons/thumbnail-user-asset.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Core.Assets.Editor.Wpf/Resources/Icons/teapot-24.png" Link="Icons/reimport-effects.png" TargetPath="Icons/reimport-effects.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Core.Assets.Editor.Wpf/Resources/Images/default-template-icon.png" Link="Icons/template-default.png" TargetPath="Icons/template-default.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/sphere.png" Link="Icons/material-primitive-sphere.png" TargetPath="Icons/material-primitive-sphere.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/cube.png" Link="Icons/material-primitive-cube.png" TargetPath="Icons/material-primitive-cube.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/cylinder.png" Link="Icons/material-primitive-cylinder.png" TargetPath="Icons/material-primitive-cylinder.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/torus.png" Link="Icons/material-primitive-torus.png" TargetPath="Icons/material-primitive-torus.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/plane.png" Link="Icons/material-primitive-plane.png" TargetPath="Icons/material-primitive-plane.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/teapot.png" Link="Icons/material-primitive-teapot.png" TargetPath="Icons/material-primitive-teapot.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/cone.png" Link="Icons/material-primitive-cone.png" TargetPath="Icons/material-primitive-cone.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Icons/capsule.png" Link="Icons/material-primitive-capsule.png" TargetPath="Icons/material-primitive-capsule.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../data/images/Logo/stride-logo-readme-white.png" Link="Icons/about-logo.png" TargetPath="Icons/about-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../../LICENSE.md;../../../THIRD PARTY.md;../../../BACKERS.md" Link="%(Filename)%(Extension)" TargetPath="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../engine/**/*.sdsl;../../engine/**/*.sdfx" Exclude="../../engine/**/bin/**;../../engine/**/obj/**" Link="Shaders/Engine/%(RecursiveDir)%(Filename)%(Extension)" TargetPath="Shaders/Engine/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Stride.GameStudio/Helpers/StrideGameStudio.cs" Link="Properties/Shared/StrideGameStudio.cs" />
+    <Compile Include="../../shared/SharedAssemblyInfo.cs" Link="Properties/SharedAssemblyInfo.cs" />
+    <Compile Include="../../presentation/Stride.Core.Presentation.Quantum/Presenters/NodePresenterCombination.cs" Link="Properties/Shared/NodePresenterCombination.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/DisplayAttributeNodeUpdater.cs" Link="Properties/Shared/DisplayAttributeNodeUpdater.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/NumericValueNodeUpdater.cs" Link="Properties/Shared/NumericValueNodeUpdater.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Keys/MaterialData.cs" Link="Properties/Shared/MaterialData.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Commands/AbstractNodeEntry.cs" Link="Properties/Shared/AbstractNodeEntry.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/SupportedLanguage.cs" Link="Infrastructure/Preferences/Shared/SupportedLanguage.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Commands/AbstractNodeType.cs" Link="Properties/Shared/AbstractNodeType.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Commands/AbstractNodeTypeGroup.cs" Link="Properties/Shared/AbstractNodeTypeGroup.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Commands/AbstractNodeValue.cs" Link="Properties/Shared/AbstractNodeValue.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/AbstractNodeEntryData.cs" Link="Properties/Shared/AbstractNodeEntryData.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/DictionaryNodeUpdater.cs" Link="Properties/Shared/DictionaryNodeUpdater.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Updaters/InlineMemberNodeUpdater.cs" Link="Properties/Shared/InlineMemberNodeUpdater.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Updaters/FXAAEffectNodeUpdater.cs" Link="Properties/Shared/FXAAEffectNodeUpdater.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/CameraComponentNodeRules.cs" Link="Properties/Shared/CameraComponentNodeRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/ModelMaterialNodeRules.cs" Link="Properties/Shared/ModelMaterialNodeRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/CameraSlotChoices.cs" Link="Properties/Shared/CameraSlotChoices.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/ParticleTransformNodeRules.cs" Link="Properties/Shared/ParticleTransformNodeRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/GameSettingsConfigurationRules.cs" Link="Properties/Shared/GameSettingsConfigurationRules.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/NumericData.cs" Link="Properties/Shared/NumericData.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/InlineData.cs" Link="Properties/Shared/InlineData.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Keys/DisplayData.cs" Link="Properties/Shared/DisplayData.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/AxialGizmo.cs" Link="Features/Scene/Gizmos/Shared/AxialGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/SpaceMarker.cs" Link="Features/Scene/Gizmos/Shared/SpaceMarker.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/CameraOrientationGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GizmoViewportRenderer.cs" Link="Features/Scene/Gizmos/Shared/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GridGizmoBase.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/ViewportGridGizmo.cs" Link="Features/Scene/Gizmos/Shared/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/BillboardingGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/CameraGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightDirectionalGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightPointGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightSpotGizmo.cs;../../engine/Stride.Audio.Editor/AudioEmitterGizmo.cs;../../engine/Stride.Audio.Editor/AudioListenerGizmo.cs" Link="Features/Scene/Gizmos/Shared/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../Stride.Assets.Presentation.Wpf/Resources/Gizmos/*.png" LogicalName="Stride.Editor.ImGui.Gizmos.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../engine/Stride.Audio.Editor/Resources/*Gizmo.png;../../engine/Stride.Particles.Editor/Resources/ParticleGizmo.png" LogicalName="Stride.Editor.ImGui.Gizmos.%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/ViewModel/ColorPaletteViewModel.cs" Link="Features/Inspector/Shared/ColorPaletteViewModel.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Quantum/NodePresenters/Rules/InlineMemberRules.cs" Link="Properties/Shared/InlineMemberRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/SpriteSheetNodeRules.cs" Link="Properties/Shared/SpriteSheetNodeRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/NodePresenters/Rules/NavigationNodeRules.cs" Link="Properties/Shared/NavigationNodeRules.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/PackageSceneSettings.cs" Link="Features/Scene/Shared/PackageSceneSettings.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/HighlightRenderFeature.cs" Link="Features/Scene/Materials/Shared/HighlightRenderFeature.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/HighlightRenderState.cs" Link="Features/Scene/Materials/Shared/HighlightRenderState.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/EntityHierarchyEditor/EditorRenderMode.cs" Link="Features/Scene/Rendering/Shared/EditorRenderMode.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/SceneEditor/MaterialFilterRenderFeature.cs" Link="Features/Scene/Rendering/Shared/MaterialFilterRenderFeature.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/GameEditor/RenderMode.cs" Link="Features/Scene/Shared/RenderMode.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/CopyPasteData.cs" Link="Documents/Scene/Shared/CopyPasteData.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/CopyPasteService.cs" Link="Documents/Scene/Shared/CopyPasteService.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/ICopyPasteService.cs" Link="Documents/Scene/Shared/ICopyPasteService.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/ICopyProcessor.cs" Link="Documents/Scene/Shared/ICopyProcessor.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/IPasteProcessor.cs" Link="Documents/Scene/Shared/IPasteProcessor.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/IAssetPostPasteProcessor.cs" Link="Documents/Scene/Shared/IAssetPostPasteProcessor.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/IPasteResult.cs" Link="Documents/Scene/Shared/IPasteResult.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/Services/CopyPaste/PasteResult.cs" Link="Documents/Scene/Shared/PasteResult.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/ViewModel/CopyPasteProcessors/PasteProcessorBase.cs" Link="Documents/Scene/Shared/PasteProcessorBase.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/ViewModel/CopyPasteProcessors/AssetPropertyPasteProcessor.cs" Link="Properties/Shared/AssetPropertyPasteProcessor.cs" />
+    <Compile Include="../Stride.Core.Assets.Editor.Wpf/ViewModel/CopyPasteProcessors/AssetCompositeHierarchyPasteProcessor.cs" Link="Documents/Scene/Shared/AssetCompositeHierarchyPasteProcessor.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/ViewModel/CopyPasteProcessors/EntityHierarchyPasteProcessor.cs" Link="Documents/Scene/Shared/EntityHierarchyPasteProcessor.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/TransformationGizmo.cs" Link="Features/Scene/Gizmos/Shared/TransformationGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/BackgroundGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/ScriptGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/NodeLinkGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/FallbackGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/ModelGizmo.cs;../../engine/Stride.Physics.Editor/NavigationBoundingBoxGizmo.cs;../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightShaftsVolumeGizmo.cs" Link="Features/Scene/Gizmos/Shared/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/AxisTransformationGizmo.cs" Link="Features/Scene/Gizmos/Shared/AxisTransformationGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/LightProbeGizmo.cs;../../engine/Stride.Particles.Editor/ParticleSystemGizmo.cs;../../engine/Stride.Voxels.Editor/VoxelVolumeGizmo.cs;../../engine/Stride.Physics.Editor/PhysicsGizmo.cs;../../engine/Stride.Physics.Editor/PhysicsConstraintGizmo.cs" Link="Features/Scene/Gizmos/Shared/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeRenderer.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShape.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeSphere.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeCube.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeCone.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeCylinder.cs;../Stride.Assets.Presentation.Wpf/DebugShapes/DebugShapeTorus.cs" Link="Features/Scene/Gizmos/Shared/DebugShapes/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/TranslationGizmo.cs" Link="Features/Scene/Gizmos/Shared/TranslationGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/RotationGizmo.cs" Link="Features/Scene/Gizmos/Shared/RotationGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/ScaleGizmo.cs" Link="Features/Scene/Gizmos/Shared/ScaleGizmo.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GizmoTransformationAxes.cs" Link="Features/Scene/Gizmos/Shared/GizmoTransformationAxes.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GizmoUniformColorMaterial.cs" Link="Features/Scene/Gizmos/Shared/GizmoUniformColorMaterial.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GizmoEmissiveColorMaterial.cs" Link="Features/Scene/Gizmos/Shared/GizmoEmissiveColorMaterial.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/Gizmos/GizmoShaderMaterial.cs" Link="Features/Scene/Gizmos/Shared/GizmoShaderMaterial.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/GameEditor/Game/EditorGameHelper.cs" Link="Features/Scene/Gizmos/Shared/EditorGameHelper.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/GameEditor/Game/AlphaBlendPipelineProcessor.cs" Link="Features/Scene/Gizmos/Shared/AlphaBlendPipelineProcessor.cs" />
+    <Compile Include="../Stride.Assets.Presentation.Wpf/AssetEditors/GameEditor/TransformationSpace.cs" Link="Features/Scene/Gizmos/Shared/TransformationSpace.cs" />
+  </ItemGroup>
+  <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk/Sdk/Sdk.targets" />
+  <Import Project="Infrastructure/Graphics/EditorGraphicsBootstrap.targets" />
+  <Import Project="Projects/Deployment/EditorGraphicsDeployment.targets" />
+  <Import Project="Infrastructure/Presentation/EditorLocalization.targets" />
+  <Import Project="../../../build/native/editor-imgui/Stride.Editor.NativeImGui.targets" />
+  <Import Project="../../shared/Stride.Core.ShellHelper/Stride.Core.ShellHelper.projitems" Label="Shared" />
+  <ItemGroup>
+    <Compile Include="../../shared/Process/AndroidDeviceEnumerator.cs" Link="Projects/Deployment/Shared/AndroidDeviceEnumerator.cs" />
+    <Compile Include="../../core/Stride.Core.AssemblyProcessor/Utilities.cs" Link="Projects/Templates/Shared/Utilities.cs" />
+  </ItemGroup>
+  <Import Project="Projects/Development/EditorHotReload.targets" Condition="'$(EditorHotReloadHost)' == 'true'" />
+  <ItemGroup>
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/GameSettingsThumbnail.png" Link="Icons/thumbnail-game-settings.png" TargetPath="Icons/thumbnail-game-settings.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/GraphicsCompositorThumbnail.png" Link="Icons/thumbnail-graphics-compositor.png" TargetPath="Icons/thumbnail-graphics-compositor.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/SceneThumbnail.png" Link="Icons/thumbnail-scene.png" TargetPath="Icons/thumbnail-scene.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../Stride.Assets.Presentation.Wpf/Resources/Thumbnails/ScriptSourceFileThumbnail.png" Link="Icons/thumbnail-script-source.png" TargetPath="Icons/thumbnail-script-source.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
+
+
+

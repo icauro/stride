@@ -1,0 +1,38 @@
+<Project>
+  <ItemGroup>
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/fr/*.fr.po" Culture="fr" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/ja/*.ja.po" Culture="ja" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/es/*.es.po" Culture="es" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/de/*.de.po" Culture="de" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/ru/*.ru.po" Culture="ru" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/it/*.it.po" Culture="it" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/ko/*.ko.po" Culture="ko" />
+    <_EditorLocalizationInput Include="$(StrideRoot)sources/localization/zh_HANS-CN/*.zh_HANS-CN.po" Culture="zh-Hans" />
+  </ItemGroup>
+  <Target Name="EditorCollectLocalizationCatalogs">
+    <ItemGroup>
+      <_EditorLocalizationInput Update="@(_EditorLocalizationInput)">
+        <ResourceBase>$([System.Text.RegularExpressions.Regex]::Replace('%(_EditorLocalizationInput.Filename)', '\.[^.]+$', ''))</ResourceBase>
+      </_EditorLocalizationInput>
+    </ItemGroup>
+  </Target>
+  <Target Name="EditorCompileLocalizationCatalog" DependsOnTargets="EditorCollectLocalizationCatalogs"
+          Inputs="%(_EditorLocalizationInput.Identity);$(StrideRoot)deps/Gettext.Net/GNU.Gettext.Msgfmt.exe;$(StrideRoot)deps/Gettext.Net/GNU.Gettext.dll"
+          Outputs="$(IntermediateOutputPath)editor-localization/%(_EditorLocalizationInput.Culture)/%(_EditorLocalizationInput.ResourceBase).Messages.resources.dll">
+    <Exec Command="&quot;$(StrideRoot)deps/Gettext.Net/GNU.Gettext.Msgfmt.exe&quot; -r &quot;%(_EditorLocalizationInput.ResourceBase)&quot; -d &quot;$(IntermediateOutputPath)editor-localization&quot; -l &quot;%(_EditorLocalizationInput.Culture)&quot; -L &quot;$(StrideRoot)deps/Gettext.Net&quot; &quot;%(_EditorLocalizationInput.Identity)&quot;" />
+  </Target>
+  <Target Name="EditorCopyLocalizationCatalogs" AfterTargets="CopyFilesToOutputDirectory" DependsOnTargets="EditorCompileLocalizationCatalog">
+    <ItemGroup><_EditorLocalizationOutput Include="$(IntermediateOutputPath)editor-localization/**/*.Messages.resources.dll" /></ItemGroup>
+    <Copy SourceFiles="@(_EditorLocalizationOutput)" DestinationFiles="@(_EditorLocalizationOutput->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <ItemGroup><FileWrites Include="@(_EditorLocalizationOutput->'$(OutDir)%(RecursiveDir)%(Filename)%(Extension)')" /></ItemGroup>
+  </Target>
+  <Target Name="EditorPublishLocalizationCatalogs" AfterTargets="ComputeFilesToPublish" BeforeTargets="GenerateSingleFileBundle" DependsOnTargets="EditorCompileLocalizationCatalog">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(IntermediateOutputPath)editor-localization/**/*.Messages.resources.dll">
+        <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+</Project>
