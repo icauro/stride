@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <StrideBuildTags>WindowsTools</StrideBuildTags>
-    <DefineConstants>STRIDE_NUGET_RESOLVER_UI;$(DefineConstants)</DefineConstants>
+    <DefineConstants>STRIDE_NUGET_RESOLVER_UI;STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

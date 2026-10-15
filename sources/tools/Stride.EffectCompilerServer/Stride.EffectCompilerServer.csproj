@@ -9,8 +9,15 @@
     <!-- NU5128: an app package intentionally has no lib/, but still declares its dependency closure. -->
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
+    <StrideAssemblyProcessorOptions>--auto-module-initializer</StrideAssemblyProcessorOptions>
+    <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <!-- Keep this service's linked bootstrap private when its assembly is referenced by GameStudio. -->
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../shared/EditorServiceGraphicsBootstrap.cs" Link="EditorServiceGraphicsBootstrap.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
     <PackageReference Include="Mono.Options" />
   </ItemGroup>
   <ItemGroup>
@@ -24,4 +31,5 @@
   </ItemGroup>
   <Import Project="..\..\shared\Stride.NuGetResolver.Targets\Stride.NuGetResolver.Targets.projitems" Label="Shared" />
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
+  <Import Project="../../shared/EditorServiceDeployment.targets" />
 </Project>

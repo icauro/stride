@@ -8,7 +8,9 @@
   </PropertyGroup>
   <!-- Runtime dependencies -->
   <ItemGroup>
+    <PackageVersion Include="Hexa.NET.ImGui" Version="2.2.9" />
     <PackageVersion Include="BepuPhysics" Version="2.5.0-beta.28" />
+    <PackageVersion Include="BepuUtilities" Version="2.5.0-beta.28" />
     <PackageVersion Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
     <PackageVersion Include="DotRecast.Core" Version="2025.2.1" />
     <PackageVersion Include="DotRecast.Detour" Version="2025.2.1" />
@@ -92,6 +94,7 @@
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <PackageVersion Include="System.Reactive.Linq" Version="6.1.0" />
     <PackageVersion Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="9.0.11" />
     <PackageVersion Include="System.Text.Encoding.CodePages" Version="10.0.0" />
     <PackageVersion Include="System.Text.Encodings.Web" Version="10.0.0" />
     <PackageVersion Include="System.Text.Json" Version="10.0.8" />

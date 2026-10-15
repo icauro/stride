@@ -82,6 +82,29 @@
                 continue;
             }
 
+            // A global OutDir can flatten a project-reference output while its
+            // actual reference assembly still identifies the compiled API.
+            // Use that native build certificate, never the requested API alone.
+            if (item.GetMetadata("ReferenceSourceTarget") == "ProjectReference")
+            {
+                var reference = item.GetMetadata("ReferenceAssembly");
+                var referenceDir = System.IO.Path.GetDirectoryName(reference);
+                var apiDir = referenceDir != null && System.IO.Path.GetFileName(referenceDir) == "ref"
+                    ? System.IO.Path.GetDirectoryName(referenceDir) : null;
+                var compiledApi = apiDir == null ? null : System.IO.Path.GetFileName(apiDir);
+                if (compiledApi != null && known.Contains(compiledApi))
+                {
+                    if (apis.Length != 1 || !System.String.Equals(apis[0], compiledApi, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        Log.LogError("A flattened graphics project output cannot supply multiple API variants. Preserve separate per-API output paths, or request only its actual compiled API: " + compiledApi);
+                        continue;
+                    }
+                    flat.Add(item);
+                    stageInto(path, compiledApi);
+                    continue;
+                }
+            }
+
             // (2) API-exclusive interop/native package: route this single file into its one API folder.
             // Match by NuGet package id (package-origin copy-local) or, as a fallback, by file name
             // (package id == assembly name for these interop packages).
@@ -136,6 +159,17 @@
           DestinationFiles="@(_StrideMultiApiStaged->'$(OutDir)%(StageSubPath)')"
           SkipUnchangedFiles="true"
           OverwriteReadOnlyFiles="true" />
+    <!-- An incremental host can still contain a flat DLL from an earlier layout.
+         The default load-context probe sees that file before Resolving, so it
+         would bypass the selected API and mix assembly generations. Remove only
+         filenames certified by this build's routed copy-local items, after the
+         copies succeed (a flattened source output may itself be in OutDir). -->
+    <ItemGroup>
+      <_StrideMultiApiObsoleteFlat Include="@(_StrideMultiApiFlat->'$(OutDir)%(Filename)%(Extension)')" />
+      <_StrideMultiApiObsoleteFlat Include="@(_StrideMultiApiFlat->'$(OutDir)%(Filename).pdb')" Condition="'%(_StrideMultiApiFlat.Extension)' == '.dll'" />
+      <_StrideMultiApiObsoleteFlat Include="@(_StrideMultiApiFlat->'$(OutDir)%(Filename).xml')" Condition="'%(_StrideMultiApiFlat.Extension)' == '.dll'" />
+    </ItemGroup>
+    <Delete Files="@(_StrideMultiApiObsoleteFlat)" />
     <ItemGroup>
       <FileWrites Include="@(_StrideMultiApiStaged->'$(OutDir)%(StageSubPath)')" />
     </ItemGroup>

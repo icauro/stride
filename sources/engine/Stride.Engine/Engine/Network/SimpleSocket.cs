@@ -17,6 +17,7 @@ namespace Stride.Engine.Network
 
         private TcpSocketClient socket;
         private bool isConnected;
+        private bool disposingSocket;
 
         public Stream ReadStream
         {
@@ -147,16 +148,24 @@ namespace Stride.Engine.Network
 
         private void DisposeSocket()
         {
-            if (this.socket != null)
+            var retiringSocket = this.socket;
+            if (retiringSocket != null && !disposingSocket)
             {
-                if (isConnected)
+                disposingSocket = true;
+                try
                 {
-                    isConnected = false;
-                    Disconnected?.Invoke(this);
+                    if (isConnected)
+                    {
+                        isConnected = false;
+                        Disconnected?.Invoke(this);
+                    }
                 }
-
-                this.socket.Dispose();
-                this.socket = null;
+                finally
+                {
+                    if (ReferenceEquals(this.socket, retiringSocket)) this.socket = null;
+                    try { retiringSocket.Dispose(); }
+                    finally { disposingSocket = false; }
+                }
             }
         }
     }

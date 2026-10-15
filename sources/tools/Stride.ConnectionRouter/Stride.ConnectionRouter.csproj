@@ -11,6 +11,9 @@
     <StrideAssemblyProcessorOptions>--auto-module-initializer</StrideAssemblyProcessorOptions>
     <StrideNuGetResolverUI>true</StrideNuGetResolverUI>
     <UseWindowsForms>true</UseWindowsForms>
+    <StrideMultiGraphicsApiHost>true</StrideMultiGraphicsApiHost>
+    <!-- These linked bootstrap types belong to this host; in-process consumers use Debugger's public API. -->
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <UseVSHostingProcess>false</UseVSHostingProcess>
@@ -20,6 +23,9 @@
     <ApplicationIcon>Resources\ConnectionRouter.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../shared/EditorServiceGraphicsBootstrap.cs" Link="EditorServiceGraphicsBootstrap.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiSelector.cs" Link="GraphicsApiSelector.cs" />
+    <Compile Include="../../shared/Stride.NuGetResolver/GraphicsApiHostResolver.cs" Link="GraphicsApiHostResolver.cs" />
     <PackageReference Include="Mono.Options" />
     <PackageReference Include="System.ServiceProcess.ServiceController" />
   </ItemGroup>
@@ -64,4 +70,5 @@
   <Import Project="..\..\shared\Stride.Core.ShellHelper\Stride.Core.ShellHelper.projitems" Label="Shared" />
   <Import Project="..\..\shared\Stride.NuGetResolver.Targets\Stride.NuGetResolver.Targets.projitems" Label="Shared" />
   <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk.Editor/Sdk/Sdk.targets" />
+  <Import Project="../../shared/EditorServiceDeployment.targets" />
 </Project>

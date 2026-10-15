@@ -12,7 +12,12 @@ namespace Stride.Core.Assets;
 /// <see cref="HostPreference"/> &gt; caller default. The <c>=</c> form is rejected (parsers don't
 /// reliably catch it, so it would silently run the default).
 /// </summary>
-public static class GraphicsApiSelector
+#if STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP
+internal
+#else
+public
+#endif
+static class GraphicsApiSelector
 {
     // Canonical names matching the per-API package/bin subfolders and StrideGraphicsApi msbuild values,
     // in fallback-preference order.

@@ -59,7 +59,9 @@ namespace Stride.ConnectionRouter
 
                 // Try to locate using Stride.ConnectionRouter package
                 var logger = new LoggerResult();
-                var package = PackageStore.Instance.FindLocalPackage("Stride.ConnectionRouter", new PackageVersionRange(new PackageVersion(StrideVersion.NuGetVersion)));
+                var routerDirectory = Path.GetDirectoryName(defaultRouterAssemblyLocation);
+                var isEditorBundle = Path.GetFileName(routerDirectory) == "router" && Path.GetFileName(Path.GetDirectoryName(routerDirectory)) == "tools";
+                var package = isEditorBundle ? null : PackageStore.Instance.FindLocalPackage("Stride.ConnectionRouter", new PackageVersionRange(new PackageVersion(StrideVersion.NuGetVersion)));
                 if (package != null)
                 {
                     routerAssemblyLocation = package.GetFiles().FirstOrDefault(x => string.Compare(Path.GetFileName(x.Path), routerAssemblyExe, true) == 0)?.FullPath ?? routerAssemblyLocation;

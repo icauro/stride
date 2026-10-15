@@ -6,6 +6,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <StrideBuildTags>WindowsTools</StrideBuildTags>
+    <DefineConstants>$(DefineConstants);STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

@@ -3,6 +3,8 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Diagnostics;
 
 namespace Stride.Core
 {
@@ -29,6 +31,31 @@ namespace Stride.Core
             else if (string.IsNullOrEmpty(inputExt))
             {
                 return assemblyLocation;
+            }
+
+            // Referenced service assemblies live flat beside the editor while their
+            // runnable apphosts/dependency closures are isolated under tools/.
+            var stagedDirectory = Path.GetFileNameWithoutExtension(assemblyLocation) switch
+            {
+                "Stride.ConnectionRouter" => "router",
+                "Stride.EffectCompilerServer" => "effect-compiler-server",
+                _ => null,
+            };
+            if (stagedDirectory != null)
+            {
+                foreach (var root in new[] { Path.GetDirectoryName(assemblyLocation), AppContext.BaseDirectory })
+                {
+                    if (string.IsNullOrEmpty(root)) continue;
+                    var name = Path.GetFileNameWithoutExtension(assemblyLocation);
+                    var folder = Path.Combine(root, "tools", stagedDirectory);
+                    var executable = Path.Combine(folder, name + ExeExtension);
+                    var managed = Path.Combine(folder, name + ".dll");
+                    if (File.Exists(executable) && File.Exists(managed) && File.Exists(Path.Combine(folder, name + ".runtimeconfig.json"))
+                        && File.Exists(Path.Combine(folder, name + ".deps.json"))
+                        && AssemblyName.GetAssemblyName(managed).Version == AssemblyName.GetAssemblyName(assemblyLocation).Version
+                        && SamePackageVersion(managed, assemblyLocation))
+                        return executable;
+                }
             }
 
             // Same folder (dev or old layout in nuget package): swap .dll for the platform executable form
@@ -58,6 +85,12 @@ namespace Stride.Core
             }
 
             throw new FileNotFoundException($"Could not find executable to start assembly [{assemblyLocation}]");
+        }
+        private static bool SamePackageVersion(string left, string right)
+        {
+            var leftVersion = FileVersionInfo.GetVersionInfo(left).ProductVersion?.Split('+')[0];
+            var rightVersion = FileVersionInfo.GetVersionInfo(right).ProductVersion?.Split('+')[0];
+            return !string.IsNullOrEmpty(leftVersion) && string.Equals(leftVersion, rightVersion, StringComparison.Ordinal);
         }
     }
 }

@@ -16,11 +16,15 @@ internal static class GraphicsApiPreferenceInitializer
     internal static void Initialize()
     {
         const string key = "Environment/GraphicsApi:";
+        var overridden = Environment.GetEnvironmentVariable("STRIDE_EDITOR_USER_DATA_PATH");
+        if (!string.IsNullOrWhiteSpace(overridden) && !Path.IsPathFullyQualified(overridden))
+            throw new ArgumentException("STRIDE_EDITOR_USER_DATA_PATH must be an absolute directory path.");
+        var userData = string.IsNullOrWhiteSpace(overridden)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "stride")
+            : Path.GetFullPath(overridden);
         try
         {
-            var confPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "stride", "GameStudioSettings.conf");
+            var confPath = Path.Combine(userData, "GameStudioSettings.conf");
             if (!File.Exists(confPath))
                 return;
             foreach (var line in File.ReadLines(confPath))

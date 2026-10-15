@@ -228,16 +228,18 @@ namespace Stride.ConnectionRouter
                     var packageVersion = urlSegments[2];
                     var process = urlSegments[3];
 
-                    // Find package
-                    var package = PackageStore.Instance.FindLocalPackage(packageName, new PackageVersionRange(new PackageVersion(packageVersion)));
-                    if (package == null)
+                    var servicePath = EditorServiceLocator.FindBundledEffectCompiler(packageName, packageVersion, process);
+                    if (servicePath == null)
                     {
-                        Log.Error($"{RouterMessage.ClientRequestServer} action URL [{url}] could not locate NuGet package");
-                        throw new InvalidOperationException();
+                        // Preserve actual package/version resolution for unbundled services.
+                        var package = PackageStore.Instance.FindLocalPackage(packageName, new PackageVersionRange(new PackageVersion(packageVersion)));
+                        if (package == null)
+                        {
+                            Log.Error($"{RouterMessage.ClientRequestServer} action URL [{url}] could not locate NuGet package");
+                            throw new InvalidOperationException();
+                        }
+                        servicePath = package.GetFiles().FirstOrDefault(x => string.Compare(Path.GetFileName(x.Path), process, true) == 0)?.FullPath;
                     }
-
-                    // Locate executable
-                    var servicePath = package.GetFiles().FirstOrDefault(x => string.Compare(Path.GetFileName(x.Path), process, true) == 0)?.FullPath;
                     if (servicePath == null || !File.Exists(servicePath))
                     {
                         Log.Error($"{RouterMessage.ClientRequestServer} action URL [{url}] references a process that doesn't seem to exist");

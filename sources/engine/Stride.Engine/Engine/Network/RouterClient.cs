@@ -40,10 +40,12 @@ namespace Stride.Engine.Network
         /// <returns></returns>
         public static async Task<SimpleSocket> RequestServer(string serverUrl, CancellationToken cancellationToken = default(CancellationToken))
         {
-            var socketContext = await InitiateConnectionToRouter().ConfigureAwait(false);
+            var socketContext = await InitiateConnectionToRouter(cancellationToken).ConfigureAwait(false);
 
-            using (cancellationToken.Register(() => socketContext.Dispose()))
+            try
             {
+                using var cancellation = cancellationToken.Register(socketContext.Dispose);
+                cancellationToken.ThrowIfCancellationRequested();
                 await socketContext.WriteStream.WriteInt16Async((short)ClientRouterMessage.RequestServer).ConfigureAwait(false);
                 await socketContext.WriteStream.WriteStringAsync(serverUrl).ConfigureAwait(false);
                 await socketContext.WriteStream.FlushAsync().ConfigureAwait(false);
@@ -61,6 +63,11 @@ namespace Stride.Engine.Network
                     throw new SimpleSocketException(errorMessage);
                 }
             }
+            catch
+            {
+                socketContext.Dispose();
+                throw;
+            }
 
             return socketContext;
         }
@@ -69,11 +76,16 @@ namespace Stride.Engine.Network
         /// Initiates a connection to the router.
         /// </summary>
         /// <returns></returns>
-        private static async Task<SimpleSocket> InitiateConnectionToRouter()
+        private static async Task<SimpleSocket> InitiateConnectionToRouter(CancellationToken cancellationToken = default)
         {
             // Let's make sure this run in a different thread (in case some operation are blocking)
             var socketContextTCS = new TaskCompletionSource<SimpleSocket>();
             var socketContext = new SimpleSocket();
+            using var cancellation = cancellationToken.Register(() =>
+            {
+                socketContext.Dispose();
+                socketContextTCS.TrySetCanceled(cancellationToken);
+            });
             socketContext.Connected = context =>
             {
                 socketContextTCS.TrySetResult(context);
@@ -81,6 +93,7 @@ namespace Stride.Engine.Network
 
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var serverAddress = Environment.GetEnvironmentVariable("StrideConnectionRouterRemoteIP") ?? "127.0.0.1";
 
                 // If connecting as a client, try once, otherwise try to listen multiple time (in case port is shared)
@@ -121,7 +134,9 @@ namespace Stride.Engine.Network
             }
             catch (Exception e)
             {
-                Log.Error($"Could not connect to connection router using mode {ConnectionMode}", e);
+                socketContext.Dispose();
+                if (!cancellationToken.IsCancellationRequested)
+                    Log.Error($"Could not connect to connection router using mode {ConnectionMode}", e);
                 throw;
             }
         }

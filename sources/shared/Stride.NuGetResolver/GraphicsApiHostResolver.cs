@@ -18,7 +18,12 @@ namespace Stride.Core.Assets;
 /// Without an explicit selection, the platform default falls back to a staged API if it isn't there.
 /// No-op on a flat build (no such subfolders).
 /// </summary>
-public static class GraphicsApiHostResolver
+#if STRIDE_HOST_LOCAL_GRAPHICS_BOOTSTRAP
+internal
+#else
+public
+#endif
+static class GraphicsApiHostResolver
 {
     static bool initialized;
 

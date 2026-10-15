@@ -1,0 +1,20 @@
+<Project>
+  <!-- Return the actual runnable tool's dependency/content/API closure to its editor host. -->
+  <Target Name="GetEditorServiceDeploymentFiles" DependsOnTargets="ResolveReferences;GetCopyToOutputDirectoryItems" Returns="@(_EditorServiceDeploymentFiles)">
+    <Error Condition="!Exists('$(TargetPath)') Or !Exists('$(TargetDir)$(TargetName).runtimeconfig.json') Or !Exists('$(TargetDir)$(TargetName).deps.json')"
+           Text="Build $(MSBuildProjectName) before staging its runnable editor service deployment." />
+    <Error Condition="'$(OS)' == 'Windows_NT' And !Exists('$(TargetDir)$(TargetName).exe')"
+           Text="$(MSBuildProjectName) needs its actual Windows apphost before editor service deployment." />
+    <ItemGroup>
+      <_EditorServiceDeploymentFiles Include="$(TargetPath)"><TargetPath>$(TargetFileName)</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Include="$(TargetDir)$(TargetName).exe" Condition="Exists('$(TargetDir)$(TargetName).exe')"><TargetPath>$(TargetName).exe</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Include="$(TargetDir)$(TargetName).runtimeconfig.json"><TargetPath>$(TargetName).runtimeconfig.json</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Include="$(TargetDir)$(TargetName).deps.json"><TargetPath>$(TargetName).deps.json</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Include="@(ReferenceCopyLocalPaths)"><TargetPath>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(Filename)%(Extension)</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Include="@(AllItemsFullPathWithTargetPath)" />
+      <_EditorServiceDeploymentFiles Remove="@(_StrideMultiApiFlat)" />
+      <_EditorServiceDeploymentFiles Include="@(_StrideMultiApiStaged)"><TargetPath>%(_StrideMultiApiStaged.StageSubPath)</TargetPath></_EditorServiceDeploymentFiles>
+      <_EditorServiceDeploymentFiles Remove="@(_EditorServiceDeploymentFiles)" Condition="'%(Filename)' == 'Stride.ConnectionRouter' And '%(Extension)' != '.dll' And '$(TargetName)' != 'Stride.ConnectionRouter'" />
+    </ItemGroup>
+  </Target>
+</Project>

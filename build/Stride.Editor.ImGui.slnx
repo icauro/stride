@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../sources/editor/Stride.Editor.ImGui/Stride.Editor.ImGui.csproj" />
+  <Project Path="../sources/editor/Stride.Editor.Thumbnails/Stride.Editor.Thumbnails.csproj" />
+  <Project Path="../sources/editor/Stride.Editor.Previews/Stride.Editor.Previews.csproj" />
+  <Project Path="../sources/editor/Stride.Assets.Thumbnails/Stride.Assets.Thumbnails.csproj" />
+</Solution>
