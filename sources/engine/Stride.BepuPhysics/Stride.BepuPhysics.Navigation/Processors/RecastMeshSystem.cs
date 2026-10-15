@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Runtime.InteropServices;
+using System.Buffers;
 using DotRecast.Detour;
 using DotRecast.Recast;
 using DotRecast.Recast.Geom;
@@ -284,7 +285,7 @@ public class RecastMeshSystem : GameSystemBase
         if (_navMesh is null) return false;
 
         var queryFilter = new DtQueryDefaultFilter();
-        var dtNavMeshQuery = new DtNavMeshQuery(_navMesh);
+        var dtNavMeshQuery = new StrideNavigationQuery(_navMesh);
 
         dtNavMeshQuery.FindNearestPoly(start.ToDotRecastVector(), _polyPickExt, queryFilter, out long startRef, out _, out _);
 
@@ -308,7 +309,7 @@ public class RecastMeshSystem : GameSystemBase
         if (_navMesh is null) return false;
 
         var queryFilter = new DtQueryDefaultFilter();
-        var dtNavMeshQuery = new DtNavMeshQuery(_navMesh);
+        var dtNavMeshQuery = new StrideNavigationQuery(_navMesh);
 
         dtNavMeshQuery.FindNearestPoly(start.ToDotRecastVector(), _polyPickExt, queryFilter, out long startRef, out _, out _);
 
@@ -358,16 +359,29 @@ public class RecastMeshSystem : GameSystemBase
         smoothPath.Clear();
         pathIterPolyCount = 0;
 
-        var opt = new DtFindPathOption(enableRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0, float.MaxValue);
-        navQuery.FindPath(startRef, endRef, startPt, endPt, filter, ref polys, opt);
-        if (0 >= polys.Count)
-            return DtStatus.DT_FAILURE;
-
-        pathIterPolyCount = polys.Count;
+        var corridorBuffer = ArrayPool<long>.Shared.Rent(MaxPolys);
+        try
+        {
+        Span<long> corridor = corridorBuffer;
+        var raycastQuery = enableRaycast ? navQuery as StrideNavigationQuery ?? new StrideNavigationQuery(navQuery.GetAttachedNavMesh()) : null;
+        DtStatus pathStatus;
+        while (true)
+        {
+            pathStatus = raycastQuery != null
+                ? raycastQuery.FindPathWithRaycasts(startRef, endRef, startPt, endPt, filter, corridor, out pathIterPolyCount)
+                : navQuery.FindPath(startRef, endRef, startPt, endPt, filter, corridor, out pathIterPolyCount, corridor.Length);
+            if (!pathStatus.Succeeded() || !pathStatus.Has(DtStatus.DT_BUFFER_TOO_SMALL)) break;
+            // The old List-based query did not truncate the initial corridor.
+            // Retry with a larger pooled span rather than changing its endpoint.
+            var largerBuffer = ArrayPool<long>.Shared.Rent(checked(corridorBuffer.Length * 2));
+            ArrayPool<long>.Shared.Return(corridorBuffer);
+            corridorBuffer = largerBuffer; corridor = corridorBuffer;
+        }
+        if (!pathStatus.Succeeded() || pathIterPolyCount <= 0) return pathStatus.Succeeded() ? DtStatus.DT_FAILURE : pathStatus;
 
         // Iterate over the path to find smooth path on the detail mesh surface.
         navQuery.ClosestPointOnPoly(startRef, startPt, out var iterPos, out _);
-        navQuery.ClosestPointOnPoly(polys[polys.Count - 1], endPt, out var targetPos, out _);
+        navQuery.ClosestPointOnPoly(corridor[pathIterPolyCount - 1], endPt, out var targetPos, out _);
 
         const float STEP_SIZE = 0.5f;
         const float SLOP = 0.01f;
@@ -380,11 +394,11 @@ public class RecastMeshSystem : GameSystemBase
 
         // Move towards target a small advancement at a time until target reached or
         // when ran out of memory to store the path.
-        while (0 < polys.Count && smoothPath.Count < MaxSmooth)
+        while (0 < pathIterPolyCount && smoothPath.Count < MaxSmooth)
         {
             // Find location to steer towards.
             if (!DtPathUtils.GetSteerTarget(navQuery, iterPos, targetPos, SLOP,
-                    polys, polys.Count, out var steerPos, out var steerPosFlag, out var steerPosRef))
+                    corridor, pathIterPolyCount, out var steerPos, out var steerPosFlag, out var steerPosRef))
             {
                 break;
             }
@@ -411,14 +425,14 @@ public class RecastMeshSystem : GameSystemBase
             RcVec3f moveTgt = RcVec.Mad(iterPos, delta, len);
 
             // Move
-            navQuery.MoveAlongSurface(polys[0], iterPos, moveTgt, filter, out var result, visited, out nvisited, visited.Length);
+            navQuery.MoveAlongSurface(corridor[0], iterPos, moveTgt, filter, out var result, visited, out nvisited, visited.Length);
 
             iterPos = result;
 
-            pathIterPolyCount = DtPathUtils.MergeCorridorStartMoved(ref polys, pathIterPolyCount, MaxPolys, visited, nvisited);
-            pathIterPolyCount = DtPathUtils.FixupShortcuts(ref polys, pathIterPolyCount, navQuery);
+            pathIterPolyCount = DtPathUtils.MergeCorridorStartMoved(corridor, pathIterPolyCount, MaxPolys, visited, nvisited);
+            pathIterPolyCount = DtPathUtils.FixupShortcuts(corridor, pathIterPolyCount, navQuery);
 
-            var status = navQuery.GetPolyHeight(polys[0], result, out var h);
+            var status = navQuery.GetPolyHeight(corridor[0], result, out var h);
             if (status.Succeeded())
             {
                 iterPos.Y = h;
@@ -483,7 +497,10 @@ public class RecastMeshSystem : GameSystemBase
             }
         }
 
-        return DtStatus.DT_SUCCESS;
+        for (var index = 0; index < pathIterPolyCount; index++) polys.Add(corridor[index]);
+        return pathStatus;
+        }
+        finally { ArrayPool<long>.Shared.Return(corridorBuffer); }
     }
 
     class AsyncInput

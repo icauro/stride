@@ -54,6 +54,35 @@ namespace Stride.Navigation
         private NavigationMeshBuilder builder = new();
 
         private CancellationTokenSource buildTaskCancellationTokenSource;
+        private readonly object buildLifetime = new();
+        private readonly List<(Task Worker, CancellationTokenSource Cancellation)> builds = [];
+        private bool stopping;
+        private Task shutdown;
+
+        /// <summary>The actual background builders' terminal fence; publication is suppressed immediately.</summary>
+        public Task BeginShutdown()
+        {
+            lock (buildLifetime)
+            {
+                if (shutdown != null) return shutdown;
+                stopping = true;
+                pendingRebuild = false;
+                foreach (var run in builds) run.Cancellation.Cancel();
+                var workers = new Task[builds.Count];
+                for (var i = 0; i < builds.Count; i++) workers[i] = builds[i].Worker;
+                return shutdown = DrainBuilders(workers);
+            }
+        }
+
+        /// <summary>Observed worker failures during shutdown, after their actual terminal states.</summary>
+        public Exception ShutdownFailure { get; private set; }
+
+        private async Task DrainBuilders(Task[] workers)
+        {
+            try { await Task.WhenAll(workers).ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (Exception failure) { ShutdownFailure = failure; }
+        }
 
         private SceneSystem sceneSystem;
         private ScriptSystem scriptSystem;
@@ -118,7 +147,7 @@ namespace Stride.Navigation
         public override void Update(GameTime gameTime)
         {
             // This system should load from settings before becoming functional
-            if (!Enabled)
+            if (!Enabled || stopping)
                 return;
 
             if (currentSceneInstance != sceneSystem?.SceneInstance)
@@ -147,17 +176,25 @@ namespace Stride.Navigation
         /// </summary>
         public async Task<NavigationMeshBuildResult> Rebuild()
         {
-            if (currentSceneInstance == null)
+            if (currentSceneInstance == null || stopping)
                 return new NavigationMeshBuildResult();
 
             // Cancel running build, TODO check if the running build can actual satisfy the current rebuild request and don't cancel in that case
             buildTaskCancellationTokenSource?.Cancel();
-            buildTaskCancellationTokenSource = new CancellationTokenSource();
+            var cancellation = buildTaskCancellationTokenSource = new CancellationTokenSource();
+            var buildScene = currentSceneInstance;
+            var buildBuilder = builder;
+            var settings = BuildSettings;
+            var groups = new List<NavigationMeshGroup>(Groups);
+            var collisionGroups = IncludedCollisionGroups;
 
             // Collect bounding boxes
             var boundingBoxProcessor = currentSceneInstance.GetProcessor<BoundingBoxProcessor>();
             if (boundingBoxProcessor == null)
+            {
+                cancellation.Dispose(); buildTaskCancellationTokenSource = null;
                 return new NavigationMeshBuildResult();
+            }
 
             List<BoundingBox> boundingBoxes = [];
             foreach (var boundingBox in boundingBoxProcessor.BoundingBoxes)
@@ -166,17 +203,26 @@ namespace Stride.Navigation
                 boundingBoxes.Add(new BoundingBox(translation - boundingBox.Size * scale, translation + boundingBox.Size * scale));
             }
 
-            var result = Task.Run(() =>
+            Task<NavigationMeshBuildResult> result;
+            lock (buildLifetime)
             {
-                // Only have one active build at a time
-                lock (builder)
+                if (stopping) { cancellation.Dispose(); return new NavigationMeshBuildResult(); }
+                for (var i = builds.Count - 1; i >= 0; i--)
                 {
-                    return builder.Build(BuildSettings, Groups, IncludedCollisionGroups,  boundingBoxes, buildTaskCancellationTokenSource.Token);
+                    if (!builds[i].Worker.IsCompleted) continue;
+                    builds[i].Cancellation.Dispose(); builds.RemoveAt(i);
                 }
-            });
+                result = Task.Run(() =>
+                {
+                    lock (buildBuilder)
+                        return buildBuilder.Build(settings, groups, collisionGroups, boundingBoxes, cancellation.Token);
+                });
+                builds.Add((result, cancellation));
+            }
             await result;
 
-            FinalizeRebuild(result);
+            if (!stopping && !cancellation.IsCancellationRequested && ReferenceEquals(buildScene, currentSceneInstance)
+                && ReferenceEquals(buildBuilder, builder)) FinalizeRebuild(result);
 
             return result.Result;
         }

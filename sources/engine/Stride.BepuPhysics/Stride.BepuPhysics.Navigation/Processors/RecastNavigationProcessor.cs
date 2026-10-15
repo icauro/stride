@@ -1,5 +1,6 @@
 using Stride.BepuPhysics.Definitions;
 using Stride.BepuPhysics.Navigation.Components;
+using Stride.BepuPhysics.Systems;
 using Stride.Core;
 using Stride.Core.Threading;
 using Stride.Engine;
@@ -23,7 +24,8 @@ public sealed class RecastNavigationProcessor : EntityProcessor<RecastNavigation
 
     protected override void OnSystemAdd()
     {
-        ServicesHelper.LoadBepuServices(Services, out _, out _, out _);
+        Services.GetOrCreate<BepuConfiguration>();
+        Services.GetOrCreate<ShapeCacheSystem>();
         if (Services.GetService<RecastMeshSystem>() is { } recastMeshProcessor)
         {
             _recastMeshSystem = recastMeshProcessor;

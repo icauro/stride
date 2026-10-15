@@ -575,13 +575,20 @@ namespace Stride.BepuPhysics.Soft.Definitions
 
                 simulation.CollidableMaterials.Allocate(vertexHandles[i]) = new BepuPhysics.Definitions.MaterialProperties()
                 {
-                    ColliderCollisionMask = CollisionMask.Everything,
+                    // Layer0 uses the simulation's current collision matrix (all layers by default).
+                    Layer = CollisionLayer.Layer0,
                     FrictionCoefficient = 1,
                     Gravity = true,
                     IsTrigger = false,
                     MaximumRecoveryVelocity = 1,
                     SpringSettings = new(30, 1),
-                    FilterByDistance = new BepuPhysics.Definitions.Contacts.FilterByDistance() { Id = (ushort)instanceId, XAxis = (ushort)vertexSpatialIndex.X, YAxis = (ushort)vertexSpatialIndex.Y, ZAxis = (ushort)vertexSpatialIndex.Z }
+                    CollisionGroup = new BepuPhysics.Definitions.CollisionGroup
+                    {
+                        Id = (ushort)instanceId,
+                        IndexA = (ushort)vertexSpatialIndex.X,
+                        IndexB = (ushort)vertexSpatialIndex.Y,
+                        IndexC = (ushort)vertexSpatialIndex.Z
+                    }
                 };
             }
 
