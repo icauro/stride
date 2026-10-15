@@ -56,7 +56,14 @@ public partial class ShaderMixer
                 }
             }
 
-            SpirvBuilder.BuildInheritanceListIncludingSelf(shaderLoader, context, mixinToMerge2, macros, mixinList, ResolveStep.Mix);
+            try
+            {
+                SpirvBuilder.BuildInheritanceListIncludingSelf(shaderLoader, context, mixinToMerge2, macros, mixinList, ResolveStep.Mix);
+            }
+            catch (Exception error)
+            {
+                throw new InvalidOperationException($"Could not instantiate shader '{mixinToMerge.ToClassName()}' at composition '{compositionPath ?? "<root>"}' (supplied generic arguments: {mixinToMerge.GenericArguments?.Length ?? 0}).", error);
+            }
         }
 
         ProcessClasses(shaderLoader, context, mixinList, shaderMixinSource, result, compositions, promoteToParent, needsFullImport, compositionPath, rootMixinSource, rootCompositions);
@@ -278,7 +285,18 @@ public partial class ShaderMixer
             if (!valueSource.Compositions.TryGetValue(variableName, out var compositionMixin))
             {
                 if (pointer.BaseType is ShaderSymbol shaderSymbol)
-                    compositionMixin = new ShaderMixinSource { Mixins = { new ShaderClassSource(shaderSymbol.Name) } };
+                {
+                    // The declared type includes its generic arguments. Dropping them here
+                    // reloads an uninstantiated class even though the composition type is specialized.
+                    var genericArguments = new string[shaderSymbol.GenericArguments.Length];
+                    for (var argument = 0; argument < genericArguments.Length; argument++)
+                    {
+                        if (!shaderSymbol.GenericArguments[argument].TryEvaluate(out var value) || value == null)
+                            throw new InvalidOperationException($"Default composition '{ChildCompositionPath(valuePath, variableName)}' in '{shaderClassName}' has an unresolved generic argument {argument}: {shaderSymbol.GenericArguments[argument]}.");
+                        genericArguments[argument] = ShaderClassSource.ConvertGenericArgToString(value);
+                    }
+                    compositionMixin = new ShaderMixinSource { Mixins = { new ShaderClassSource(shaderSymbol.Name, genericArguments) } };
+                }
                 else if (pointer.BaseType is ArrayType { BaseType: ShaderSymbol })
                     compositionMixin = new ShaderArraySource();
                 else

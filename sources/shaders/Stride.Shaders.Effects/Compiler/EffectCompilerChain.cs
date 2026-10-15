@@ -27,6 +27,9 @@ namespace Stride.Shaders.Compiler
             get { return compiler; }
         }
 
+        /// <summary>Allows tooling hosts to configure the wrapped compiler without replacing its cache or scheduling layers.</summary>
+        public EffectCompilerBase InnerCompiler => compiler;
+
         public override IVirtualFileProvider FileProvider
         {
             get { return compiler.FileProvider; }
