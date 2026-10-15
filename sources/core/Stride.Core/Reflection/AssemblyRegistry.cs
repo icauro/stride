@@ -3,6 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Stride.Core.Diagnostics;
 using Stride.Core.Serialization;
 
@@ -12,13 +13,13 @@ namespace Stride.Core.Reflection;
 /// Provides a basic infrastructure to associate an assembly with some categories and to
 /// query and register on new registered assembly event.
 /// </summary>
-public static class AssemblyRegistry
+public static partial class AssemblyRegistry
 {
     private static readonly Lazy<Logger> Log = new(() => GlobalLogger.GetLogger("AssemblyRegistry"));
     private static readonly object Lock = new();
     private static readonly Dictionary<string, HashSet<Assembly>> MapCategoryToAssemblies = [];
     private static readonly Dictionary<Assembly, HashSet<string>> MapAssemblyToCategories = [];
-    private static readonly Dictionary<Assembly, ScanTypes> AssemblyToScanTypes = [];
+    private static readonly ConditionalWeakTable<Assembly, ScanTypes> AssemblyToScanTypes = new();
     private static readonly Dictionary<string, Assembly> AssemblyNameToAssembly = new(StringComparer.OrdinalIgnoreCase);
 
     static AssemblyRegistry()
@@ -155,14 +156,17 @@ public static class AssemblyRegistry
 
     public static void RegisterScanTypes(Assembly assembly, ScanTypes types)
     {
-        AssemblyToScanTypes.TryAdd(assembly, types);
+        lock (Lock)
+            if (!AssemblyToScanTypes.TryGetValue(assembly, out _)) AssemblyToScanTypes.Add(assembly, types);
     }
 
     public static ScanTypes? GetScanTypes(Assembly assembly)
     {
-        AssemblyToScanTypes.TryGetValue(assembly, out var assemblyScanTypes);
-
-        return assemblyScanTypes;
+        lock (Lock)
+        {
+            AssemblyToScanTypes.TryGetValue(assembly, out var assemblyScanTypes);
+            return assemblyScanTypes;
+        }
     }
 
     /// <summary>
@@ -287,6 +291,14 @@ public static class AssemblyRegistry
             {
                 // Remove assembly=>categories entry
                 MapAssemblyToCategories.Remove(assembly);
+                var assemblyName = assembly.GetName().Name;
+                if (assemblyName != null && AssemblyNameToAssembly.TryGetValue(assemblyName, out var current)
+                    && ReferenceEquals(current, assembly))
+                {
+                    AssemblyNameToAssembly.Remove(assemblyName);
+                    var retained = MapAssemblyToCategories.Keys.LastOrDefault(candidate => candidate.GetName().Name == assemblyName);
+                    if (retained != null) AssemblyNameToAssembly[assemblyName] = retained;
+                }
 
                 // Remove reverse category=>assemblies entries
                 foreach (var category in categoriesFound)

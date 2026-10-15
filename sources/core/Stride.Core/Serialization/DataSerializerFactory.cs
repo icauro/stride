@@ -188,24 +188,26 @@ public static class DataSerializerFactory
             if (removedAssemblySerializer == null)
                 return;
 
+            // Validate the real remaining registry before removing its owner.
+            // A failing alias rebuild must leave the old registry intact for retry.
+            var aliases = new Dictionary<string, Type>();
+            var profiles = new Dictionary<string, Dictionary<Type, AssemblySerializerEntry>>();
+            foreach (var remaining in AssemblySerializers.Where(candidate => !ReferenceEquals(candidate, removedAssemblySerializer)))
+            {
+                foreach (var alias in remaining.DataContractAliases)
+                {
+                    if (!aliases.TryAdd(alias.Name, alias.Type))
+                        throw new InvalidOperationException($"Two different classes have the same DataContract Alias [{alias.Name}]: {alias.Type} and {aliases[alias.Name]}");
+                }
+                foreach (var source in remaining.Profiles)
+                {
+                    if (!profiles.TryGetValue(source.Key, out var target)) profiles.Add(source.Key, target = new());
+                    foreach (var entry in source.Value) target.TryAdd(entry.ObjectType, entry);
+                }
+            }
             AssemblySerializers.Remove(removedAssemblySerializer);
-
-            // Unregister data contract aliases
-            foreach (var dataContractAliasEntry in removedAssemblySerializer.DataContractAliases)
-            {
-                // TODO: Warning, exception or override if collision? (currently exception, easiest since we can remove them without worry when unloading assembly)
-                DataContractAliasMapping.Remove(dataContractAliasEntry.Name);
-            }
-
-            // Rebuild serializer list
-            // TODO: For now, we simply reregister all assemblies one-by-one, but it can easily be improved if it proves to be unefficient (for now it shouldn't happen often so probably not a big deal)
-            DataSerializersPerProfile.Clear();
-            DataContractAliasMapping.Clear();
-
-            foreach (var assemblySerializer in AssemblySerializers)
-            {
-                RegisterSerializers(assemblySerializer);
-            }
+            DataContractAliasMapping.Clear(); foreach (var alias in aliases) DataContractAliasMapping.Add(alias.Key, alias.Value);
+            DataSerializersPerProfile.Clear(); foreach (var profile in profiles) DataSerializersPerProfile.Add(profile.Key, profile.Value);
 
             ++Version;
 

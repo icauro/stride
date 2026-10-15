@@ -10,7 +10,7 @@ using Stride.Core.IO;
 
 namespace Stride.Core.Reflection;
 
-public class LoadedAssembly
+public partial class LoadedAssembly
 {
     public AssemblyContainer Container { get; }
     public string Path { get; }
@@ -18,15 +18,17 @@ public class LoadedAssembly
 
     public Dictionary<string, string>? Dependencies { get; }
 
-    public LoadedAssembly(AssemblyContainer container, string path, Assembly assembly, Dictionary<string, string>? dependencies)
+    public LoadedAssembly(AssemblyContainer container, string path, Assembly assembly, Dictionary<string, string>? dependencies, IAssemblyArtifactLifetime? artifactLifetime = null)
     {
         Container = container;
         Path = path;
         Assembly = assembly;
         Dependencies = dependencies;
+        ArtifactLifetime = artifactLifetime;
+        AcquireRegistrationArtifact();
     }
 }
-public class AssemblyContainer
+public partial class AssemblyContainer
 {
     private readonly List<LoadedAssembly> loadedAssemblies = [];
     private readonly Dictionary<string, LoadedAssembly> loadedAssembliesByName = new(StringComparer.InvariantCultureIgnoreCase);
@@ -70,7 +72,7 @@ public class AssemblyContainer
         }
     }
 
-    public Assembly? LoadAssemblyFromPath(string assemblyFullPath, ILogger? outputLog = null)
+    public Assembly? LoadAssemblyFromPath(string assemblyFullPath, ILogger? outputLog = null, IAssemblyArtifactLifetime? artifactLifetime = null)
     {
 #if NET6_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(assemblyFullPath);
@@ -88,12 +90,15 @@ public class AssemblyContainer
             throw new ArgumentException("Invalid assembly path. Doesn't contain directory information");
         }
 
+        var previousArtifactLifetime = currentArtifactLifetime;
         try
         {
+            currentArtifactLifetime = artifactLifetime ?? currentArtifactLifetime;
             return LoadAssemblyFromPathInternal(assemblyFullPath);
         }
         finally
         {
+            currentArtifactLifetime = previousArtifactLifetime;
             if (outputLog != null)
             {
                 log.CopyTo(outputLog);
@@ -118,9 +123,12 @@ public class AssemblyContainer
             if (loadedAssembly == null)
                 return null;
 
+            loadedAssembly.ReleaseRegistrationArtifact();
             loadedAssemblies.Remove(loadedAssembly);
-            loadedAssembliesByName.Remove(loadedAssembly.Path);
-            assemblyToContainers.Remove(assembly);
+            if (loadedAssembliesByName.TryGetValue(loadedAssembly.Path, out var mapped) && ReferenceEquals(mapped, loadedAssembly))
+                loadedAssembliesByName.Remove(loadedAssembly.Path);
+            if (assemblyToContainers.TryGetValue(assembly, out var resolver) && ReferenceEquals(resolver, loadedAssembly))
+                assemblyToContainers.Remove(assembly);
             return loadedAssembly;
         }
     }
@@ -138,6 +146,7 @@ public class AssemblyContainer
             if (loadedAssemblies.Any(x => x.Assembly == loadedAssembly.Assembly))
                 return;
 
+            loadedAssembly.AcquireRegistrationArtifact();
             loadedAssemblies.Add(loadedAssembly);
             loadedAssembliesByName[loadedAssembly.Path] = loadedAssembly;
             assemblyToContainers.AddOrUpdate(loadedAssembly.Assembly, loadedAssembly);
@@ -309,7 +318,9 @@ public class AssemblyContainer
                     return null;
 
                 // The assembly loads from bytes, without a location for its module initializer to probe natives from
-                RegisterNativeLibraries(assemblyFullPath);
+                var artifacts = currentArtifactLifetime?.Owns(assemblyFullPath) == true ? currentArtifactLifetime
+                    : loadedAssemblies.Select(entry => entry.ArtifactLifetime).FirstOrDefault(source => source?.Owns(assemblyFullPath) == true);
+                RegisterNativeLibraries(assemblyFullPath, artifacts);
 
                 // Find pdb (if it exists)
                 var pdbFullPath = Path.ChangeExtension(assemblyFullPath, ".pdb");
@@ -421,7 +432,10 @@ public class AssemblyContainer
                         // It could be a mixed mode assembly (see https://stackoverflow.com/questions/2945080/how-do-i-dynamically-load-raw-assemblies-that-contains-unmanaged-codebypassing)
                         assembly = Assembly.LoadFrom(assemblyFullPath);
                     }
-                    loadedAssembly = new LoadedAssembly(this, assemblyFullPath, assembly, dependenciesMapping);
+                    loadedAssembly = new LoadedAssembly(this, assemblyFullPath, assembly, dependenciesMapping, artifacts)
+                    {
+                        SourceSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(assemblyBytes)),
+                    };
                     loadedAssemblies.Add(loadedAssembly);
                     loadedAssembliesByName.Add(assemblyFullPath, loadedAssembly);
 
@@ -477,14 +491,14 @@ public class AssemblyContainer
     /// Registers the native libraries shipped with an assembly: next to it, or at the package root for the NuGet
     /// layout lib/&lt;framework&gt;/&lt;assembly&gt; (the game's dependencies resolve from the package cache).
     /// </summary>
-    private static void RegisterNativeLibraries(string assemblyFullPath)
+    private static void RegisterNativeLibraries(string assemblyFullPath, IAssemblyArtifactLifetime? artifactLifetime)
     {
         var assemblyDirectory = Path.GetDirectoryName(assemblyFullPath)!;
-        NativeLibraryHelper.RegisterDependenciesFrom(assemblyDirectory);
+        NativeLibraryHelper.RegisterDependenciesFrom(assemblyDirectory, artifactLifetime == null ? null : artifactLifetime.Acquire);
 
         var libDirectory = Path.GetDirectoryName(assemblyDirectory);
         if (libDirectory is not null && string.Equals(Path.GetFileName(libDirectory), "lib", StringComparison.OrdinalIgnoreCase))
-            NativeLibraryHelper.RegisterDependenciesFrom(Path.GetDirectoryName(libDirectory)!);
+            NativeLibraryHelper.RegisterDependenciesFrom(Path.GetDirectoryName(libDirectory)!, artifactLifetime == null ? null : artifactLifetime.Acquire);
     }
 
     private static Assembly? CurrentDomain_AssemblyResolve(object? sender, ResolveEventArgs args)
@@ -508,7 +522,13 @@ public class AssemblyContainer
         if (container != null)
         {
             var assemblyName = new AssemblyName(args.Name);
-            return container.LoadAssemblyByName(assemblyName, searchDirectory ?? string.Empty);
+            var previous = currentArtifactLifetime;
+            try
+            {
+                if (args.RequestingAssembly != null && assemblyToContainers.TryGetValue(args.RequestingAssembly, out var requesting)) currentArtifactLifetime = requesting.ArtifactLifetime;
+                return container.LoadAssemblyByName(assemblyName, searchDirectory ?? string.Empty);
+            }
+            finally { currentArtifactLifetime = previous; }
         }
 
         // Asked from outside any container (e.g. WPF binding a BAML type's generic arguments): use a container's copy

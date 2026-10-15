@@ -1,6 +1,8 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using System.Reflection;
+
 namespace Stride.Core;
 
 /// <summary>
@@ -34,6 +36,33 @@ public class AccessorMetadata : PropertyKeyMetadata
     {
         this.getter = getter;
         this.setter = setter;
+    }
+
+    internal IEnumerable<Type> RegistrationTypes()
+    {
+        foreach (var callback in new Delegate?[] { getter, setter })
+        {
+            if (callback == null) continue;
+            foreach (var method in callback.GetInvocationList())
+            {
+                if (method.Method.DeclaringType != null) yield return method.Method.DeclaringType;
+                foreach (var argument in method.Method.GetGenericArguments()) yield return argument;
+                if (method.Target != null) yield return method.Target.GetType();
+            }
+        }
+    }
+
+    internal IEnumerable<Assembly> RegistrationAssemblies()
+    {
+        foreach (var callback in new Delegate?[] { getter, setter })
+        {
+            if (callback == null) continue;
+            foreach (var method in callback.GetInvocationList())
+            {
+                yield return method.Method.Module.Assembly;
+                if (method.Target != null) yield return method.Target.GetType().Assembly;
+            }
+        }
     }
 
     /// <summary>

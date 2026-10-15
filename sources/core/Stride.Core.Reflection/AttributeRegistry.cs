@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Stride.Core.Reflection;
 
@@ -10,11 +11,23 @@ namespace Stride.Core.Reflection;
 /// This implementation allows to retrieve default attributes for a member or
 /// to attach an attribute to a specific type/member.
 /// </summary>
-public class AttributeRegistry : IAttributeRegistry
+public partial class AttributeRegistry : IAttributeRegistry
 {
     private readonly object lockObject = new();
     private readonly Dictionary<MemberInfoKey, List<Attribute>> cachedAttributes = [];
     private readonly Dictionary<MemberInfo, List<Attribute>> registeredAttributes = [];
+    private sealed class CollectibleMemberAttributes
+    {
+        internal readonly Dictionary<MemberInfoKey, List<Attribute>> Cached = [];
+        internal readonly Dictionary<MemberInfo, List<Attribute>> Registered = [];
+    }
+    private readonly ConditionalWeakTable<Type, CollectibleMemberAttributes> collectibleAttributes = new();
+    private CollectibleMemberAttributes? GetCollectibleAttributes(MemberInfo member)
+    {
+        var type = member as Type ?? (member.ReflectedType?.IsCollectible == true ? member.ReflectedType : member.DeclaringType);
+        return type?.IsCollectible == true ? collectibleAttributes.GetValue(type, _ => new()) : null;
+    }
+
 
     // TODO: move this in a different location
     public Action<ObjectDescriptor, List<IMemberDescriptor>>? PrepareMembersCallback { get; set; }
@@ -33,7 +46,10 @@ public class AttributeRegistry : IAttributeRegistry
         List<Attribute> attributes;
         lock (lockObject)
         {
-            if (cachedAttributes.TryGetValue(key, out var cacheAttributes))
+            var generation = GetCollectibleAttributes(memberInfo);
+            var cache = generation?.Cached ?? cachedAttributes;
+            var registrations = generation?.Registered ?? registeredAttributes;
+            if (cache.TryGetValue(key, out var cacheAttributes))
             {
                 return cacheAttributes;
             }
@@ -43,7 +59,7 @@ public class AttributeRegistry : IAttributeRegistry
             IEnumerable<Attribute> attributesToCache = defaultAttributes;
 
             // And add registered attributes
-            if (registeredAttributes.TryGetValue(memberInfo, out var registered))
+            if (registrations.TryGetValue(memberInfo, out var registered))
             {
                 // Remove "real" attributes overridden by manually registered attributes
                 attributesToCache = registered.Concat(defaultAttributes.Where(x => GetUsage(x)!.AllowMultiple || registered.All(y => y.GetType() != x.GetType())));
@@ -52,7 +68,7 @@ public class AttributeRegistry : IAttributeRegistry
             attributes = attributesToCache.ToList();
 
             // Add to the cache
-            cachedAttributes.Add(key, attributes);
+            cache.Add(key, attributes);
         }
 
         return attributes;
@@ -65,19 +81,12 @@ public class AttributeRegistry : IAttributeRegistry
     /// <param name="attribute">The attribute.</param>
     public void Register(MemberInfo memberInfo, Attribute attribute)
     {
-        lock (lockObject)
-        {
-            if (!registeredAttributes.TryGetValue(memberInfo, out var attributes))
-            {
-                attributes = [];
-                registeredAttributes.Add(memberInfo, attributes);
-            }
-            // Insert it in the first position to ensure it will override same attributes from base classes when using First
-            attributes.Insert(0, attribute);
-
-            cachedAttributes.Remove(new MemberInfoKey(memberInfo, true));
-            cachedAttributes.Remove(new MemberInfoKey(memberInfo, false));
-        }
+        ArgumentNullException.ThrowIfNull(attribute);
+        // Baked attributes have no external registration owner. Manually attached
+        // custom attributes do; preserve them until that actual generation unloads.
+        var owner = attribute is Stride.Core.Annotations.ObjectFactoryAttribute factory
+            ? factory.FactoryType.Assembly : attribute.GetType().Assembly;
+        Register(memberInfo, attribute, owner);
     }
 
     private static AttributeUsageAttribute? GetUsage(Attribute attribute)

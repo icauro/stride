@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Stride.Core
 {
@@ -33,7 +34,8 @@ namespace Stride.Core
     /// </summary>
     public class DisplayAttribute : Attribute
     {
-        private static readonly Dictionary<MemberInfo, DisplayAttribute> RegisteredDisplayAttributes = [];
+        private static readonly ConditionalWeakTable<Type, Dictionary<MemberInfo, DisplayAttribute>> RegisteredDisplayAttributes = new();
+        private static readonly ConditionalWeakTable<MemberInfo, DisplayAttribute> UntypedDisplayAttributes = new();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DisplayAttribute"/> class.
@@ -102,12 +104,17 @@ namespace Stride.Core
         public static DisplayAttribute GetDisplay(MemberInfo memberInfo)
         {
             ArgumentNullException.ThrowIfNull(memberInfo);
-            lock (RegisteredDisplayAttributes)
+            var owner = memberInfo as Type ?? (memberInfo.ReflectedType?.IsCollectible == true
+                ? memberInfo.ReflectedType : memberInfo.DeclaringType);
+            if (owner == null)
+                return UntypedDisplayAttributes.GetValue(memberInfo, member => member.GetCustomAttribute<DisplayAttribute>() ?? new DisplayAttribute(member.Name));
+            var members = RegisteredDisplayAttributes.GetValue(owner, _ => new());
+            lock (members)
             {
-                if (!RegisteredDisplayAttributes.TryGetValue(memberInfo, out var value))
+                if (!members.TryGetValue(memberInfo, out var value))
                 {
                     value = memberInfo.GetCustomAttribute<DisplayAttribute>() ?? new DisplayAttribute(memberInfo.Name);
-                    RegisteredDisplayAttributes.Add(memberInfo, value);
+                    members.Add(memberInfo, value);
                 }
                 return value;
             }

@@ -477,6 +477,12 @@ public static partial class NativeLibraryHelper
     /// </summary>
     /// <param name="directory">A package root or the directory holding a package assembly.</param>
     public static void RegisterDependenciesFrom(string directory)
+        => RegisterDependenciesFrom(directory, null);
+
+    private static readonly Dictionary<string, IDisposable> nativeArtifactLifetimes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Retains owned files for the lifetime of this helper's process-wide native mappings and handles.</summary>
+    public static void RegisterDependenciesFrom(string directory, Func<IDisposable>? acquireArtifacts)
     {
         ArgumentNullException.ThrowIfNull(directory);
         lock (loadedLibrariesLock)
@@ -486,22 +492,21 @@ public static partial class NativeLibraryHelper
         }
 
         var nativeDirectory = Path.Combine(directory, platformNativeLibsDir);
+        var files = new List<string>();
         if (Directory.Exists(nativeDirectory))
-        {
-            foreach (var file in Directory.EnumerateFiles(nativeDirectory))
-                RegisterDependency(file);
-        }
-
+            files.AddRange(Directory.EnumerateFiles(nativeDirectory));
         if (Directory.Exists(directory))
         {
-            // libfoo.so.6 on Linux; on Windows, the managed assemblies next to them share the extension
             var pattern = Platform.Type == PlatformType.Linux ? "*" + libExtension + "*" : "*" + libExtension;
-            foreach (var file in Directory.EnumerateFiles(directory, pattern))
-            {
-                if (Platform.Type != PlatformType.Windows || !IsManagedAssembly(file))
-                    RegisterDependency(file);
-            }
+            files.AddRange(Directory.EnumerateFiles(directory, pattern).Where(file => Platform.Type != PlatformType.Windows || !IsManagedAssembly(file)));
         }
+        if (files.Count == 0) return;
+        if (acquireArtifacts != null)
+            lock (loadedLibrariesLock)
+                if (!nativeArtifactLifetimes.ContainsKey(Path.GetFullPath(directory)))
+                    nativeArtifactLifetimes.Add(Path.GetFullPath(directory), acquireArtifacts());
+        foreach (var file in files)
+            RegisterDependency(file);
 
         static bool IsManagedAssembly(string file)
         {

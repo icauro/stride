@@ -2,6 +2,8 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Reflection;
 using Stride.Core.Yaml.Serialization;
 
 namespace Stride.Core.Reflection;
@@ -12,7 +14,9 @@ namespace Stride.Core.Reflection;
 public class TypeDescriptorFactory : ITypeDescriptorFactory
 {
     private readonly IComparer<object> keyComparer;
-    private readonly Dictionary<Type, ITypeDescriptor> registeredDescriptors = [];
+    // Descriptors reference their Type and member descriptors. A weak-key table
+    // keeps cached identity while allowing a retired collectible generation to die.
+    private readonly ConditionalWeakTable<Type, ITypeDescriptor> registeredDescriptors = new();
     private readonly bool emitDefaultValues;
     private readonly IMemberNamingConvention namingConvention;
 
@@ -40,6 +44,7 @@ public class TypeDescriptorFactory : ITypeDescriptorFactory
         ArgumentNullException.ThrowIfNull(attributeRegistry);
         this.keyComparer = keyComparer;
         AttributeRegistry = attributeRegistry;
+        if (attributeRegistry is AttributeRegistry nativeRegistry) nativeRegistry.TrackDescriptors(this);
         this.emitDefaultValues = emitDefaultValues;
         this.namingConvention = namingConvention;
     }
@@ -69,6 +74,16 @@ public class TypeDescriptorFactory : ITypeDescriptorFactory
         }
 
         return descriptor;
+    }
+
+    internal void RetireRegisteredAttributes(MemberInfo member)
+    {
+        // Retained authoring graphs keep their descriptor. Only future lookups
+        // must stop inheriting a retired provider's manually attached metadata.
+        var type = member as Type ?? member.ReflectedType ?? member.DeclaringType;
+        if (type == null) return;
+        foreach (var cached in registeredDescriptors)
+            if (type.IsAssignableFrom(cached.Key)) registeredDescriptors.Remove(cached.Key);
     }
 
     /// <summary>

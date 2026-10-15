@@ -8,7 +8,8 @@ namespace Stride.Core.Reflection;
 
 public static class TypeExtensions
 {
-    private static readonly Dictionary<Type, bool> AnonymousTypes = [];
+    private sealed class AnonymousTypeResult(bool value) { internal bool Value { get; } = value; }
+    private static readonly ConditionalWeakTable<Type, AnonymousTypeResult> AnonymousTypes = new();
 
     public static bool HasInterface(this Type type, Type lookInterfaceType)
     {
@@ -76,14 +77,14 @@ public static class TypeExtensions
         lock (AnonymousTypes)
         {
             if (AnonymousTypes.TryGetValue(type, out var isAnonymous))
-                return isAnonymous;
+                return isAnonymous.Value;
 
-            isAnonymous = type.GetCustomAttributes(typeof(CompilerGeneratedAttribute), false).Length > 0
+            var result = type.GetCustomAttributes(typeof(CompilerGeneratedAttribute), false).Length > 0
                           && type.Namespace == null
                           && type.FullName!.Contains("AnonymousType");
 
-            AnonymousTypes.Add(type, isAnonymous);
-            return isAnonymous;
+            AnonymousTypes.Add(type, new AnonymousTypeResult(result));
+            return result;
         }
     }
 

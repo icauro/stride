@@ -26,9 +26,8 @@ namespace Stride.Core;
 /// </remarks>
 [DataContract]
 [DataSerializer(typeof(DictionaryAllSerializer<PropertyContainer, PropertyKey, object>))]
-public struct PropertyContainer : IDictionary<PropertyKey, object>, IReadOnlyDictionary<PropertyKey, object>
+public partial struct PropertyContainer : IDictionary<PropertyKey, object>, IReadOnlyDictionary<PropertyKey, object>
 {
-    private static readonly Dictionary<Type, List<PropertyKey>> AccessorProperties = [];
     private Dictionary<PropertyKey, object>? properties;
 
     /// <summary>
@@ -73,7 +72,7 @@ public struct PropertyContainer : IDictionary<PropertyKey, object>, IReadOnlyDic
             var currentType = Owner.GetType();
             while (currentType != null)
             {
-                if (AccessorProperties.TryGetValue(currentType, out var typeAccessorProperties))
+                if (GetAccessorProperties(currentType) is { Length: > 0 } typeAccessorProperties)
                 {
                     foreach (var accessorProperty in typeAccessorProperties)
                     {
@@ -139,7 +138,7 @@ public struct PropertyContainer : IDictionary<PropertyKey, object>, IReadOnlyDic
             var currentType = Owner.GetType();
             while (currentType != null)
             {
-                if (AccessorProperties.TryGetValue(currentType, out var typeAccessorProperties))
+                if (GetAccessorProperties(currentType) is { Length: > 0 } typeAccessorProperties)
                 {
                     foreach (var accessorProperty in typeAccessorProperties)
                     {
@@ -519,20 +518,6 @@ public struct PropertyContainer : IDictionary<PropertyKey, object>, IReadOnlyDic
         }
 
         propertyKey.ObjectInvalidationMetadata?.Invalidate(Owner, propertyKey, oldValue);
-    }
-
-    public static void AddAccessorProperty(Type type, PropertyKey propertyKey)
-    {
-        if (!type.GetTypeInfo().IsClass)
-            throw new ArgumentException("Class type is expected.", nameof(type));
-
-        if (propertyKey.AccessorMetadata == null)
-            throw new ArgumentException("Given PropertyKey doesn't have accessor metadata.", nameof(propertyKey));
-
-        if (!AccessorProperties.TryGetValue(type, out var typeAccessorProperties))
-            AccessorProperties.Add(type, typeAccessorProperties = []);
-
-        typeAccessorProperties.Add(propertyKey);
     }
 
     internal void RaisePropertyContainerUpdated(PropertyKey propertyKey, object newValue, object oldValue)

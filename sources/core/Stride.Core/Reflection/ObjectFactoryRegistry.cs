@@ -3,6 +3,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Stride.Core.Annotations;
 
 namespace Stride.Core.Reflection;
@@ -12,13 +13,14 @@ namespace Stride.Core.Reflection;
 /// </summary>
 public static class ObjectFactoryRegistry
 {
-    private static readonly Dictionary<Type, IObjectFactory?> RegisteredFactories = [];
+    private sealed class FactoryEntry(IObjectFactory? factory) { internal IObjectFactory? Factory { get; } = factory; }
+    private static readonly ConditionalWeakTable<Type, FactoryEntry> RegisteredFactories = new();
 
     static ObjectFactoryRegistry()
     {
         // Register factory for string
         // TODO: We should remove that as soon as we can register attributes in registry for "string" type
-        RegisteredFactories.Add(typeof(string), new StringObjectFactory());
+        RegisteredFactories.Add(typeof(string), new FactoryEntry(new StringObjectFactory()));
     }
 
     /// <summary>
@@ -32,8 +34,8 @@ public static class ObjectFactoryRegistry
         ArgumentNullException.ThrowIfNull(objectType);
         lock (RegisteredFactories)
         {
-            RegisteredFactories.TryGetValue(objectType, out var factory);
-            return factory;
+            RegisteredFactories.TryGetValue(objectType, out var entry);
+            return entry?.Factory;
         }
     }
 
@@ -81,11 +83,8 @@ public static class ObjectFactoryRegistry
 
         lock (RegisteredFactories)
         {
-            if (!RegisteredFactories.TryGetValue(objectType, out var factory))
-            {
-                factory = RegisterFactory(objectType);
-            }
-            return factory;
+            if (!RegisteredFactories.TryGetValue(objectType, out var entry)) return RegisterFactory(objectType);
+            return entry.Factory;
         }
     }
 
@@ -102,7 +101,8 @@ public static class ObjectFactoryRegistry
                 factory = (IObjectFactory?)Activator.CreateInstance(factoryAttribute.FactoryType);
             }
 
-            RegisteredFactories[objectType] = factory;
+            RegisteredFactories.Remove(objectType);
+            RegisteredFactories.Add(objectType, new FactoryEntry(factory));
 
             return factory;
         }
