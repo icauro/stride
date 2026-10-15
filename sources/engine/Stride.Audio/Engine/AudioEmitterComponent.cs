@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using Stride.Audio;
 using Stride.Core;
 using Stride.Core.Annotations;
@@ -96,6 +97,43 @@ namespace Stride.Engine
         /// <returns>The sound controller.</returns>
         [DataMemberIgnore]
         public AudioEmitterSoundController this[string soundName] => SoundToController[Sounds[soundName]];
+
+        private bool replacingCompiledSound;
+        /// <summary>Replaces a compiled sound without invalidating its existing controller and named aliases.</summary>
+        public void ReplaceCompiledSound(Sound previous, Sound next)
+        {
+            ArgumentNullException.ThrowIfNull(previous); ArgumentNullException.ThrowIfNull(next);
+            if (ReferenceEquals(previous, next)) return;
+            if (next.Channels > 1) throw new InvalidOperationException("The provided Sound has more than one channel. It can not be localized in the 3D scene, please check the spatialized option in the Sound asset.");
+            var names = new List<string>();
+            foreach (var pair in Sounds) if (ReferenceEquals(pair.Value, previous)) names.Add(pair.Key);
+            if (names.Count == 0) return;
+            if (SoundToController.ContainsKey(next)) throw new InvalidOperationException("The replacement sound is already attached to this emitter.");
+            SoundToController.TryGetValue(previous, out var controller);
+            replacingCompiledSound = true;
+            try
+            {
+                controller?.ReplaceCompiledSound(next);
+                foreach (var name in names) Sounds[name] = next;
+                if (controller != null) { SoundToController.Remove(previous); SoundToController.Add(next, controller); }
+                if (SoundMultiplicities.Remove(previous, out var count)) SoundMultiplicities[next] = count;
+            }
+            catch (Exception failure)
+            {
+                var failures = new List<Exception> { failure };
+                foreach (var name in names) try { Sounds[name] = previous; } catch (Exception error) { failures.Add(error); }
+                try { controller?.ReplaceCompiledSound(previous); } catch (Exception error) { failures.Add(error); }
+                SoundToController.Remove(next);
+                if (controller != null) SoundToController[previous] = controller;
+                if (SoundMultiplicities.Remove(next, out var count)) SoundMultiplicities[previous] = count;
+                if (failures.Count > 1) throw new AggregateException("Sound aliases could not be restored.", failures);
+                throw;
+            }
+            finally { replacingCompiledSound = false; }
+        }
+
+        /// <summary>Includes playback that intentionally finishes against an older compiled generation.</summary>
+        public bool ReferencesSound(SoundBase value) => SoundToController.Values.Any(controller => controller.ReferencesSound(value));
 
         /// <summary>
         /// If possible use a more complex HRTF algorithm to perform 3D sound simulation
@@ -191,6 +229,7 @@ namespace Stride.Engine
 
         private void OnSoundsOnCollectionChanged(object sender, TrackingCollectionChangedEventArgs args)
         {
+            if (replacingCompiledSound) return;
             switch (args.Action)
             {
                 case NotifyCollectionChangedAction.Add:

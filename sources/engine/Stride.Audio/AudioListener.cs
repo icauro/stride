@@ -14,10 +14,11 @@ namespace Stride.Audio
     /// </summary>
     /// <seealso cref="IPositionableSound.Apply3D"/>
     /// <seealso cref="AudioEmitter"/>
-    public class AudioListener : IDisposable
+    public partial class AudioListener : IDisposable
     {
         public AudioListener(AudioEngine engine)
         {
+            deviceEngine = engine; engine.RegisterDeviceListener(this);
             if (engine.State == AudioEngineState.Invalidated) return;
 
 #if STRIDE_PLATFORM_IOS
@@ -124,12 +125,13 @@ namespace Stride.Audio
         /// </summary>
         public void Dispose()
         {
-            if (Listener.Ptr == IntPtr.Zero) return;
+            if (Listener.Ptr == IntPtr.Zero) { deviceEngine?.UnregisterDeviceListener(this); return; }
 
 #if !STRIDE_PLATFORM_IOS
             AudioLayer.ListenerDisable(Listener);
             AudioLayer.ListenerDestroy(Listener);
 #endif
+            Listener = default; deviceEngine?.UnregisterDeviceListener(this);
         }
 
         internal void Update()

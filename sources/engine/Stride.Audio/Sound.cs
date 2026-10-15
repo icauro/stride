@@ -20,7 +20,7 @@ namespace Stride.Audio
     [ContentSerializer(typeof(DataContentSerializer<Sound>))]
     [ReferenceSerializer, DataSerializerGlobal(typeof(ReferenceSerializer<Sound>), Profile = "Content")]
     [DataSerializer(typeof(SoundSerializer))]
-    public sealed class Sound : SoundBase
+    public sealed partial class Sound : SoundBase
     {
         internal bool StreamFromDisk { get; set; }
 
@@ -64,30 +64,33 @@ namespace Stride.Audio
         {
             base.Destroy();
 
-            if (AudioEngine == null || AudioEngine.State == AudioEngineState.Invalidated)
+            if (AudioEngine == null)
                 return;
 
             // Don't free a buffer that was never loaded into memory (Ptr stays null then).
-            if (!StreamFromDisk && PreloadedBuffer.Ptr != IntPtr.Zero)
+            if (PreloadedBuffer.Ptr != IntPtr.Zero)
             {
                 AudioLayer.BufferDestroy(PreloadedBuffer);
+                PreloadedBuffer = default;
             }
         }
 
         internal void LoadSoundInMemory()
         {
-            if (PreloadedBuffer.Ptr != IntPtr.Zero) return;
-
-            using (var soundStream = FileProvider.OpenStream(CompressedDataUrl, VirtualFileMode.Open, VirtualFileAccess.Read, VirtualFileShare.Read, StreamFlags.Seekable))
-            using (var decoder = new Celt(SampleRate, CompressedSoundSource.SamplesPerFrame, Channels, true))
+            if (PreloadedBuffer.Ptr == IntPtr.Zero) PreloadedBuffer = CreateDeviceBuffer();
+        }
+        internal AudioLayer.Buffer CreateDeviceBuffer()
+        {
+            var buffer = default(AudioLayer.Buffer);
+            try
             {
+                using var soundStream = FileProvider.OpenStream(CompressedDataUrl, VirtualFileMode.Open, VirtualFileAccess.Read, VirtualFileShare.Read, StreamFlags.Seekable);
+                using var decoder = new Celt(SampleRate, CompressedSoundSource.SamplesPerFrame, Channels, true);
                 var reader = new BinarySerializationReader(soundStream);
                 var samplesPerPacket = CompressedSoundSource.SamplesPerFrame * Channels;
-
-                PreloadedBuffer = AudioLayer.BufferCreate(samplesPerPacket * NumberOfPackets * sizeof(short));
-
-                var memory = new UnmanagedArray<short>(samplesPerPacket * NumberOfPackets);
-
+                buffer = AudioLayer.BufferCreate(samplesPerPacket * NumberOfPackets * sizeof(short));
+                if (buffer.Ptr == IntPtr.Zero) throw new InvalidOperationException("The native sound buffer could not be allocated.");
+                using var memory = new UnmanagedArray<short>(samplesPerPacket * NumberOfPackets);
                 var offset = 0;
                 var outputBuffer = new short[samplesPerPacket];
                 for (var i = 0; i < NumberOfPackets; i++)
@@ -98,12 +101,12 @@ namespace Stride.Audio
                     memory.Write(outputBuffer, offset, 0, samplesDecoded * Channels);
                     offset += samplesDecoded * Channels * sizeof(short);
                 }
-
-                // Ignore invalid data at beginning (due to encoder delay) & end of stream (due to packet size)
                 var samplesToSkip = decoder.GetDecoderSampleDelay();
-                AudioLayer.BufferFill(PreloadedBuffer, memory.Pointer + samplesToSkip * Channels * sizeof(short), Samples * Channels * sizeof(short), SampleRate, Channels == 1);
-                memory.Dispose();
+                AudioLayer.BufferFill(buffer, memory.Pointer + samplesToSkip * Channels * sizeof(short), Samples * Channels * sizeof(short), SampleRate, Channels == 1);
+                return buffer;
             }
+            catch { if (buffer.Ptr != IntPtr.Zero) AudioLayer.BufferDestroy(buffer); throw; }
         }
+
     }
 }

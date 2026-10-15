@@ -40,12 +40,13 @@ namespace Stride.Audio
 
         // -- Managed wrappers ----------------------------------------------------
 
-        private sealed class ManagedDevice
+        private sealed partial class ManagedDevice
         {
             public AVAudioEngine Engine;
             public AVAudioMixerNode Mixer;          // == Engine.MainMixerNode; cached for master volume
             public AVAudioEnvironmentNode Env;      // 3D mixer; spatialized sources connect here
             public List<ManagedSource> Sources = new();
+            public bool EngineStopped, EnvironmentDetached, EnvironmentReleased, EngineReleased;
         }
 
         private sealed class ManagedListener
@@ -56,6 +57,8 @@ namespace Stride.Audio
 
         private sealed class ManagedBuffer
         {
+            public IntPtr NativeHandle;
+            public long ScheduleGeneration;
             public int CapacityBytes;               // max bytes BufferFill can write
             public AVAudioPcmBuffer Pcm;            // null until BufferFill is called the first time
             public AudioLayer.BufferType StreamType;
@@ -64,7 +67,7 @@ namespace Stride.Audio
             public bool Scheduled;
         }
 
-        private sealed class ManagedSource
+        private sealed partial class ManagedSource
         {
             public ManagedDevice Device;
             public ManagedListener Listener;
@@ -76,9 +79,14 @@ namespace Stride.Audio
             public bool Streamed;
             public bool Looping;
             public float Gain = 1f;
+            public bool StaticBufferScheduled;
             public ManagedBuffer StaticBuffer;      // SourceSetBuffer target; replays on Play
-            public Queue<ManagedBuffer> StreamingFree = new();  // pre-allocated, returned via SourceGetFreeBuffer
-            public Queue<ManagedBuffer> StreamingPending = new(); // queued, not yet consumed
+            public Queue<ManagedBuffer> StreamingFree = new();  // actual pool tokens returned after native playback
+            public readonly object ScheduleGate = new();
+            public readonly List<NativeAudioSchedule> NativeSchedules = new();
+            public long ScheduledFrames;
+            public bool ScheduleDisposed;
+            public bool PlayerStopped, PlayerDetached, PlayerReleased, FormatReleased;
             public double PlayRangeStart, PlayRangeStop;
         }
 
@@ -128,17 +136,15 @@ namespace Stride.Audio
             var dev = ResolveHandle<ManagedDevice>(device.Ptr);
             if (dev == null) return;
 
-            // Stop and tear down player nodes still attached.
-            foreach (var src in dev.Sources)
+            foreach (var src in new List<ManagedSource>(dev.Sources)) DestroyNativeSourceResources(src);
+            if (!dev.EngineStopped) { dev.Engine.Stop(); dev.EngineStopped = true; }
+            if (!dev.EnvironmentDetached)
             {
-                try { src.Player?.Stop(); } catch { }
-                try { if (src.Player != null) dev.Engine.DetachNode(src.Player); } catch { }
+                if (dev.Env != null) dev.Engine.DetachNode(dev.Env);
+                dev.EnvironmentDetached = true;
             }
-            dev.Sources.Clear();
-
-            try { dev.Engine.Stop(); } catch { }
-            try { if (dev.Env != null) dev.Engine.DetachNode(dev.Env); } catch { }
-            dev.Engine.Dispose();
+            if (!dev.EnvironmentReleased) { dev.Env?.Dispose(); dev.EnvironmentReleased = true; }
+            if (!dev.EngineReleased) { dev.Engine.Dispose(); dev.EngineReleased = true; }
             FreeHandle(device.Ptr);
         }
 
@@ -195,7 +201,8 @@ namespace Stride.Audio
         public static Buffer BufferCreate(int maxBufferSizeBytes)
         {
             var buf = new ManagedBuffer { CapacityBytes = maxBufferSizeBytes };
-            return new Buffer { Ptr = AllocHandle(buf) };
+            buf.NativeHandle = AllocHandle(buf);
+            return new Buffer { Ptr = buf.NativeHandle };
         }
 
         public static void BufferDestroy(Buffer buffer)
@@ -205,6 +212,7 @@ namespace Stride.Audio
             {
                 b.Pcm?.Dispose();
                 b.Pcm = null;
+                b.NativeHandle = IntPtr.Zero;
             }
             FreeHandle(buffer.Ptr);
         }
@@ -213,6 +221,8 @@ namespace Stride.Audio
         {
             var b = ResolveHandle<ManagedBuffer>(buffer.Ptr);
             if (b == null || pcm == IntPtr.Zero || bufferSize <= 0) return;
+            if (bufferSize > b.CapacityBytes || sampleRate <= 0 || bufferSize % (sizeof(short) * (mono ? 1 : 2)) != 0)
+                throw new ArgumentOutOfRangeException(nameof(bufferSize), "The PCM packet must fit its real native pool buffer and contain complete frames.");
 
             uint channels = mono ? 1u : 2u;
             // Stride writes int16 interleaved PCM into the buffer.
@@ -267,14 +277,8 @@ namespace Stride.Audio
                 dev.Engine.Connect(src.Player, dev.Mixer, src.Format);
             }
 
-            // Streaming sources pre-allocate a pool of empty buffers that SourceGetFreeBuffer
-            // hands back to the caller; BufferFill (via the buffer the caller filled) + QueueBuffer
-            // recycle them as the player consumes them.
-            if (streamed && maxNumberOfBuffers > 0)
-            {
-                for (int i = 0; i < maxNumberOfBuffers; i++)
-                    src.StreamingFree.Enqueue(new ManagedBuffer { CapacityBytes = 0 });
-            }
+            // DynamicSoundSource owns and allocates the exact native pool. Extra
+            // source-local buffers would have no matching managed pool tokens.
 
             lock (dev.Sources) dev.Sources.Add(src);
             return new Source { Ptr = AllocHandle(src) };
@@ -283,14 +287,35 @@ namespace Stride.Audio
         public static void SourceDestroy(Source source)
         {
             var src = ResolveHandle<ManagedSource>(source.Ptr);
-            if (src != null)
-            {
-                try { src.Player?.Stop(); } catch { }
-                try { if (src.Player != null && src.Device != null) src.Device.Engine.DetachNode(src.Player); } catch { }
-                if (src.Device != null)
-                    lock (src.Device.Sources) src.Device.Sources.Remove(src);
-            }
+            if (src != null) DestroyNativeSourceResources(src);
             FreeHandle(source.Ptr);
+        }
+
+        internal static bool SupportsStreamDeviceRecovery => false;
+        internal static bool TryPrepareStreamRecovery(Source original, Source replacement, Buffer[] originalBuffers, Buffer[] replacementBuffers, Buffer[] managedFreeBuffers) => false;
+        internal static int GetRecoveryPlaybackState(Source source) => throw new NotSupportedException("This backend has no streamed playback recovery adapter.");
+
+        // No managed seek adapter is installed until the AVAudioPlayerNode segment
+        // scheduler supports preserving both the first-pass offset and loop range.
+        internal static bool TrySetPlaybackPosition(Source source, double seconds)
+        {
+            var src = ResolveHandle<ManagedSource>(source.Ptr);
+            return seconds == 0 && CanPreserveStaticPlaybackRange(source) && src?.StaticBuffer?.Pcm != null;
+        }
+        internal static bool CanPreserveStaticPlaybackRange(Source source)
+        {
+            var src = ResolveHandle<ManagedSource>(source.Ptr);
+            if (src == null || src.Streamed || src.StaticBuffer?.Pcm == null || src.SampleRate <= 0) return false;
+            // The existing native buffer scheduler supports the full buffer only.
+            // Do not report a trimmed segment restored until actual PCM segment
+            // scheduling and subsequent full-range loop scheduling are installed.
+            var duration = (double)src.StaticBuffer.Pcm.FrameLength / src.SampleRate;
+            return src.PlayRangeStart == 0 && (src.PlayRangeStop <= 0 || src.PlayRangeStop >= duration);
+        }
+        internal static bool? TryGetDeviceInvalidation(Device device)
+        {
+            var native = ResolveHandle<ManagedDevice>(device.Ptr);
+            return native?.Engine == null ? true : (bool?)null;
         }
 
         public static double SourceGetPosition(Source source)
@@ -316,20 +341,16 @@ namespace Stride.Audio
             var buf = ResolveHandle<ManagedBuffer>(buffer.Ptr);
             if (src == null) return;
             src.StaticBuffer = buf;
+            src.StaticBufferScheduled = false;
         }
 
         public static void SourceFlushBuffers(Source source)
         {
             var src = ResolveHandle<ManagedSource>(source.Ptr);
             if (src?.Player == null) return;
-            try { src.Player.Stop(); } catch { }
-            // Recycle pending streaming buffers back to the free pool.
-            while (src.StreamingPending.Count > 0)
-            {
-                var b = src.StreamingPending.Dequeue();
-                b.Scheduled = false;
-                src.StreamingFree.Enqueue(b);
-            }
+            src.Player.Stop();
+            src.StaticBufferScheduled = false;
+            ReleaseNativeSchedules(src, disposing: false);
         }
 
         public static void SourceQueueBuffer(Source source, Buffer buffer, IntPtr pcm, int bufferSize, BufferType streamType)
@@ -337,34 +358,21 @@ namespace Stride.Audio
             var src = ResolveHandle<ManagedSource>(source.Ptr);
             var buf = ResolveHandle<ManagedBuffer>(buffer.Ptr);
             if (src?.Player == null || buf == null) return;
-            // Caller already wrote PCM into the buffer's AVAudioPcmBuffer via BufferFill. Just schedule.
-            buf.StreamType = streamType;
-            buf.Scheduled = true;
-            src.StreamingPending.Enqueue(buf);
-            if (buf.Pcm != null)
-            {
-                src.Player.ScheduleBuffer(buf.Pcm, () =>
-                {
-                    // Completion runs on an AV worker thread; bounce back onto a free pool the
-                    // game thread polls via SourceGetFreeBuffer.
-                    lock (src.StreamingFree)
-                    {
-                        buf.Scheduled = false;
-                        src.StreamingFree.Enqueue(buf);
-                    }
-                });
-            }
+            BufferFill(buffer, pcm, bufferSize, src.SampleRate, src.Mono);
+            if (buf.Pcm == null) throw new InvalidOperationException("The native audio packet has no PCM storage.");
+            ScheduleNativePacket(src, buf, streamType);
         }
 
         public static Buffer SourceGetFreeBuffer(Source source)
         {
             var src = ResolveHandle<ManagedSource>(source.Ptr);
             if (src == null) return default;
-            lock (src.StreamingFree)
+            lock (src.ScheduleGate)
             {
+                RetirePlayedNativeSchedules(src);
                 if (src.StreamingFree.Count == 0) return default;
                 var b = src.StreamingFree.Dequeue();
-                return new Buffer { Ptr = AllocHandle(b) };
+                return new Buffer { Ptr = b.NativeHandle };
             }
         }
 
@@ -374,10 +382,11 @@ namespace Stride.Audio
             if (src?.Player == null) return;
             // Static (non-streamed) sources schedule the single attached buffer here. The streaming
             // path schedules via SourceQueueBuffer; SourcePlay just resumes the player node.
-            if (!src.Streamed && src.StaticBuffer?.Pcm != null && !src.Player.Playing)
+            if (!src.Streamed && src.StaticBuffer?.Pcm != null && !src.StaticBufferScheduled)
             {
                 var options = src.Looping ? AVAudioPlayerNodeBufferOptions.Loops : AVAudioPlayerNodeBufferOptions.Interrupts;
                 src.Player.ScheduleBuffer(src.StaticBuffer.Pcm, when: null, options, completionHandler: () => { });
+                src.StaticBufferScheduled = true;
             }
             src.Player.Play();
         }
@@ -385,21 +394,18 @@ namespace Stride.Audio
         public static void SourcePause(Source source)
         {
             var src = ResolveHandle<ManagedSource>(source.Ptr);
-            try { src?.Player?.Pause(); } catch { }
+            src?.Player?.Pause();
         }
 
         public static void SourceStop(Source source)
         {
             var src = ResolveHandle<ManagedSource>(source.Ptr);
-            try { src?.Player?.Stop(); } catch { }
+            src?.Player?.Stop();
+            if (src != null)
+                src.StaticBufferScheduled = false;
             if (src != null)
             {
-                while (src.StreamingPending.Count > 0)
-                {
-                    var b = src.StreamingPending.Dequeue();
-                    b.Scheduled = false;
-                    src.StreamingFree.Enqueue(b);
-                }
+                ReleaseNativeSchedules(src, disposing: false);
             }
         }
 

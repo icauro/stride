@@ -34,6 +34,56 @@ namespace Stride.Audio
         [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioUpdate", CallingConvention = CallingConvention.Cdecl)]
         public static extern void Update(Device device);
 
+        [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioRecoveryCapabilities", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int RecoveryCapabilities();
+        private static int? recoveryCapabilities;
+        internal static bool SupportsStreamDeviceRecovery
+        {
+            get
+            {
+                if (!recoveryCapabilities.HasValue)
+                    try { recoveryCapabilities = RecoveryCapabilities(); }
+                    catch (EntryPointNotFoundException) { recoveryCapabilities = 0; }
+                return (recoveryCapabilities.Value & 2) != 0;
+            }
+        }
+        [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioPrepareStreamRecovery", CallingConvention = CallingConvention.Cdecl)]
+        private static extern bool PrepareStreamRecovery(Source original, Source replacement,
+            [In] Buffer[] originalBuffers, [In] Buffer[] replacementBuffers, int count,
+            [In] Buffer[] managedFreeBuffers, int managedFreeCount);
+        internal static bool TryPrepareStreamRecovery(Source original, Source replacement, Buffer[] originalBuffers, Buffer[] replacementBuffers, Buffer[] managedFreeBuffers)
+            => SupportsStreamDeviceRecovery && originalBuffers.Length == replacementBuffers.Length
+                && PrepareStreamRecovery(original, replacement, originalBuffers, replacementBuffers, originalBuffers.Length, managedFreeBuffers, managedFreeBuffers.Length);
+        [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioSourceGetPlaybackState", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int NativePlaybackState(Source source);
+        internal static int GetRecoveryPlaybackState(Source source)
+        {
+            if (!SupportsStreamDeviceRecovery) throw new NotSupportedException("The loaded native backend cannot capture streamed playback state.");
+            var playback = NativePlaybackState(source);
+            if (playback < 0 || playback > 2) throw new InvalidOperationException("The native streamed playback state could not be certified.");
+            return playback;
+        }
+
+        [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioSourceSetPlaybackPosition", CallingConvention = CallingConvention.Cdecl)]
+        private static extern bool SetPlaybackPosition(Source source, double seconds);
+        internal static bool CanPreserveStaticPlaybackRange(Source source) => source.Ptr != IntPtr.Zero;
+        private static bool? playbackPositionSupported;
+        internal static bool TrySetPlaybackPosition(Source source, double seconds)
+        {
+            if (playbackPositionSupported == false) return false;
+            try { var result = SetPlaybackPosition(source, seconds); playbackPositionSupported = true; return result; }
+            catch (EntryPointNotFoundException) { playbackPositionSupported = false; return false; }
+        }
+        [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioDeviceIsInvalidated", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int DeviceIsInvalidated(Device device);
+        private static bool? deviceInvalidationSupported;
+        internal static bool? TryGetDeviceInvalidation(Device device)
+        {
+            if (deviceInvalidationSupported == false) return null;
+            try { var result = DeviceIsInvalidated(device); deviceInvalidationSupported = true; return result < 0 ? (bool?)null : result != 0; }
+            catch (EntryPointNotFoundException) { deviceInvalidationSupported = false; return null; }
+        }
+
         [SuppressUnmanagedCodeSecurity]
         [DllImport(NativeInvoke.Library, EntryPoint = "xnAudioSetMasterVolume", CallingConvention = CallingConvention.Cdecl)]
         public static extern void SetMasterVolume(Device device, float volume);

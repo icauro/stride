@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Stride.Core;
 using Stride.Core.Diagnostics;
 using Stride.Media;
@@ -16,11 +17,12 @@ namespace Stride.Audio
     /// </summary>
     /// <remarks>The AudioEngine is Disposable. Call the <see cref="DisposeBase.Dispose"/> function when you do not need to play sounds anymore to free memory allocated to the audio system.
     /// A call to Dispose automatically stops and disposes all the <see cref="SoundBase"/>, <see cref="SoundInstance"/>.</remarks>
-    public class AudioEngine : ComponentBase
+    public partial class AudioEngine : ComponentBase
     {
         public AudioListener DefaultListener;
 
-        private readonly AudioDevice audioDevice;
+        private AudioDevice audioDevice;
+        private AudioLayer.DeviceFlags initializedDeviceFlags;
 
         static AudioEngine()
         {
@@ -57,7 +59,7 @@ namespace Stride.Audio
 
             AudioSampleRate = sampleRate;
 
-            audioDevice = device;
+            audioDevice = device ?? new AudioDevice();
         }
 
         private float masterVolume = 1.0f;
@@ -69,6 +71,8 @@ namespace Stride.Audio
         /// </summary>
         internal virtual void InitializeAudioEngine(AudioLayer.DeviceFlags flags)
         {
+            deviceOwnerThread = Environment.CurrentManagedThreadId;
+            initializedDeviceFlags = flags;
             AudioDevice = AudioLayer.Create(audioDevice.Name == "default" ? null : audioDevice.Name, flags);
             if (AudioDevice.Ptr == IntPtr.Zero)
             {
@@ -85,8 +89,16 @@ namespace Stride.Audio
         {
             if (AudioDevice.Ptr != IntPtr.Zero)
             {
-                AudioLayer.ListenerDestroy(DefaultListener.Listener);
-                AudioLayer.Destroy(AudioDevice);
+                deviceRecreationNotification = false;
+                FinishDeviceCleanup();
+#if STRIDE_PLATFORM_IOS
+                var sharedListener = DefaultListener == null ? default(AudioLayer.Listener) : DefaultListener.Listener;
+                foreach (var listener in deviceListeners.ToArray()) listener.Dispose();
+                if (sharedListener.Ptr != IntPtr.Zero) AudioLayer.ListenerDestroy(sharedListener);
+#else
+                foreach (var listener in deviceListeners.ToArray()) listener.Dispose();
+#endif
+                AudioLayer.Destroy(AudioDevice); AudioDevice = default;
             }
         }
 
@@ -109,7 +121,11 @@ namespace Stride.Audio
         {
             if (State != AudioEngineState.Disposed && State != AudioEngineState.Invalidated)
             {
+                if (CheckDeviceAvailability() == false) return;
                 AudioLayer.Update(AudioDevice);
+                foreach (var instance in deviceInstances)
+                    if (!instance.IsDisposed && instance.CanRecreateDeviceSource && instance.PlayState == PlayState.Playing) _ = instance.Position;
+                CheckDeviceAvailability();
             }
         }
 

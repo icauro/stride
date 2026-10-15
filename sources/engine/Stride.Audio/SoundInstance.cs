@@ -11,7 +11,7 @@ namespace Stride.Audio
     /// <summary>
     /// Base class for sound that creates voices
     /// </summary>
-    public class SoundInstance : ComponentBase, IPositionableSound
+    public partial class SoundInstance : ComponentBase, IPositionableSound
     {
         protected DynamicSoundSource soundSource;
         protected SoundBase sound;
@@ -19,8 +19,8 @@ namespace Stride.Audio
 
         protected bool isLooping;
         protected float pan;
-        protected float pitch;
-        protected float volume;
+        protected float pitch = 1.0f;
+        protected float volume = 1.0f;
         protected bool spatialized;
         protected PlayState playState = PlayState.Stopped;
 
@@ -45,10 +45,10 @@ namespace Stride.Audio
             Listener = listener;
             this.engine = engine;
             this.spatialized = spatialized;
+            ConfigureDeviceSource(sampleRate, mono, true, useHrtf, directionalFactor, environment);
             soundSource = dynamicSoundSource;
 
-            if (engine.State == AudioEngineState.Invalidated)
-                return;
+            if (engine.State == AudioEngineState.Invalidated) { engine.RegisterDeviceInstance(this); return; }
 
             Source = AudioLayer.SourceCreate(listener.Listener, sampleRate, dynamicSoundSource.MaxNumberOfBuffers, mono, spatialized, true, useHrtf, directionalFactor, environment);
             if (Source.Ptr == IntPtr.Zero)
@@ -56,7 +56,7 @@ namespace Stride.Audio
                 throw new Exception("Failed to create an AudioLayer Source");
             }
 
-            ResetStateToDefault();
+            ResetStateToDefault(); engine.RegisterDeviceInstance(this);
         }
 
         internal SoundInstance() { }
@@ -69,6 +69,7 @@ namespace Stride.Audio
             spatialized = staticSound.Spatialized;
 
             var streamed = staticSound.StreamFromDisk && !forceLoadInMemory;
+            ConfigureDeviceSource(staticSound.SampleRate, staticSound.Channels == 1, streamed, useHrtf, directionalFactor, environment);
 
             if (engine.State == AudioEngineState.Invalidated)
                 return;
@@ -201,6 +202,7 @@ namespace Stride.Audio
             if (emitter == null)
                 throw new ArgumentNullException(nameof(emitter));
 
+            deviceEmitter = emitter;
             emitter.Apply3D(Source);
         }
 
@@ -216,6 +218,7 @@ namespace Stride.Audio
             if (PlayState != PlayState.Playing)
                 return;
 
+            retainedDevicePosition = Position;
             if (soundSource == null)
             {
                 AudioLayer.SourcePause(Source);
@@ -265,7 +268,7 @@ namespace Stride.Audio
                 soundSource.Stop();
             }
 
-            playState = PlayState.Stopped;
+            playState = PlayState.Stopped; retainedDevicePosition = TimeSpan.Zero;
         }
 
         internal void ResetStateToDefault()
@@ -289,14 +292,13 @@ namespace Stride.Audio
 
             Stop();
 
+            engine?.UnregisterDeviceInstance(this);
             sound?.UnregisterInstance(this);
-
-            if (engine.State == AudioEngineState.Invalidated)
-                return;
 
             if (soundSource == null)
             {
-                AudioLayer.SourceDestroy(Source);
+                if (Source.Ptr == IntPtr.Zero) return;
+                AudioLayer.SourceDestroy(Source); Source = default;
             }
             else
             {
@@ -363,6 +365,7 @@ namespace Stride.Audio
         /// <param name="range">a PlayRange structure that describes the starting offset and ending point of the sound to play in seconds.</param>
         public void SetRange(PlayRange range)
         {
+            devicePlayRange = range;
             if (engine.State == AudioEngineState.Invalidated)
                 return;
 
@@ -399,7 +402,7 @@ namespace Stride.Audio
                     return TimeSpan.Zero;
                 var rangeStart = soundSource?.PlayRange.Start ?? TimeSpan.Zero;
                 var position = TimeSpan.FromSeconds(AudioLayer.SourceGetPosition(Source)) + rangeStart;
-                return position > sound.TotalLength ? rangeStart : position;
+                return retainedDevicePosition = position > sound.TotalLength ? rangeStart : position;
             }
         }
     }

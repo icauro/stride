@@ -34,12 +34,15 @@ namespace Stride.Audio
             engine = soundStreamedBuffer.AudioEngine;
             sound = soundStreamedBuffer;
             spatialized = soundStreamedBuffer.Spatialized;
+            ConfigureDeviceSource(soundStreamedBuffer.SampleRate, soundStreamedBuffer.Channels == 1, true, useHrtf, directionalFactor, environment);
 
             if (engine.State == AudioEngineState.Invalidated)
                 return;
 
             //We first create the soundSource so that it gets initialized and can give us sampleRate and Channels info
             soundSource = streamedSource = new StreamedBufferSoundSource(this, this.scheduler, mediaDataUrl, startPosition, length);
+
+            ConfigureDeviceSource(soundStreamedBuffer.SampleRate, soundStreamedBuffer.Channels == 1, true, useHrtf, directionalFactor, environment);
 
             //Create the AudioLayer source
             Source = AudioLayer.SourceCreate(listener.Listener, soundStreamedBuffer.SampleRate, streamedSource.MaxNumberOfBuffers, 

@@ -39,6 +39,9 @@ namespace Stride.Audio
 
         public AudioDevice RequestedAudioDevice { get; set; } = new AudioDevice();
 
+        /// <summary>Whether this system follows its game's main-window activation events.</summary>
+        public bool HandleGameActivation { get; set; } = true;
+
         /// <summary>
         /// A collection containing the <see cref="AudioListenerComponent"/>-<see cref="AudioListener"/> associations.
         /// The AudioListenerComponent keys are added/removed by the user by calls to <see cref="AddListener"/>/<see cref="RemoveListener"/>.
@@ -137,12 +140,14 @@ namespace Stride.Audio
 
         private void OnActivated(object sender, EventArgs e)
         {
+            if (!HandleGameActivation || AudioEngine == null) return;
             // resume the audio
             AudioEngine.ResumeAudio();
         }
 
         private void OnDeactivated(object sender, EventArgs e)
         {
+            if (!HandleGameActivation || AudioEngine == null) return;
             // pause the audio
             AudioEngine.PauseAudio();
             AudioEngine.Update(); // force the update of the audio to pause the Musics

@@ -1138,12 +1138,27 @@ extern "C" {
 			return true;
 		}
 
-		struct xnAudioDevice
+		struct xnAudioDevice : IXAudio2EngineCallback
 		{
-			IXAudio2* x_audio2_;
+			IXAudio2* x_audio2_ = NULL;
 			X3DAUDIO_HANDLE x3_audio_;
-			IXAudio2MasteringVoice* mastering_voice_;
+			IXAudio2MasteringVoice* mastering_voice_ = NULL;
 			bool hrtf_;
+            bool callbacks_registered_ = false;
+            volatile bool invalidated_ = false;
+            SpinLock invalidationLock_;
+            ~xnAudioDevice()
+            {
+                if (!x_audio2_) return;
+                if (callbacks_registered_) x_audio2_->UnregisterForCallbacks(this);
+                x_audio2_->StopEngine();
+                if (mastering_voice_) mastering_voice_->DestroyVoice();
+                x_audio2_->Release();
+            }
+            void __stdcall OnProcessingPassStart() override { }
+            void __stdcall OnProcessingPassEnd() override { }
+            void __stdcall OnCriticalError(HRESULT error) override
+            { invalidationLock_.Lock(); invalidated_ = true; invalidationLock_.Unlock(); }
 		};
 
 		struct xnAudioSource;
@@ -1153,6 +1168,8 @@ extern "C" {
 		{
 			XAUDIO2_BUFFER buffer_;
 			int length_;
+            int capacityBytes_;
+            xnAudioBuffer* nextQueued_ = NULL;
 			BufferType type_;
 		};
 
@@ -1203,6 +1220,9 @@ extern "C" {
 				}		
 			}
 
+            result = res->x_audio2_->RegisterForCallbacks(res);
+            if (FAILED(result)) { delete res; return NULL; }
+            res->callbacks_registered_ = true;
 			//X3DAudio
 			result = X3DAudioInitializeFunc(SPEAKER_STEREO, SPEED_OF_SOUND, res->x3_audio_);
 			if (FAILED(result))
@@ -1214,14 +1234,16 @@ extern "C" {
 			return res;
 		}
 
-		DLL_EXPORT_API void xnAudioDestroy(xnAudioDevice* device)
-		{
-			device->x_audio2_->StopEngine();
+		DLL_EXPORT_API void xnAudioDestroy(xnAudioDevice* device) { delete device; }
 
-			device->mastering_voice_->DestroyVoice();
-			
-			delete device;
-		}
+        DLL_EXPORT_API npBool xnAudioDeviceIsInvalidated(xnAudioDevice* device)
+        {
+            if (!device) return true;
+            device->invalidationLock_.Lock();
+            const auto invalidated = device->invalidated_;
+            device->invalidationLock_.Unlock();
+            return invalidated;
+        }
 
 		DLL_EXPORT_API void xnAudioUpdate(xnAudioDevice* device)
 		{
@@ -1261,13 +1283,14 @@ extern "C" {
 		struct xnAudioSource : IXAudio2VoiceCallback
 		{
 			IXAudio2MasteringVoice* mastering_voice_;
-			IXAudio2SourceVoice* source_voice_;
-			X3DAUDIO_EMITTER* emitter_;
-			X3DAUDIO_DSP_SETTINGS* dsp_settings_;
-			IXAPOHrtfParameters* hrtf_params_;
+			IXAudio2SourceVoice* source_voice_ = NULL;
+            IXAudio2SubmixVoice* submix_voice_ = NULL;
+			X3DAUDIO_EMITTER* emitter_ = NULL;
+			X3DAUDIO_DSP_SETTINGS* dsp_settings_ = NULL;
+			IXAPOHrtfParameters* hrtf_params_ = NULL;
 			xnAudioListener* listener_;
 			volatile bool playing_;
-			volatile bool pause_;
+			volatile bool pause_ = false;
 			volatile bool looped_;
 			int sampleRate_;
 			bool mono_;
@@ -1277,12 +1300,37 @@ extern "C" {
 
 			SpinLock bufferLock_;
 			SpinLock apply3DLock_;
-			xnAudioBuffer** freeBuffers_;
+			xnAudioBuffer** freeBuffers_ = NULL;
 			int freeBuffersMax_;
 
 			XAUDIO2_BUFFER single_buffer_;
+            bool recoveryPosition_ = false;
+            UINT32 recoverySampleStart_ = 0;
 
-			volatile int samplesAtBegin = 0;
+			volatile UINT64 samplesAtBegin = 0;
+            UINT64 currentBufferSamplesAtBegin_ = 0;
+            double streamRecoveryOffset_ = 0;
+            xnAudioBuffer* firstRecoveryBuffer_ = NULL;
+            xnAudioBuffer* currentBuffer_ = NULL;
+            xnAudioBuffer* queuedHead_ = NULL;
+            xnAudioBuffer* queuedTail_ = NULL;
+            void RemoveQueued(xnAudioBuffer* buffer)
+            {
+                xnAudioBuffer* previous = NULL;
+                for (auto current = queuedHead_; current; current = current->nextQueued_)
+                {
+                    if (current != buffer) { previous = current; continue; }
+                    if (previous) previous->nextQueued_ = current->nextQueued_; else queuedHead_ = current->nextQueued_;
+                    if (queuedTail_ == current) queuedTail_ = previous;
+                    current->nextQueued_ = NULL; return;
+                }
+            }
+            void AppendQueued(xnAudioBuffer* buffer)
+            {
+                buffer->nextQueued_ = NULL;
+                if (queuedTail_) queuedTail_->nextQueued_ = buffer; else queuedHead_ = buffer;
+                queuedTail_ = buffer;
+            }
 
 			void __stdcall OnVoiceProcessingPassStart(UINT32 BytesRequired) override;
 
@@ -1298,6 +1346,20 @@ extern "C" {
 
 			void __stdcall OnVoiceError(void* context, HRESULT error) override;
 
+            ~xnAudioSource()
+            {
+                if (source_voice_) { source_voice_->Stop(); source_voice_->DestroyVoice(); }
+                if (submix_voice_) submix_voice_->DestroyVoice();
+                if (hrtf_params_) hrtf_params_->Release();
+                if (emitter_) delete emitter_;
+                if (dsp_settings_)
+                {
+                    delete[] dsp_settings_->pMatrixCoefficients;
+                    delete[] dsp_settings_->pDelayTimes;
+                    delete dsp_settings_;
+                }
+                delete[] freeBuffers_;
+            }
 			void GetState(XAUDIO2_VOICE_STATE* state)
 			{
 				source_voice_->GetState(state, 0);
@@ -1402,6 +1464,7 @@ extern "C" {
 
 				// HRTF APO expects mono 48kHz input, so we configure the submix voice for that format.
 				result = listener->device_->x_audio2_->CreateSubmixVoice(&submixVoice, 1, 48000, 0, 0, &sends, &fxChain);
+                res->submix_voice_ = submixVoice;
 				if (FAILED(result))
 				{
 					delete res;
@@ -1426,19 +1489,7 @@ extern "C" {
 			return res;
 		}
 
-		DLL_EXPORT_API void xnAudioSourceDestroy(xnAudioSource* source)
-		{
-			source->source_voice_->Stop();
-			source->source_voice_->DestroyVoice();
-			if (source->emitter_) delete source->emitter_;
-			if (source->dsp_settings_)
-			{		
-				delete[] source->dsp_settings_->pMatrixCoefficients;
-				delete[] source->dsp_settings_->pDelayTimes;
-				delete source->dsp_settings_;
-			}
-			delete source;
-		}
+		DLL_EXPORT_API void xnAudioSourceDestroy(xnAudioSource* source) { delete source; }
 
 		DLL_EXPORT_API void xnAudioSourceSetLooping(xnAudioSource* source, npBool looping)
 		{
@@ -1554,17 +1605,128 @@ extern "C" {
 			XAUDIO2_VOICE_STATE state;
 			source->GetState(&state);
 
-			if (!source->streamed_)
-				return double(source->single_buffer_.PlayBegin + state.SamplesPlayed - source->samplesAtBegin) / double(source->sampleRate_);
+            if (!source->streamed_)
+            {
+                auto position = double((source->recoveryPosition_ ? source->recoverySampleStart_ : source->single_buffer_.PlayBegin)
+                    + state.SamplesPlayed - source->samplesAtBegin);
+                const auto start = double(source->single_buffer_.PlayBegin);
+                const auto end = start + source->single_buffer_.PlayLength;
+                if (source->looped_ && end > start && position >= end)
+                    position = start + fmod(position - end, end - start);
+                return position / double(source->sampleRate_);
+            }
 			
 			//things work different for streamed sources, but anyway we simply subtract the snapshotted samples at begin of the stream ( could be the begin of the loop )
-			return double(state.SamplesPlayed - source->samplesAtBegin) / double(source->sampleRate_);
+			return source->streamRecoveryOffset_ + double(state.SamplesPlayed - source->samplesAtBegin) / double(source->sampleRate_);
 		}
+
+        DLL_EXPORT_API int xnAudioRecoveryCapabilities() { return 1 | 2 | 4; }
+        DLL_EXPORT_API int xnAudioSourceGetPlaybackState(xnAudioSource* source)
+        { return source ? (source->playing_ ? 1 : source->pause_ ? 2 : 0) : -1; }
+        DLL_EXPORT_API npBool xnAudioPrepareStreamRecovery(xnAudioSource* original, xnAudioSource* replacement,
+            xnAudioBuffer** oldPool, xnAudioBuffer** newPool, int count, xnAudioBuffer** managedFree, int freeCount)
+        {
+            if (!original || !replacement || !original->streamed_ || !replacement->streamed_
+                || original->playing_ || count != original->freeBuffersMax_ || count != replacement->freeBuffersMax_
+                || freeCount < 0 || freeCount > count) return false;
+            original->bufferLock_.Lock();
+            // Pause + this callback lock certify the actual queue and sampled position.
+            XAUDIO2_VOICE_STATE state; original->GetState(&state);
+            bool valid = state.SamplesPlayed >= original->samplesAtBegin
+                && (original->currentBuffer_ == NULL || state.SamplesPlayed >= original->currentBufferSamplesAtBegin_);
+            for (int i = 0; i < count; ++i)
+            {
+                if (!oldPool[i] || !newPool[i] || oldPool[i]->buffer_.AudioBytes > (UINT32)newPool[i]->capacityBytes_)
+                    { valid = false; break; }
+                for (int j = 0; j < i; ++j)
+                    if (oldPool[j] == oldPool[i] || newPool[j] == newPool[i]) valid = false;
+            }
+            for (int i = 0; i < freeCount && valid; ++i)
+            {
+                bool found = false;
+                for (int j = 0; j < count; ++j) if (oldPool[j] == managedFree[i]) found = true;
+                for (int j = 0; j < i; ++j) if (managedFree[j] == managedFree[i]) found = false;
+                valid = found;
+            }
+            int queuedCount = 0;
+            for (auto queued = original->queuedHead_; queued && valid; queued = queued->nextQueued_)
+            {
+                if (++queuedCount > count) { valid = false; break; }
+                bool found = false;
+                for (int i = 0; i < count; ++i) if (oldPool[i] == queued) found = true;
+                for (int i = 0; i < freeCount; ++i) if (managedFree[i] == queued) found = false;
+                valid = found;
+            }
+            // Never infer a current buffer when native callbacks and SDK state disagree.
+            if (valid && (state.BuffersQueued != (UINT32)queuedCount
+                || (queuedCount && state.pCurrentBufferContext != original->queuedHead_
+                    && !(state.pCurrentBufferContext == NULL && original->currentBuffer_ == NULL)))) valid = false;
+            if (!valid) { original->bufferLock_.Unlock(); return false; }
+            replacement->samplesAtBegin = 0;
+            replacement->streamRecoveryOffset_ = original->streamRecoveryOffset_
+                + double(state.SamplesPlayed - original->samplesAtBegin) / original->sampleRate_;
+            for (int i = 0; i < count; ++i)
+            {
+                auto target = newPool[i]; auto source = oldPool[i];
+                auto data = target->buffer_.pAudioData;
+                target->buffer_ = source->buffer_; target->buffer_.pAudioData = data; target->buffer_.pContext = target;
+                target->length_ = source->length_; target->type_ = source->type_;
+                memcpy(const_cast<char*>(data), source->buffer_.pAudioData, source->buffer_.AudioBytes);
+            }
+            for (auto queued = original->queuedHead_; queued; queued = queued->nextQueued_)
+            {
+                int index = 0; while (oldPool[index] != queued) ++index;
+                auto target = newPool[index];
+                if (queued == original->queuedHead_)
+                {
+                    const auto totalFrames = target->buffer_.PlayLength ? target->buffer_.PlayLength
+                        : target->buffer_.AudioBytes / (sizeof(short) * (original->mono_ ? 1 : 2)) - target->buffer_.PlayBegin;
+                    const auto consumed = original->currentBuffer_ == queued ? state.SamplesPlayed - original->currentBufferSamplesAtBegin_ : 0;
+                    if (consumed >= totalFrames) { valid = false; break; }
+                    target->buffer_.PlayBegin += (UINT32)consumed;
+                    target->buffer_.PlayLength = totalFrames - (UINT32)consumed;
+                    if (original->currentBuffer_ == queued) replacement->firstRecoveryBuffer_ = target;
+                }
+                replacement->AppendQueued(target);
+                if (FAILED(replacement->source_voice_->SubmitSourceBuffer(&target->buffer_))) { valid = false; break; }
+            }
+            // The managed free FIFO and native free slots have disjoint ownership.
+            for (int i = 0; i < count && valid; ++i)
+            {
+                bool available = true;
+                for (auto queued = original->queuedHead_; queued; queued = queued->nextQueued_)
+                    if (oldPool[i] == queued) available = false;
+                for (int j = 0; j < freeCount; ++j) if (oldPool[i] == managedFree[j]) available = false;
+                replacement->freeBuffers_[i] = available ? newPool[i] : NULL;
+            }
+            original->bufferLock_.Unlock();
+            return valid;
+        }
+
+        DLL_EXPORT_API npBool xnAudioSourceSetPlaybackPosition(xnAudioSource* source, double seconds)
+        {
+            if (!source || source->streamed_ || seconds < 0 || !isfinite(seconds)) return false;
+            const auto begin = source->single_buffer_.PlayBegin;
+            const auto end = begin + source->single_buffer_.PlayLength;
+            const auto sample = (UINT32)(seconds * source->sampleRate_);
+            if (sample < begin || sample >= end) return false;
+            source->source_voice_->Stop();
+            source->source_voice_->FlushSourceBuffers();
+            auto remainder = source->single_buffer_;
+            remainder.PlayBegin = sample; remainder.PlayLength = end - sample;
+            remainder.LoopBegin = 0; remainder.LoopLength = 0; remainder.LoopCount = 0;
+            remainder.Flags = source->looped_ ? 0 : XAUDIO2_END_OF_STREAM;
+            if (FAILED(source->source_voice_->SubmitSourceBuffer(&remainder, NULL))) return false;
+            if (source->looped_ && FAILED(source->source_voice_->SubmitSourceBuffer(&source->single_buffer_, NULL))) return false;
+            source->recoveryPosition_ = true; source->recoverySampleStart_ = sample;
+            return true;
+        }
 
 		DLL_EXPORT_API void xnAudioSourceSetRange(xnAudioSource* source, double startTime, double stopTime)
 		{
 			if(!source->streamed_)
 			{
+                source->recoveryPosition_ = false;
 				auto singleBuffer = source->freeBuffers_[0];
 				if(startTime == 0 && stopTime == 0)
 				{
@@ -1638,21 +1800,21 @@ extern "C" {
 		}
 
         void xnAudioSource::OnBufferStart(void* context)
-		{
-			if (streamed_)
-			{
-				auto buffer = static_cast<xnAudioBuffer*>(context);
-
-				if (buffer->type_ == BeginOfStream)
-				{
-					//we need this info to compute position of stream
-					XAUDIO2_VOICE_STATE state;
-					GetState(&state);
-
-					samplesAtBegin = state.SamplesPlayed;
-				}
-			}
-		}
+        {
+            if (!streamed_) return;
+            auto buffer = static_cast<xnAudioBuffer*>(context);
+            XAUDIO2_VOICE_STATE state; GetState(&state);
+            bufferLock_.Lock();
+            currentBuffer_ = buffer;
+            currentBufferSamplesAtBegin_ = state.SamplesPlayed;
+            if (firstRecoveryBuffer_ == buffer) firstRecoveryBuffer_ = NULL;
+            else if (buffer->type_ == BeginOfStream)
+            {
+                samplesAtBegin = state.SamplesPlayed;
+                streamRecoveryOffset_ = 0;
+            }
+            bufferLock_.Unlock();
+        }
 
 		void xnAudioSource::OnBufferEnd(void* context)
 		{
@@ -1661,6 +1823,8 @@ extern "C" {
 				auto buffer = static_cast<xnAudioBuffer*>(context);
 
 				bufferLock_.Lock();
+                RemoveQueued(buffer);
+                if (currentBuffer_ == buffer) currentBuffer_ = NULL;
 
 				for (int i = 0; i < freeBuffersMax_; i++)
 				{
@@ -1695,9 +1859,14 @@ extern "C" {
 			buffer->buffer_.Flags = type == EndOfStream ? XAUDIO2_END_OF_STREAM : 0;
 			buffer->type_ = type;
 			
-			buffer->length_ = buffer->buffer_.AudioBytes = bufferSize;
+			buffer->buffer_.PlayBegin = 0; buffer->buffer_.PlayLength = 0;
+            buffer->length_ = buffer->buffer_.AudioBytes = bufferSize;
 			memcpy(const_cast<char*>(buffer->buffer_.pAudioData), pcm, bufferSize);
-			source->source_voice_->SubmitSourceBuffer(&buffer->buffer_);
+			source->bufferLock_.Lock();
+            source->AppendQueued(buffer);
+            auto submitted = source->source_voice_->SubmitSourceBuffer(&buffer->buffer_);
+            if (FAILED(submitted)) source->RemoveQueued(buffer);
+            source->bufferLock_.Unlock();
 		}
 
 		DLL_EXPORT_API void xnAudioSourcePause(xnAudioSource* source)
@@ -1817,6 +1986,8 @@ extern "C" {
 		{
 			auto buffer = new xnAudioBuffer;
 			buffer->length_ = 0;
+            buffer->capacityBytes_ = maxBufferSize;
+            buffer->type_ = None;
 			buffer->buffer_ = {};
 			buffer->buffer_.pContext = buffer;
 			buffer->buffer_.PlayBegin = 0;

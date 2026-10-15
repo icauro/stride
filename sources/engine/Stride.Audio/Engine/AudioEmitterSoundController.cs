@@ -31,7 +31,51 @@ namespace Stride.Audio
     [DebuggerDisplay("Controller for {sound.Name}")]
     public class AudioEmitterSoundController : IPlayableSound, IMediaPlayer
     {
-        private readonly SoundBase sound;
+        private SoundBase sound;
+        private readonly Dictionary<SoundInstance, SoundBase> instanceSources = new Dictionary<SoundInstance, SoundBase>();
+        private PlayRange? authoredPlayRange;
+
+        /// <summary>Whether live native playback still borrows a compiled sound.</summary>
+        public bool ReferencesSound(SoundBase value)
+        {
+            foreach (var instance in instanceSources.Keys.Where(instance => instance.IsDisposed).ToArray()) instanceSources.Remove(instance);
+            return ReferenceEquals(sound, value) || instanceSources.Values.Any(source => ReferenceEquals(source, value));
+        }
+
+        internal void ReplaceCompiledSound(SoundBase next)
+        {
+            if (ReferenceEquals(sound, next)) return;
+            var replacements = new List<KeyValuePair<SoundInstance, AudioListenerComponent>>();
+            try
+            {
+                foreach (var pair in InstanceToListener)
+                {
+                    var previous = pair.Key;
+                    var instance = next.CreateInstance(pair.Value.Listener, emitter.UseHRTF, emitter.DirectionalFactor, emitter.Environment);
+                    replacements.Add(new KeyValuePair<SoundInstance, AudioListenerComponent>(instance, pair.Value));
+                    instanceSources[instance] = next;
+                    instance.Volume = previous.Volume; instance.Pitch = previous.Pitch; instance.IsLooping = previous.IsLooping;
+                    var range = previous.DynamicSoundSource?.PlayRange ?? authoredPlayRange;
+                    if (range.HasValue) instance.SetRange(range.Value);
+                    if (instance is IMediaReader reader) reader.Seek(previous.Position);
+                    if (previous.PlayState == PlayState.Playing) instance.Play();
+                    else if (previous.PlayState == PlayState.Paused) { instance.Play(); instance.Pause(); }
+                }
+            }
+            catch (Exception failure)
+            {
+                var failures = new List<Exception> { failure };
+                foreach (var pair in replacements) try { pair.Key.Dispose(); instanceSources.Remove(pair.Key); } catch (Exception error) { failures.Add(error); }
+                if (failures.Count > 1) throw new AggregateException("Sound playback replacement could not be released.", failures);
+                throw;
+            }
+            var previousInstances = InstanceToListener.Keys.ToArray();
+            InstanceToListener.Clear();
+            foreach (var pair in replacements) InstanceToListener.Add(pair.Key, pair.Value);
+            sound = next;
+            // PlayAndForget instances finish with their original sound and remain explicitly borrowed.
+            foreach (var instance in previousInstances) { instance.Dispose(); instanceSources.Remove(instance); }
+        }
         private readonly AudioEmitterComponent emitter;
 
         public bool IsDisposed { get; set; }
@@ -63,6 +107,7 @@ namespace Stride.Audio
         internal SoundInstance CreateSoundInstance(AudioListenerComponent listener, bool forget)
         {
             var newInstance = sound.CreateInstance(listener.Listener, emitter.UseHRTF, emitter.DirectionalFactor, emitter.Environment);
+            instanceSources[newInstance] = sound;
 
             if (!forget)
                 InstanceToListener.Add(newInstance, listener);
@@ -74,6 +119,7 @@ namespace Stride.Audio
         {
             InstanceToListener.Remove(instance);
             instance.Dispose();
+            instanceSources.Remove(instance);
         }
 
         internal void DestroySoundInstances(AudioListenerComponent listener)
@@ -98,6 +144,7 @@ namespace Stride.Audio
                     //Decrement the loop counter to iterate this index again, since later elements will get moved down during the remove operation.
                     FastInstances.RemoveAt(i--);
                     instance.Dispose();
+                    instanceSources.Remove(instance);
                 }
             }
         }
@@ -118,6 +165,7 @@ namespace Stride.Audio
                 soundInstance.Dispose();
             }
             FastInstances.Clear();
+            instanceSources.Clear();
         }
 
         private PlayState playState;
@@ -275,6 +323,7 @@ namespace Stride.Audio
         /// <remarks>This will not be valid if the sound is played with PlayAndForget</remarks>
         public void SetRange(PlayRange range)
         {
+            authoredPlayRange = range;
             foreach (var instance in InstanceToListener)
             {
                 instance.Key.SetRange(range);

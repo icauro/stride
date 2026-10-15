@@ -13,6 +13,9 @@ namespace Stride.Audio
     //The audio buffer is extracted by an external, unknown API (MediaCodec, FFMPEG, ...), and then feed into this class
     public partial class StreamedBufferSoundSource : DynamicSoundSource, IMediaExtractor
     {
+        protected override bool SupportsNativeBufferDeviceRecreation => true;
+        internal override void ResetDeviceClock() => lastLoopTime = DateTime.Now;
+
         /// <summary>
         /// Specifies how much data we wait to have extracted before we send the storage buffer to the audio buffer
         /// </summary>

@@ -132,6 +132,7 @@ namespace Stride.Audio
         protected void RegisterInstance(SoundInstance instance)
         {
             Instances.Add(instance);
+            AudioEngine.RegisterDeviceInstance(instance);
             intancesCreationCount++;
         }
 
@@ -145,7 +146,7 @@ namespace Stride.Audio
         /// </summary>
         protected override void Destroy()
         {
-            if (AudioEngine == null || AudioEngine.State == AudioEngineState.Invalidated)
+            if (AudioEngine == null)
                 return;
 
             // Stop and destroy all source voices before any subclass frees the audio buffer they may

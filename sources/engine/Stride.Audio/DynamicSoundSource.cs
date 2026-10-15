@@ -12,11 +12,12 @@ using Stride.Media;
 
 namespace Stride.Audio
 {
-    public abstract class DynamicSoundSource : IDisposable
+    public abstract partial class DynamicSoundSource : IDisposable
     {
         public static Logger Logger = GlobalLogger.GetLogger(nameof(DynamicSoundSource));
 
         private static Task readFromDiskWorker;
+        private static readonly object nativeWorkerGate = new object();
         private static volatile bool workerShutdownRequested;
 
         protected static readonly ConcurrentBag<DynamicSoundSource> NewSources = new ConcurrentBag<DynamicSoundSource>();
@@ -82,6 +83,7 @@ namespace Stride.Audio
         protected bool isInitialized;
 
         protected bool isDisposed;
+        private volatile bool disposalRequested;
 
         /// <summary>
         /// If we are in the paused state.
@@ -126,8 +128,33 @@ namespace Stride.Audio
         /// <summary>
         /// Enqueues a dispose command, to dispose this instance.
         /// </summary>
+        internal static bool TryAcquireNativeWorker(out IDisposable lease)
+        {
+            if (!Monitor.TryEnter(nativeWorkerGate)) { lease = null; return false; }
+            lease = new NativeWorkerLease(); return true;
+        }
+        private sealed class NativeWorkerLease : IDisposable
+        {
+            private bool disposed;
+            public void Dispose() { if (disposed) return; Monitor.Exit(nativeWorkerGate); disposed = true; }
+        }
+        internal static void DrainDisposedDeviceSources(AudioEngine engine)
+        {
+            foreach (var source in Sources.ToArray())
+                if (ReferenceEquals(source.soundInstance.DeviceEngine, engine) && (source.soundInstance.IsDisposed || source.disposalRequested))
+                { if (!source.isDisposed) source.DisposeInternal(); Sources.Remove(source); }
+            var retained = new List<DynamicSoundSource>();
+            while (NewSources.TryTake(out var source))
+            {
+                if (ReferenceEquals(source.soundInstance.DeviceEngine, engine) && (source.soundInstance.IsDisposed || source.disposalRequested))
+                { if (!source.isDisposed) source.DisposeInternal(); }
+                else retained.Add(source);
+            }
+            foreach (var source in retained) NewSources.Add(source);
+        }
         public virtual void Dispose()
         {
+            disposalRequested = true;
             Commands.Enqueue(AsyncCommand.Dispose);
         }
 
@@ -208,11 +235,16 @@ namespace Stride.Audio
 
         private void PlayAsyncInternal()
         {
+            var generation = nativeDeviceGeneration;
+            var readiness = ReadyToPlay;
             Task.Run(async () =>
             {
-                var playMe = await ReadyToPlay.Task;
-                if (playMe)
-                    AudioLayer.SourcePlay(soundInstance.Source);
+                var playMe = await readiness.Task;
+                lock (nativeWorkerGate)
+                    if (playMe && generation == nativeDeviceGeneration && (state == PlayState.Playing || playingQueued)
+                        && !isDisposed && !disposalRequested && !soundInstance.IsDisposed
+                        && soundInstance.DeviceEngine.State != AudioEngineState.Invalidated && soundInstance.Source.Ptr != IntPtr.Zero)
+                        AudioLayer.SourcePlay(soundInstance.Source);
             });
         }
 
@@ -280,7 +312,8 @@ namespace Stride.Audio
         /// </summary>
         protected virtual void DisposeInternal()
         {
-            AudioLayer.SourceDestroy(soundInstance.Source);
+            if (soundInstance.Source.Ptr != IntPtr.Zero) AudioLayer.SourceDestroy(soundInstance.Source);
+            soundInstance.Source = default;
 
             foreach (var deviceBuffer in deviceBuffers)
                 AudioLayer.BufferDestroy(deviceBuffer);
@@ -351,6 +384,8 @@ namespace Stride.Audio
             var toRemove = new List<DynamicSoundSource>();
             while (true)
             {
+                lock (nativeWorkerGate)
+                {
                 if (workerShutdownRequested)
                 {
                     // Drain pending Dispose commands so native sources/buffers are released
@@ -365,11 +400,16 @@ namespace Stride.Audio
                 }
                 toRemove.Clear();
 
+                var deferredSources = new List<DynamicSoundSource>();
                 while (!NewSources.IsEmpty)
                 {
                     if (!NewSources.TryTake(out var source))
                         continue;
 
+                    if (source.disposalRequested || source.soundInstance.IsDisposed)
+                    { source.DisposeInternal(); continue; }
+                    if (source.soundInstance.DeviceEngine.State == AudioEngineState.Invalidated)
+                    { deferredSources.Add(source); continue; }
                     if (!source.isInitialized)
                         source.InitializeInternal();
 
@@ -377,14 +417,19 @@ namespace Stride.Audio
                         Sources.Add(source);
                 }
 
+                foreach (var source in deferredSources) NewSources.Add(source);
+
                 foreach (var source in Sources)
                 {
+                    if (source.disposalRequested || source.soundInstance.IsDisposed)
+                    { if (!source.isDisposed) source.DisposeInternal(); toRemove.Add(source); continue; }
                     if (source.isDisposed)
                     {
                         toRemove.Add(source);
                         continue;
                     }
 
+                    if (source.soundInstance.DeviceEngine.State == AudioEngineState.Invalidated) continue;
                     source.UpdateInternal();
 
                     var seekRequested = false;
@@ -441,7 +486,7 @@ namespace Stride.Audio
                 var buffersShouldBeFill = false;
                 foreach (var source in Sources)
                 { 
-                    if (source.CanFill)
+                    if (source.soundInstance.DeviceEngine.State != AudioEngineState.Invalidated && source.CanFill)
                     {
                         buffersShouldBeFill = true;
                         break;
@@ -450,6 +495,7 @@ namespace Stride.Audio
 
                 if (!buffersShouldBeFill) // avoid active looping when no work is needed
                     Thread.Sleep(10);
+                }
             }
         }
     }

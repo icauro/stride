@@ -12,6 +12,8 @@ namespace Stride.Audio
 {
     internal sealed class CompressedSoundSource : DynamicSoundSource
     {
+        protected override bool SupportsNativeBufferDeviceRecreation => true;
+
         private const int SamplesPerBuffer = 32768;
         private const int MaxChannels = 2;
         internal const int NumberOfBuffers = 4;
@@ -215,8 +217,8 @@ namespace Stride.Audio
         protected override void DisposeInternal()
         {
             base.DisposeInternal();
-            compressedSoundStream.Dispose();
-            decoder.Dispose();
+            compressedSoundStream?.Dispose();
+            decoder?.Dispose();
         }
 
         protected override unsafe void ExtractAndFillData()
