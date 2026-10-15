@@ -376,6 +376,18 @@ namespace Stride.Rendering.UI
             PerformRecursiveHitTest(rootElement, ref ray, ref worldViewProj, results);
             return results;
         }
+
+        /// <summary>
+        /// Gets visible authored-element intersections for editor targeting, including
+        /// containers that do not handle application pointer input. Uses the actual
+        /// layout/intersection implementations without changing authored hit-test flags.
+        /// </summary>
+        public static ICollection<HitTestResult> GetElementsAtPositionForEditor(UIElement rootElement, ref Ray ray, ref Matrix worldViewProj)
+        {
+            var results = new List<HitTestResult>();
+            PerformRecursiveHitTest(rootElement, ref ray, ref worldViewProj, results, true);
+            return results;
+        }
         
         private static void PerformRecursiveHitTest(UIElement element, ref Ray ray, ref Matrix worldViewProj, ref UIElement hitElement, ref Vector3 intersectionPoint, ref float smallestDepth, ref float highestDepthBias)
         {
@@ -417,13 +429,13 @@ namespace Stride.Rendering.UI
                 PerformRecursiveHitTest(child, ref ray, ref worldViewProj, ref hitElement, ref intersectionPoint, ref smallestDepth, ref highestDepthBias);
         }
 
-        private static void PerformRecursiveHitTest(UIElement element, ref Ray ray, ref Matrix worldViewProj, ICollection<HitTestResult> results)
+        private static void PerformRecursiveHitTest(UIElement element, ref Ray ray, ref Matrix worldViewProj, ICollection<HitTestResult> results, bool editorTargeting = false)
         {
             // if the element is not visible, we also remove all its children
             if (!element.IsVisible)
                 return;
 
-            var canBeHit = element.CanBeHitByUser;
+            var canBeHit = editorTargeting || element.CanBeHitByUser;
             if (canBeHit || element.ClipToBounds)
             {
                 Vector3 intersection;
@@ -446,8 +458,9 @@ namespace Stride.Rendering.UI
             }
 
             // test the children
-            foreach (var child in element.HitableChildren)
-                PerformRecursiveHitTest(child, ref ray, ref worldViewProj, results);
+            IEnumerable<UIElement> children = editorTargeting ? element.VisualChildren : element.HitableChildren;
+            foreach (var child in children)
+                PerformRecursiveHitTest(child, ref ray, ref worldViewProj, results, editorTargeting);
         }
 
         /// <summary>

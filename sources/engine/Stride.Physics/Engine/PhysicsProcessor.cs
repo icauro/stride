@@ -206,9 +206,11 @@ namespace Stride.Physics
             ((IReferencable)physicsSystem).AddReference();
 
             // Check if PhysicsShapesRenderingService is created (and check if rendering is enabled with IGraphicsDeviceService)
-            if (Services.GetService<Graphics.IGraphicsDeviceService>() != null && Services.GetService<PhysicsShapesRenderingService>() == null)
+            debugShapeRendering = Services.GetService<PhysicsShapesRenderingService>();
+            if (Services.GetService<Graphics.IGraphicsDeviceService>() != null && debugShapeRendering == null)
             {
                 debugShapeRendering = new PhysicsShapesRenderingService(Services);
+                Services.AddService(debugShapeRendering);
                 var gameSystems = Services.GetSafeServiceAs<IGameSystemCollection>();
                 gameSystems.Add(debugShapeRendering);
             }

@@ -18,6 +18,18 @@ namespace Stride.Profiling
 {
     public class GameProfilingSystem : GameSystemBase
     {
+        /// <summary>Releases native draw resources while retaining profiler channels and settings.</summary>
+        public void ReleaseGraphicsResourcesForRecovery()
+        {
+            if (RenderTarget != null)
+                throw new InvalidOperationException("The profiling render target must be detached before graphics recovery.");
+            if (fastTextRenderer == null) return;
+            var texture = fastTextRenderer.DebugSpriteFont;
+            fastTextRenderer.Dispose();
+            fastTextRenderer = null;
+            if (texture != null) Content.Unload(texture);
+        }
+
         private static readonly ProfilingKey UpdateStringsKey = new ProfilingKey($"{nameof(GameProfilingSystem)}.UpdateStrings");
 
         private readonly Point textDrawStartOffset = new Point(5, 10);

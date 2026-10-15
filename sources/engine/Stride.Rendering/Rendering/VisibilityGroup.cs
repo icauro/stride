@@ -30,6 +30,8 @@ namespace Stride.Rendering
         private uint[] viewRenderStageMask;
 
         internal bool NeedActiveRenderStageReevaluation;
+        /// <summary>Schedule render-stage selection refresh after editor-owned scene changes.</summary>
+        public void RequestActiveRenderStageReevaluation() => NeedActiveRenderStageReevaluation = true;
         internal bool DisableCulling;
 
         public readonly StaticObjectPropertyKey<uint> RenderStageMaskKey;

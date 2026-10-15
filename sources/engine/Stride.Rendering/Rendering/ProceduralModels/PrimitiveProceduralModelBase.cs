@@ -85,6 +85,10 @@ namespace Stride.Rendering.ProceduralModels
         }
 
         public void Generate(IServiceRegistry services, Model model)
+            => Generate(services, model, null);
+
+        /// <summary>Reports each actual buffer allocation to an owning scope before subsequent generation can fail.</summary>
+        public void Generate(IServiceRegistry services, Model model, Action<Buffer>? retainBuffer)
         {
             ArgumentNullException.ThrowIfNull(model);
 
@@ -158,6 +162,7 @@ namespace Stride.Rendering.ProceduralModels
                     indicesShort[i] = (ushort)indices[i];
                 }
                 meshDraw.IndexBuffer = new IndexBufferBinding(Buffer.Index.New(graphicsDevice, indicesShort), false, indices.Length);
+                retainBuffer?.Invoke(meshDraw.IndexBuffer.Buffer);
                 if (needsTempDevice)
                 {
                     var indexData = BufferData.New(BufferFlags.IndexBuffer, indicesShort);
@@ -172,6 +177,7 @@ namespace Stride.Rendering.ProceduralModels
                 }
 
                 meshDraw.IndexBuffer = new IndexBufferBinding(Buffer.Index.New(graphicsDevice, indices), true, indices.Length);
+                retainBuffer?.Invoke(meshDraw.IndexBuffer.Buffer);
                 if (needsTempDevice)
                 {
                     var indexData = BufferData.New(BufferFlags.IndexBuffer, indices);
@@ -180,6 +186,7 @@ namespace Stride.Rendering.ProceduralModels
             }
 
             var vertexBuffer = Buffer.New(graphicsDevice, vertexBufferData, BufferFlags.VertexBuffer, GraphicsResourceUsage.Default);
+            retainBuffer?.Invoke(vertexBuffer);
             meshDraw.VertexBuffers = [ new VertexBufferBinding(vertexBuffer, layout, data.Vertices.Length) ];
             if (needsTempDevice)
             {

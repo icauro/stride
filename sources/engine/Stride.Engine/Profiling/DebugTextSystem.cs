@@ -12,6 +12,16 @@ namespace Stride.Profiling
 {
     public class DebugTextSystem : GameSystemBase
     {
+        /// <summary>Releases device-specific text resources, preserving pending overlay messages.</summary>
+        public void ReleaseGraphicsResourcesForRecovery()
+        {
+            if (fastTextRenderer == null) return;
+            var texture = fastTextRenderer.DebugSpriteFont;
+            fastTextRenderer.Dispose();
+            fastTextRenderer = null;
+            if (texture != null) Content.Unload(texture);
+        }
+
         internal struct DebugOverlayMessage
         {
             public string Message;

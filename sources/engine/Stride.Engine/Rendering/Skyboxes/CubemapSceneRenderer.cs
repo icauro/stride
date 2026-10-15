@@ -27,9 +27,8 @@ namespace Stride.Rendering.Skyboxes
 
         public override void Dispose()
         {
-            base.Dispose();
-
-            context.SceneSystem.GraphicsCompositor.Game = gameCompositor;
+            try { base.Dispose(); }
+            finally { context.SceneSystem.GraphicsCompositor.Game = gameCompositor; }
         }
 
         public static Texture GenerateCubemap(ISceneRendererContext context, Vector3 position, int textureSize)

@@ -42,7 +42,7 @@ namespace Stride.Animations
         /// <summary>
         /// Gets or sets the animation clip to run
         /// </summary>
-        public AnimationClip Clip { get; }
+        public AnimationClip Clip { get; internal set; }
 
         /// <summary>
         /// Gets or sets the repeat mode.

@@ -25,6 +25,13 @@ namespace Stride.Engine
             return instances[instanceId];
         }
 
+        /// <summary>Resolves an actual rendered instance without exposing the mutable processor-owned list.</summary>
+        public bool TryGetInstanceAt(int instanceId, out InstanceComponent instance)
+        {
+            instance = instanceId >= 0 && instanceId < instances.Count ? instances[instanceId] : null;
+            return instance != null;
+        }
+
         internal void ClearInstances()
         {
             instances.Clear();

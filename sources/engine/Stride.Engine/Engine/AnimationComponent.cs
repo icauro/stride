@@ -49,6 +49,22 @@ namespace Stride.Engine
             PlayingAnimations.CollectionChanged += PlayingAnimations_CollectionChanged;
         }
 
+        /// <summary>Rebinds live playback after an asset refresh while retaining playback state and completion observers.</summary>
+        public void ReplacePlayingAnimationClip(PlayingAnimation animation, AnimationClip clip)
+        {
+            ArgumentNullException.ThrowIfNull(animation);
+            ArgumentNullException.ThrowIfNull(clip);
+            if (!PlayingAnimations.Contains(animation))
+                throw new ArgumentException("The playback does not belong to this component.", nameof(animation));
+            if (ReferenceEquals(animation.Clip, clip)) return;
+            if (animation.Evaluator != null)
+            {
+                Blender.ReleaseEvaluator(animation.Evaluator);
+                animation.Evaluator = null;
+            }
+            animation.Clip = clip;
+        }
+
         private void PlayingAnimations_CollectionChanged(object sender, TrackingCollectionChangedEventArgs e)
         {
             var item = (PlayingAnimation)e.Item;

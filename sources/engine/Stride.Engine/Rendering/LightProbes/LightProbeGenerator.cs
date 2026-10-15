@@ -31,10 +31,10 @@ namespace Stride.Rendering.LightProbes
             using (var cubemapRenderer = new CubemapSceneRenderer(context, 256))
             {
                 // Create target cube texture
-                var cubeTexture = Texture.NewCube(context.GraphicsDevice, 256, PixelFormat.R16G16B16A16_Float);
+                using var cubeTexture = Texture.NewCube(context.GraphicsDevice, 256, PixelFormat.R16G16B16A16_Float);
 
                 // Prepare shader for SH prefiltering
-                var lambertFiltering = new LambertianPrefilteringSHNoCompute(cubemapRenderer.DrawContext.RenderContext)
+                using var lambertFiltering = new LambertianPrefilteringSHNoCompute(cubemapRenderer.DrawContext.RenderContext)
                 {
                     HarmonicOrder = LambertHamonicOrder,
                     RadianceMap = cubeTexture,
@@ -85,8 +85,6 @@ namespace Stride.Rendering.LightProbes
 
                     context.GraphicsContext.CommandList.EndProfile(); // LightProbes
                 }
-
-                cubeTexture.Dispose();
 
                 return lightProbesCoefficients;
             }

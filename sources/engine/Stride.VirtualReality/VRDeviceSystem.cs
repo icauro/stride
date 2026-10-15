@@ -43,6 +43,20 @@ namespace Stride.VirtualReality
 
         public float ResolutionScale;
 
+        public void ReleaseGraphicsResourcesForRecovery()
+        {
+            if (Device == null) return;
+            var physical = !(Device is DummyDevice);
+            Device.Dispose();
+            Device = null;
+            if (physical) physicalDeviceInUse = false;
+        }
+
+        public void RebindGraphicsResourcesAfterRecovery()
+        {
+            OnEnabledChanged(this, EventArgs.Empty);
+        }
+
         private void OnEnabledChanged(object sender, EventArgs eventArgs)
         {
             if (Enabled && Device == null)

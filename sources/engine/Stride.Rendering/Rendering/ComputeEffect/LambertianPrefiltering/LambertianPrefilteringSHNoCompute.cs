@@ -53,6 +53,13 @@ namespace Stride.Rendering.ComputeEffect.LambertianPrefiltering
             HarmonicOrder = 3;
         }
 
+        protected override void Destroy()
+        {
+            firstPassEffect.Dispose();
+            secondPassEffect.Dispose();
+            base.Destroy();
+        }
+
         protected override void DrawCore(RenderDrawContext context)
         {
             var inputTexture = RadianceMap;
