@@ -181,6 +181,8 @@ public class AssetCloner
             //}
 
             ShadowObject.Copy(previousObject, newObject);
+            if (previousObject is Asset sourceAsset && newObject is Asset targetAsset)
+                Tracking.SourceHashesHelper.CopyForClone(sourceAsset, targetAsset, (flags & AssetClonerFlags.RemoveItemIds) == 0);
 
             // NOTE: we don't use Add because of strings that might be duplicated
             clonedObjectMapping[previousObject] = newObject;
@@ -334,6 +336,14 @@ public class AssetCloner
         public override void Initialize(SerializerSelector serializerSelector)
         {
             parentSerializer = serializerSelector.GetSerializer(typeof(T).BaseType!);
+            // An unloadable content proxy is represented by its original YAML
+            // events, not a valid compiled-content URL. A reference serializer
+            // would require an attached URL and can replace the proxy on read.
+            // Preserve the invariant proxy instead; ordinary base contracts still
+            // serialize their supported members through the native serializer.
+            if (parentSerializer?.GetType() is { IsGenericType: true } serializerType
+                && serializerType.GetGenericTypeDefinition() == typeof(ReferenceSerializer<>))
+                parentSerializer = null;
         }
 
         public override void PreSerialize(ref T obj, ArchiveMode mode, SerializationStream stream)
@@ -360,6 +370,13 @@ public class AssetCloner
 
                 // Create a new object to avoid exception in case its identity is important
                 obj = (T)Activator.CreateInstance(typeof(T), invariant.TypeName, invariant.AssemblyName, invariant.Error, invariant.ParsingEvents)!;
+                if (AttachedReferenceManager.GetAttachedReference(invariant) is { } reference)
+                {
+                    var clonedReference = AttachedReferenceManager.GetOrCreateAttachedReference(obj);
+                    clonedReference.Id = reference.Id;
+                    clonedReference.Url = reference.Url;
+                    clonedReference.IsProxy = reference.IsProxy;
+                }
             }
         }
 

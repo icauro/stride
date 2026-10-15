@@ -101,7 +101,7 @@ partial class PackageSession
                 if (!File.Exists(lockFile))
                     continue;
                 if (!packagesByLockFile.TryGetValue(lockFile, out var packages))
-                    packagesByLockFile[lockFile] = packages = session.LoadPackageDependenciesFromLockFile(lockFile, NuGetFramework.Parse(manifest.TargetFramework), sdpkgPackagesByName, sessionResult);
+                    packagesByLockFile[lockFile] = packages = session.LoadPackageDependenciesFromLockFile(lockFile, NuGetFramework.Parse(manifest.TargetFramework), sdpkgPackagesByName, sessionResult, loadParameters);
                 packagesByManifest[file] = packages;
             }
 
@@ -150,7 +150,7 @@ partial class PackageSession
             var rootProjectDirectory = rootManifest.ProjectFile is not null
                 ? Path.GetDirectoryName(Path.GetFullPath(Path.Combine(Path.GetDirectoryName(rootManifestFile)!, rootManifest.ProjectFile.ToOSPath())))
                 : null;
-            session.LoadCompanionPackages(rootProjectDirectory, sessionResult, loadEditorPackages: false, editorToolkit: null);
+            session.LoadCompanionPackages(rootProjectDirectory, sessionResult, loadEditorPackages: false, editorToolkit: null, loadParameters: loadParameters);
 
             // Load + register exactly the declared assemblies, then load assets (folder scan +
             // precomputed project assets); no dependency resolution, no MSBuild
@@ -306,12 +306,12 @@ partial class PackageSession
     /// each seeing the sdpkg packages reachable through the lock file's dependency graph.
     /// Returns the sdpkg packages this lock file contains (loaded here or by a previous call).
     /// </summary>
-    private List<StandalonePackage> LoadPackageDependenciesFromLockFile(string lockFilePath, NuGetFramework framework, Dictionary<string, StandalonePackage> sdpkgPackagesByName, ILogger log)
+    private List<StandalonePackage> LoadPackageDependenciesFromLockFile(string lockFilePath, NuGetFramework framework, Dictionary<string, StandalonePackage> sdpkgPackagesByName, ILogger log, PackageLoadParameters? loadParameters = null)
     {
-        return LoadPackageDependenciesFromLockFile(new LockFileFormat().Read(lockFilePath), framework, sdpkgPackagesByName, log);
+        return LoadPackageDependenciesFromLockFile(new LockFileFormat().Read(lockFilePath), framework, sdpkgPackagesByName, log, loadParameters);
     }
 
-    private List<StandalonePackage> LoadPackageDependenciesFromLockFile(LockFile lockFile, NuGetFramework framework, Dictionary<string, StandalonePackage> sdpkgPackagesByName, ILogger log)
+    private List<StandalonePackage> LoadPackageDependenciesFromLockFile(LockFile lockFile, NuGetFramework framework, Dictionary<string, StandalonePackage> sdpkgPackagesByName, ILogger log, PackageLoadParameters? loadParameters = null)
     {
         var target = lockFile.Targets.FirstOrDefault(t => t.RuntimeIdentifier == null && Equals(t.TargetFramework, framework))
             ?? lockFile.Targets.FirstOrDefault(t => t.RuntimeIdentifier == null);
@@ -323,6 +323,7 @@ partial class PackageSession
 
         foreach (var targetLibrary in target.Libraries)
         {
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
             if (targetLibrary.Type != "package")
                 continue;
             if (!libraries.TryGetValue((targetLibrary.Name, targetLibrary.Version), out var library))
@@ -358,7 +359,7 @@ partial class PackageSession
             if (Packages.Any(p => string.Equals(p.Meta.Name, library.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
-            var package = Package.LoadRaw(log, sdpkgPath);
+            var package = Package.LoadRaw(log, ResolveDependencyPackagePath(sdpkgPath, loadParameters));
             // The packed sdpkg's declarations (host-loadable, narrowed to asset types) are the
             // complete list; a package declaring none gets no assembly loaded.
             var sdpkgDirectory = Path.GetDirectoryName(sdpkgPath)!;
@@ -375,7 +376,7 @@ partial class PackageSession
             if (sourceSdpkgPath is not null && File.Exists(sourceSdpkgPath))
             {
                 var packedPackage = package;
-                package = Package.LoadRaw(log, sourceSdpkgPath);
+                package = Package.LoadRaw(log, ResolveDependencyPackagePath(sourceSdpkgPath, loadParameters));
                 var manifestFile = FindDevRedirectManifest(Path.Combine(devProjectDirectory!, library.Name + ".csproj"));
                 AssetBuildManifest? manifest = null;
                 try
@@ -429,6 +430,7 @@ partial class PackageSession
         var result = new List<StandalonePackage>();
         foreach (var targetLibrary in target.Libraries)
         {
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
             if (targetLibrary.Name is not null && sdpkgPackagesByName.TryGetValue(targetLibrary.Name, out var package))
                 result.Add(package);
         }

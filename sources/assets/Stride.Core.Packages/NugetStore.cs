@@ -55,27 +55,34 @@ public partial class NugetStore : INugetDownloadProgress
     /// Initialize a new instance of <see cref="NugetStore"/>.
     /// </summary>
     /// <param name="oldRootDirectory">The location of the Nuget store.</param>
-    public NugetStore(string? oldRootDirectory)
+    public NugetStore(string? oldRootDirectory) : this(oldRootDirectory, null)
+    {
+    }
+
+    public NugetStore(string? oldRootDirectory, ISettings? explicitSettings)
     {
         // Used only for versions before 3.0
         this.oldRootDirectory = oldRootDirectory;
 
-        settings = NuGet.Configuration.Settings.LoadDefaultSettings(null);
+        settings = explicitSettings ?? NuGet.Configuration.Settings.LoadDefaultSettings(null);
 
         // Remove obsolete sources
-        RemoveDeletedSources(settings, "Xenko Dev");
-        // Note the space: we want to keep "Stride Dev" but not "Stride Dev {PATH}\bin\packages" anymore
-        RemoveSources(settings, "Stride Dev ");
-        // Older launchers added the legacy feed (Xenko 3.0 and lower) to the user's NuGet.config
-        RemoveLegacyFeedSources(settings);
+        if (explicitSettings == null)
+        {
+            RemoveDeletedSources(settings, "Xenko Dev");
+            // Note the space: we want to keep "Stride Dev" but not "Stride Dev {PATH}\bin\packages" anymore
+            RemoveSources(settings, "Stride Dev ");
+            // Older launchers added the legacy feed (Xenko 3.0 and lower) to the user's NuGet.config
+            RemoveLegacyFeedSources(settings);
 
-        try
-        {
-            settings.SaveToDisk();
-        }
-        catch (NuGetConfigurationException)
-        {
-            // Best effort: a NuGet.config that can't be written keeps the sources this cleanup would remove
+            try
+            {
+                settings.SaveToDisk();
+            }
+            catch (NuGetConfigurationException)
+            {
+                // Best effort: a NuGet.config that can't be written keeps the sources this cleanup would remove
+            }
         }
 
         InstallPath = SettingsUtility.GetGlobalPackagesFolder(settings);

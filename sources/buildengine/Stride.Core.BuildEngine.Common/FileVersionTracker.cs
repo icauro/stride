@@ -38,7 +38,16 @@ public class FileVersionTracker : IDisposable
         {
             if (defaultFileVersionTracker == null)
             {
-                var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DefaultFileVersionTrackerFile);
+                var privateDirectory = Environment.GetEnvironmentVariable("STRIDE_FILE_VERSION_TRACKER_CACHE_DIRECTORY");
+                string filePath;
+                if (privateDirectory != null)
+                {
+                    if (string.IsNullOrWhiteSpace(privateDirectory) || !Path.IsPathFullyQualified(privateDirectory))
+                        throw new ArgumentException("The file version tracker cache directory must be an absolute path.", "STRIDE_FILE_VERSION_TRACKER_CACHE_DIRECTORY");
+                    filePath = Path.Combine(Path.GetFullPath(privateDirectory), $"FileVersionTracker.{Environment.ProcessId}.cache");
+                }
+                else
+                    filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DefaultFileVersionTrackerFile);
                 var directory = Path.GetDirectoryName(filePath);
                 if (directory != null && !Directory.Exists(directory))
                 {

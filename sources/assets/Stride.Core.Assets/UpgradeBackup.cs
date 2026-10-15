@@ -23,6 +23,7 @@ public sealed class UpgradeBackup
     private readonly object lockObject = new();
     private readonly HashSet<string> snapshotted = new(StringComparer.OrdinalIgnoreCase);
     private string? backupDirectory;
+    private readonly bool strictRoot;
 
     /// <param name="rootDirectory">
     /// The folder the backup mirrors — each file is stored under it preserving its path relative to this
@@ -30,11 +31,34 @@ public sealed class UpgradeBackup
     /// </param>
     /// <param name="timestamp">The upgrade start time, used to name the backup folder.</param>
     /// <param name="log">Logger that receives a single notice when the backup folder is first created.</param>
-    public UpgradeBackup(string rootDirectory, DateTime timestamp, ILogger? log = null)
+    public UpgradeBackup(string rootDirectory, DateTime timestamp, ILogger? log = null, bool strictRoot = false)
     {
         this.rootDirectory = Path.GetFullPath(rootDirectory);
         backupFolderName = $".stride-backup-{timestamp:yyyyMMdd-HHmmss}";
         this.log = log;
+        this.strictRoot = strictRoot;
+    }
+
+    /// <summary>Validates a staged creation, replacement, deletion or move endpoint without writing it.</summary>
+    public void ValidateWritePath(string path)
+    {
+        if (!strictRoot) return;
+        var full = Path.GetFullPath(path); var relative = Path.GetRelativePath(rootDirectory, full);
+        try
+        {
+            if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative))
+                throw new IOException("The staged upgrade cannot write outside its owned root: " + full);
+            var current = full;
+            while (true)
+            {
+                if ((File.Exists(current) || Directory.Exists(current)) && File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+                    throw new IOException("The staged upgrade cannot write through a linked path: " + current);
+                if (string.Equals(Path.TrimEndingDirectorySeparator(current), Path.TrimEndingDirectorySeparator(rootDirectory), StringComparison.OrdinalIgnoreCase)) break;
+                current = Path.GetDirectoryName(current) ?? throw new IOException("The staged upgrade path has no owned parent.");
+            }
+        }
+        catch (Exception failure) { log?.Error(failure.Message); throw; }
     }
 
     /// <summary>
@@ -48,6 +72,7 @@ public sealed class UpgradeBackup
             return;
 
         var fullPath = Path.GetFullPath(originalFullPath);
+        ValidateWritePath(fullPath);
 
         var relative = Path.GetRelativePath(rootDirectory, fullPath);
         // Outside the root (relative escapes with "..") or excluded build/backup output: skip.

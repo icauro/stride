@@ -34,6 +34,25 @@ public static class VSProjectHelper
     // the debugging view's build and assembly reload, restores), so they queue here instead of failing
     private static readonly SemaphoreSlim buildGate = new(1, 1);
 
+    private static Microsoft.Build.Framework.ILogger[] WithOptionalBinaryLogger(Microsoft.Build.Framework.ILogger logger, string projectPath, string phase)
+    {
+        var directory = Environment.GetEnvironmentVariable("STRIDE_EDITOR_MSBUILD_DIAGNOSTICS_DIRECTORY");
+        if (string.IsNullOrWhiteSpace(directory)) return [logger];
+        directory = Path.GetFullPath(directory);
+        Directory.CreateDirectory(directory);
+        return [logger, new Microsoft.Build.Logging.BinaryLogger
+        {
+            Parameters = Path.Combine(directory, Path.GetFileNameWithoutExtension(projectPath) + "-" + phase + "-" + Guid.NewGuid().ToString("N") + ".binlog"),
+            CollectProjectImports = Microsoft.Build.Logging.BinaryLogger.ProjectImportsCollectionMode.None,
+        }];
+    }
+
+    private static void RequireSuccessfulBuild(BuildResult result, string phase, string projectPath)
+    {
+        if (result.OverallResult == BuildResultCode.Success) return;
+        throw new InvalidOperationException("MSBuild " + phase + " failed for [" + projectPath + "]. See the native build diagnostics for target errors.", result.Exception);
+    }
+
     private static BuildResult RunBuild(BuildParameters parameters, BuildRequestData request)
     {
         buildGate.Wait();
@@ -45,6 +64,32 @@ public static class VSProjectHelper
         {
             buildGate.Release();
         }
+    }
+
+    private static BuildResult RunBuild(BuildParameters parameters, BuildRequestData request, CancellationToken cancellation)
+    {
+        if (!cancellation.CanBeCanceled) return RunBuild(parameters, request);
+        buildGate.Wait(cancellation);
+        try
+        {
+            cancellation.ThrowIfCancellationRequested();
+            using var manager = new BuildManager();
+            manager.BeginBuild(parameters);
+            try
+            {
+                var completed = new TaskCompletionSource<BuildResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var submission = manager.PendBuildRequest(request);
+                submission.ExecuteAsync(finished => completed.TrySetResult(finished.BuildResult), null);
+                using var registration = cancellation.Register(manager.CancelAllSubmissions);
+                // A cancellation request stops this manager only. Wait for its
+                // actual submission before releasing projects or restore files.
+                var result = completed.Task.GetAwaiter().GetResult();
+                cancellation.ThrowIfCancellationRequested();
+                return result;
+            }
+            finally { manager.EndBuild(); }
+        }
+        finally { buildGate.Release(); }
     }
 
     public static Guid GetProjectGuid(MicrosoftProject project)
@@ -138,6 +183,9 @@ public static class VSProjectHelper
     }
 
     public static async Task<DependencyGraphSpec> GenerateRestoreGraphFile(ILogger logger, string projectPath)
+        => await GenerateRestoreGraphFile(logger, projectPath, CancellationToken.None).ConfigureAwait(false);
+
+    public static async Task<DependencyGraphSpec> GenerateRestoreGraphFile(ILogger logger, string projectPath, CancellationToken cancellationToken)
     {
         DependencyGraphSpec? spec = null;
         using (var restoreGraphResult = new TemporaryFile())
@@ -150,21 +198,22 @@ public static class VSProjectHelper
                 {
                     var parameters = new BuildParameters(pc)
                     {
-                        Loggers = [new LoggerRedirect(logger, true)], //Instance of ILogger instantiated earlier
+                        Loggers = WithOptionalBinaryLogger(new LoggerRedirect(logger, true), projectPath, "restore-graph"),
                         DisableInProcNode = true,
+                        EnableNodeReuse = false,
                     };
 
                     // Run a MSBuild /t:Restore <projectfile>
                     var request = new BuildRequestData(projectPath, new Dictionary<string, string> { { "RestoreGraphOutputPath", restoreGraphResult.Path }, { "RestoreRecursive", "false" } }, null, ["GenerateRestoreGraphFile"], null, BuildRequestDataFlags.None);
 
-                    RunBuild(parameters, request);
+                    RequireSuccessfulBuild(RunBuild(parameters, request, cancellationToken), "GenerateRestoreGraphFile", projectPath);
                 }
                 finally
                 {
                     pc.UnloadAllProjects();
                     pc.Dispose();
                 }
-            });
+            }, cancellationToken).ConfigureAwait(false);
 
             if (File.Exists(restoreGraphResult.Path) && new FileInfo(restoreGraphResult.Path).Length != 0)
             {
@@ -183,6 +232,9 @@ public static class VSProjectHelper
     /// <param name="tolerateDowngrade">Suppress NU1605 (package downgrade) for this restore — used by the in-place
     /// upgrade flow, where the graph is transiently mixed. Off for normal loads so real downgrades fail.</param>
     public static async Task RestoreNugetPackages(ILogger logger, string projectPath, bool tolerateDowngrade = false)
+        => await RestoreNugetPackages(logger, projectPath, tolerateDowngrade, CancellationToken.None).ConfigureAwait(false);
+
+    public static async Task RestoreNugetPackages(ILogger logger, string projectPath, bool tolerateDowngrade, CancellationToken cancellationToken)
     {
         await Task.Run(() =>
         {
@@ -192,8 +244,9 @@ public static class VSProjectHelper
             {
                 var parameters = new BuildParameters(pc)
                 {
-                    Loggers = [new LoggerRedirect(logger, true)], //Instance of ILogger instantiated earlier
+                    Loggers = WithOptionalBinaryLogger(new LoggerRedirect(logger, true), projectPath, "restore"),
                     DisableInProcNode = true,
+                    EnableNodeReuse = false,
                 };
 
                 // Run a MSBuild /t:Restore on the project or solution.
@@ -208,14 +261,16 @@ public static class VSProjectHelper
                     globalProperties["NoWarn"] = "NU1605";
                 var request = new BuildRequestData(projectPath, globalProperties, null, ["Restore"], null, BuildRequestDataFlags.None);
 
-                RunBuild(parameters, request);
+                RequireSuccessfulBuild(RunBuild(parameters, request, cancellationToken), "Restore", projectPath);
             }
             finally
             {
                 pc.UnloadAllProjects();
                 pc.Dispose();
             }
-        });
+        // Native package loading exposes synchronous entry points. Do not post
+        // restoration completion back to a UI context blocked on that loader.
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public static MicrosoftProject LoadProject(string fullProjectLocation, string configuration = "Debug", string platform = "AnyCPU", Dictionary<string, string>? extraProperties = null)
@@ -457,7 +512,13 @@ public static class VSProjectHelper
 
             // Make sure that we are using the project collection from the loaded project, otherwise we are getting
             // weird cache behavior with the msbuild system
-            var projectInstance = new ProjectInstance(project.Xml, project.ProjectCollection.GlobalProperties, project.ToolsVersion, project.ProjectCollection);
+            var buildProperties = new Dictionary<string, string>(project.ProjectCollection.GlobalProperties)
+            {
+                // Native editor loads compile short-lived private project trees.
+                // Keep their compiler file/context lifetime inside this build.
+                ["UseSharedCompilation"] = "false",
+            };
+            var projectInstance = new ProjectInstance(project.Xml, buildProperties, project.ToolsVersion, project.ProjectCollection);
 
             BuildTask = Task.Run(() =>
             {
@@ -469,11 +530,14 @@ public static class VSProjectHelper
                     if (IsCanceled)
                         return new BuildResult();
 
+                    var loggers = WithOptionalBinaryLogger(logger, project.FullPath, "compile");
+
                     return mainBuildManager.Build(
                         new BuildParameters(project.ProjectCollection)
                         {
-                            Loggers = [logger],
+                            Loggers = loggers,
                             DisableInProcNode = true,
+                            EnableNodeReuse = false,
                         },
                         new BuildRequestData(projectInstance, targets.Split(';'), null, flags));
                 }

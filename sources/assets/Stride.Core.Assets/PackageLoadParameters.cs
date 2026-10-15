@@ -153,6 +153,12 @@ public sealed class PackageLoadParameters
     /// </summary>
     public bool BackupBeforeUpgrade { get; set; }
 
+    /// <summary>Optional strict boundary for staged upgrade writes. Null preserves ordinary upgrade behavior.</summary>
+    public string? UpgradeWriteRoot { get; set; }
+
+    /// <summary>Optional staging resolver for an actual store dependency package file. Null uses the native store file.</summary>
+    public Func<string, string>? DependencyPackagePathResolver { get; set; }
+
     /// <summary>
     /// Occurs when an asset is about to be loaded, if false is returned the asset will be ignored and not loaded.
     /// </summary>

@@ -56,18 +56,27 @@ internal static class SolutionSerialization
     }
 
     public static void Write(Solution solution, string outputPath, Action<string>? onBeforeOverwrite = null)
+        => WriteCore(solution, outputPath, outputPath, onBeforeOverwrite, null, null);
+
+    public static void WriteForLocation(Solution solution, string stagedPath, string publicationPath, string generatedRoot, string publishedRoot)
+        => WriteCore(solution, stagedPath, publicationPath, null, Path.GetFullPath(generatedRoot), Path.GetFullPath(publishedRoot));
+
+    private static void WriteCore(Solution solution, string outputPath, string referencePath, Action<string>? onBeforeOverwrite,
+        string? generatedRoot, string? publishedRoot)
     {
         // Behave like Visual Studio: a solution loaded from disk keeps everything it had (platforms, build
         // configurations, solution folders, projects Stride doesn't manage) and only its project list is
         // reconciled. A solution that wasn't loaded from disk is created from a fresh model with defaults.
         var model = solution.SourceModel is { } source ? new SolutionModel(source) : NewModel(solution);
-        Reconcile(model, solution, outputPath);
+        Reconcile(model, solution, referencePath);
+        if (generatedRoot != null && publishedRoot != null)
+            RelocateReferences(model, solution, referencePath, generatedRoot, publishedRoot);
 
         // Pick the serializer from the output extension so a .slnx round-trips as XML and a .sln as classic format.
         var serializer = SolutionSerializers.GetSerializerByMoniker(outputPath) ?? SolutionSerializers.SlnFileV12;
 
         // SolutionPersistence can't model the .slnx DefaultStartup attribute, so stamp it in after writing.
-        var startupPath = StartupRelativePath(solution, outputPath);
+        var startupPath = StartupRelativePath(solution, referencePath, generatedRoot, publishedRoot);
 
         // Write to a sibling temp file first and only replace the solution when its content changed, so
         // Visual Studio doesn't reload an unchanged solution.
@@ -95,6 +104,60 @@ internal static class SolutionSerialization
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+    }
+
+    private static void RelocateReferences(SolutionModel model, Solution solution, string referencePath, string generatedRoot, string publishedRoot)
+    {
+        var directory = Path.GetDirectoryName(referencePath) ?? string.Empty;
+        var sourceDirectory = Path.GetDirectoryName(solution.FullPath) ?? string.Empty;
+        var projects = model.SolutionProjects.Select(project => (Model: project, Id: project.Id,
+            Authored: solution.Projects.FirstOrDefault(candidate => !candidate.IsSolutionFolder && candidate.Guid == project.Id))).ToList();
+        var byId = projects.ToDictionary(entry => entry.Id, entry => entry.Model);
+        // SolutionPersistence's model copy keeps dependency object references.
+        // Bind them to this private native generation before rebasing paths.
+        foreach (var entry in projects)
+        {
+            foreach (var dependency in entry.Model.Dependencies?.ToArray() ?? [])
+            {
+                entry.Model.RemoveDependency(dependency);
+                if (byId.TryGetValue(dependency.Id, out var owned) && !ReferenceEquals(owned, entry.Model)) entry.Model.AddDependency(owned);
+            }
+        }
+        // Setter duplicate checks are live. A private model-only namespace allows
+        // valid simultaneous path swaps without publishing intermediate paths.
+        var stagingNamespace = ".stride-solution-rebase-" + Guid.NewGuid().ToString("N");
+        foreach (var entry in projects)
+        {
+            if (entry.Authored == null) continue;
+            entry.Model.FilePath = stagingNamespace + "/" + entry.Id.ToString("N") + Path.GetExtension(entry.Model.FilePath);
+            entry.Model.Id = entry.Id;
+        }
+        foreach (var entry in projects)
+        {
+            if (entry.Authored == null) continue;
+            entry.Model.FilePath = GetRelativePath(directory, RelocateGeneratedPath(entry.Authored.FullPath, generatedRoot, publishedRoot)).Replace('\\', '/');
+            entry.Model.Id = entry.Id;
+        }
+        foreach (var folder in model.SolutionFolders)
+        {
+            foreach (var file in folder.Files?.ToArray() ?? [])
+            {
+                var source = Path.GetFullPath(Path.Combine(sourceDirectory, file.Replace('\\', Path.DirectorySeparatorChar)));
+                var relocated = GetRelativePath(directory, RelocateGeneratedPath(source, generatedRoot, publishedRoot)).Replace('\\', '/');
+                if (string.Equals(file, relocated, StringComparison.Ordinal)) continue;
+                folder.RemoveFile(file); folder.AddFile(relocated);
+            }
+        }
+    }
+
+    internal static string RelocateGeneratedPath(string path, string generatedRoot, string publishedRoot)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var relative = GetRelativePath(generatedRoot, fullPath);
+        if (relative == ".") return publishedRoot;
+        if (relative == ".." || relative.StartsWith("../", StringComparison.Ordinal) || relative.StartsWith("..\\", StringComparison.Ordinal)
+            || Path.IsPathRooted(relative)) return fullPath;
+        return Path.GetFullPath(Path.Combine(publishedRoot, relative));
     }
 
     // The flip side of StampDefaultStartup: SolutionPersistence drops the .slnx DefaultStartup attribute on
@@ -127,13 +190,14 @@ internal static class SolutionSerialization
     }
 
     // The solution-relative path of the startup project, or null when there's none (or the target isn't a .slnx).
-    private static string? StartupRelativePath(Solution solution, string outputPath)
+    private static string? StartupRelativePath(Solution solution, string outputPath, string? generatedRoot = null, string? publishedRoot = null)
     {
         if (!Path.GetExtension(outputPath).Equals(".slnx", StringComparison.OrdinalIgnoreCase) || solution.StartupProjectGuid is not { } guid)
             return null;
         if (solution.Projects.FirstOrDefault(p => !p.IsSolutionFolder && p.Guid == guid) is not { } project)
             return null;
-        return GetRelativePath(Path.GetDirectoryName(outputPath) ?? string.Empty, project.FullPath).Replace('\\', '/');
+        var path = generatedRoot != null && publishedRoot != null ? RelocateGeneratedPath(project.FullPath, generatedRoot, publishedRoot) : project.FullPath;
+        return GetRelativePath(Path.GetDirectoryName(outputPath) ?? string.Empty, path).Replace('\\', '/');
     }
 
     // SolutionPersistence (1.0.52) has no model for the .slnx DefaultStartup attribute, so add it to the startup

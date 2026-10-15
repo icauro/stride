@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Collections.Generic;
+using System.Threading;
 using Stride.Core.Diagnostics;
 using Stride.Core.IO;
 
@@ -29,6 +30,12 @@ public interface ICodeUpgradeRunner
     /// <param name="backup">The copy-on-write backup to snapshot each source file into before overwriting it, or <c>null</c> when no backup is requested.</param>
     /// <param name="log">The logger.</param>
     void Run(UFile? solutionPath, IReadOnlyList<PendingCodeUpgrade> pending, UpgradeBackup? backup, ILogger log);
+}
+
+/// <summary>Optional cancellation-aware runner. Legacy runners remain synchronous and must finish before owner disposal.</summary>
+public interface ICancellableCodeUpgradeRunner : ICodeUpgradeRunner
+{
+    void Run(UFile? solutionPath, IReadOnlyList<PendingCodeUpgrade> pending, UpgradeBackup? backup, ILogger log, CancellationToken cancellationToken);
 }
 
 /// <summary>

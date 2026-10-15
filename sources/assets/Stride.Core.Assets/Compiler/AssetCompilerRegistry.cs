@@ -12,7 +12,7 @@ namespace Stride.Core.Assets.Compiler;
 /// <summary>
 /// A registry containing the asset compilers of the assets.
 /// </summary>
-public sealed class AssetCompilerRegistry
+public sealed class AssetCompilerRegistry : IDisposable
 {
     private readonly HashSet<Assembly> assembliesToRegister = [];
     private readonly Logger log = GlobalLogger.GetLogger("AssetsCompiler.AttributeBasedRegistry");
@@ -22,6 +22,9 @@ public sealed class AssetCompilerRegistry
     private readonly List<AttributeCompiler> attributeCompilers = [];
     private readonly Dictionary<Assembly, List<CompilerTypeData>> declaredCompilers = [];
     private bool assembliesChanged;
+    private bool disposed;
+    private bool disposalComplete;
+    private readonly HashSet<IAssetCompiler> retiredCompilers = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Create an instance of that registry
@@ -52,6 +55,7 @@ public sealed class AssetCompilerRegistry
     /// <returns>The compiler associated the provided asset type or null if no compiler exists for that type.</returns>
     public IAssetCompiler? GetCompiler(Type type, Type context)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         AssertAssetType(type);
 
         EnsureTypes();
@@ -80,13 +84,16 @@ public sealed class AssetCompilerRegistry
     /// <param name="context"></param>
     public void RegisterCompiler(Type type, IAssetCompiler compiler, Type context)
     {
+        ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentNullException.ThrowIfNull(compiler);
 
         AssertAssetType(type);
 
         var typeData = new CompilerTypeData(context, type);
 
+        var previous = typeToCompiler.GetValueOrDefault(typeData);
         typeToCompiler[typeData] = compiler;
+        RetainUnreferencedCompiler(previous);
     }
 
     /// <summary>
@@ -141,17 +148,51 @@ public sealed class AssetCompilerRegistry
 
     private void UnregisterCompilersFromAssembly(Assembly assembly)
     {
+        var removed = new HashSet<IAssetCompiler>(ReferenceEqualityComparer.Instance);
         foreach (var typeToRemove in typeToCompiler.Where(typeAndCompile => typeAndCompile.Key.Type.Assembly == assembly || typeAndCompile.Value.GetType().Assembly == assembly).Select(e => e.Key).ToList())
         {
+            removed.Add(typeToCompiler[typeToRemove]);
             typeToCompiler.Remove(typeToRemove);
         }
-
         // Compilers declared by the assembly's attributes, for asset types of other assemblies
         if (declaredCompilers.Remove(assembly, out var declared))
         {
             foreach (var typeToRemove in declared)
-                typeToCompiler.Remove(typeToRemove);
+            {
+                if (typeToCompiler.Remove(typeToRemove, out var compiler))
+                    removed.Add(compiler);
+            }
         }
+        foreach (var compiler in removed) RetainUnreferencedCompiler(compiler);
+    }
+
+    private void RetainUnreferencedCompiler(IAssetCompiler? compiler)
+    {
+        // Removing a registration must not dispose an instance retained by a
+        // previously prepared build. The owning service drains builds first.
+        if (compiler != null && !ReferenceEquals(compiler, DefaultCompiler)
+            && !typeToCompiler.Values.Any(value => ReferenceEquals(value, compiler))) retiredCompilers.Add(compiler);
+    }
+
+    /// <summary>Detaches native assembly notifications and disposes factories after the owner has drained its builds.</summary>
+    public void Dispose()
+    {
+        if (disposalComplete) return;
+        if (!disposed)
+        {
+            disposed = true;
+            AssemblyRegistry.AssemblyRegistered -= AssemblyRegistered;
+            AssemblyRegistry.AssemblyUnregistered -= AssemblyUnregistered;
+            retiredCompilers.UnionWith(typeToCompiler.Values);
+            if (DefaultCompiler != null) retiredCompilers.Add(DefaultCompiler);
+            typeToCompiler.Clear(); declaredCompilers.Clear(); registeredAssemblies.Clear(); assembliesToRegister.Clear();
+        }
+        foreach (var compiler in retiredCompilers.ToArray())
+        {
+            if (compiler is IDisposable owned) owned.Dispose();
+            retiredCompilers.Remove(compiler);
+        }
+        disposalComplete = true;
     }
 
     private static void AssertAssetType(Type assetType)

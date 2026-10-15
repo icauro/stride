@@ -13,8 +13,15 @@ namespace Stride.Core.Assets;
 
 partial class PackageSession
 {
-    // Cache to avoid loading the same project multiple times
-    private readonly Dictionary<string, Microsoft.Build.Evaluation.Project> projectLoadCache = new(StringComparer.OrdinalIgnoreCase);
+    // In-memory asset sessions do not evaluate projects. Keep the SDK-typed
+    // cache out of constructor initializers so they do not bind Microsoft.Build.
+    private object? projectLoadCacheStorage;
+    private Dictionary<string, Microsoft.Build.Evaluation.Project> projectLoadCache
+    {
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        get => (Dictionary<string, Microsoft.Build.Evaluation.Project>)(projectLoadCacheStorage
+            ??= new Dictionary<string, Microsoft.Build.Evaluation.Project>(StringComparer.OrdinalIgnoreCase));
+    }
     // Track projects being processed to avoid infinite recursion
     private readonly HashSet<string> processingProjects = new(StringComparer.OrdinalIgnoreCase);
     // Set when LoadMissingDependencies restored the whole solution once up front, so the per-project
@@ -44,7 +51,7 @@ partial class PackageSession
     /// package's project assets (shaders) load from source with no MSBuild evaluation.
     /// </summary>
     /// <returns>The manifest, or null when it could not be parsed.</returns>
-    private static AssetBuildManifest? LoadProjectAssetsFromManifest(Package package, string projectFile, string manifestFile)
+    private static AssetBuildManifest? LoadProjectAssetsFromManifest(Package package, string projectFile, string manifestFile, PackageLoadParameters? loadParameters = null)
     {
         package.PrecomputedProjectAssets = [];
 
@@ -59,7 +66,10 @@ partial class PackageSession
         }
 
         var manifestDirectory = Path.GetDirectoryName(manifestFile)!;
-        var projectDirectory = new UDirectory(Path.GetDirectoryName(projectFile)!);
+        var sourceProjectDirectory = Path.GetDirectoryName(projectFile)!;
+        var projectDirectory = loadParameters?.DependencyPackagePathResolver is null
+            ? new UDirectory(sourceProjectDirectory)
+            : package.RootDirectory ?? throw new InvalidOperationException("A redirected dependency package has no root directory.");
         package.RootNamespace ??= manifest.RootNamespace;
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -67,13 +77,29 @@ partial class PackageSession
         {
             if (item.Path is null)
                 continue;
-            var filePath = new UFile(Path.GetFullPath(Path.Combine(manifestDirectory, item.Path.ToOSPath())));
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
+            var sourcePath = Path.GetFullPath(Path.Combine(manifestDirectory, item.Path.ToOSPath()));
+            // The manifest stays at its original read-only build location, while writable
+            // asset inputs follow the package copy selected by the host's existing policy.
+            var relative = Path.GetRelativePath(sourceProjectDirectory, sourcePath);
+            var filePath = new UFile(loadParameters?.DependencyPackagePathResolver is null ? sourcePath
+                : !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    ? Path.GetFullPath(Path.Combine(projectDirectory.ToOSPath(), relative))
+                    : ResolveDependencyPackagePath(sourcePath, loadParameters));
             if (!seen.Add(filePath.FullPath))
                 continue;
             var link = item.Link is not null ? UPath.Combine(projectDirectory, item.Link) : null;
             package.PrecomputedProjectAssets.Add(new PackageLoadingAssetFile(filePath, projectDirectory) { Link = link });
         }
         return manifest;
+    }
+
+    private static string ResolveDependencyPackagePath(string path, PackageLoadParameters? loadParameters)
+    {
+        loadParameters?.CancelToken?.ThrowIfCancellationRequested();
+        var resolved = loadParameters?.DependencyPackagePathResolver is { } resolver ? resolver(path) : path;
+        loadParameters?.CancelToken?.ThrowIfCancellationRequested();
+        return resolved;
     }
 
     /// <summary>
@@ -142,6 +168,7 @@ partial class PackageSession
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(loadParameters);
+        loadParameters.CancelToken?.ThrowIfCancellationRequested();
 
         bool packageDependencyErrors = false;
         // Tracks whether an upgrade rewrote this project's references, or those of a project it references,
@@ -241,7 +268,7 @@ partial class PackageSession
                         if (referencedProject != null)
                         {
                             // Process referenced projects sequentially (MSBuild doesn't support parallel evaluation)
-                            await PreLoadPackageDependencies(log, referencedProject, loadParameters);
+                            await PreLoadPackageDependencies(log, referencedProject, loadParameters).ConfigureAwait(false);
 
                             // Get package upgrader from dependency
                             if (pendingPackageUpgradesPerPackage.TryGetValue(referencedProject.Package, out var dependencyPackageUpgraders))
@@ -327,6 +354,7 @@ partial class PackageSession
                 // Perform pre assembly load upgrade - reuse cached project
                 foreach (var pendingPackageUpgrade in pendingPackageUpgrades)
                 {
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                     var expectedVersion = pendingPackageUpgrade.PackageUpgrader.Attribute.UpdatedVersionRange?.MinVersion?.ToString();
 
                     // Update NuGet references using cached project
@@ -359,20 +387,31 @@ partial class PackageSession
                     var dependencyPackage = pendingPackageUpgrade.DependencyPackage;
                     if (!packageUpgrader.UpgradeBeforeAssembliesLoaded(loadParameters, package.Session, log, package, pendingPackageUpgrade.Dependency, dependencyPackage))
                     {
+                        loadParameters.CancelToken?.ThrowIfCancellationRequested();
                         log.Error($"Error while upgrading package [{package.Meta.Name}] for [{dependencyPackage.Meta.Name}] from version [{pendingPackageUpgrade.Dependency.Version}] to [{dependencyPackage.Meta.Version}]");
                         return;
                     }
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                 }
             }
 
-            // Real nuget restore. Also runs when this project's restore output is missing — e.g. a library just
+            // Real nuget restore. Also runs when this project's restore output is missing â€” e.g. a library just
             // added to the solution that the up-front solution restore didn't cover.
             var assetsFile = msProject?.GetPropertyValue("ProjectAssetsFile");
             var restoreOutputMissing = string.IsNullOrEmpty(assetsFile) || !File.Exists(assetsFile);
-            if (loadParameters.AutoCompileProjects && (!solutionDependenciesRestored || referencesUpgraded || restoreOutputMissing))
+            // Loading an existing script binary still requires its real NuGet
+            // dependency graph. A prepared binary/content copy deliberately has
+            // no shared obj; missing restore data must never become an empty
+            // package/reference closure merely because compilation is disabled.
+            if (restoreOutputMissing || loadParameters.AutoCompileProjects && (!solutionDependenciesRestored || referencesUpgraded))
             {
                 log.Verbose($"Restore NuGet packages for {project.Name}...");
-                await VSProjectHelper.RestoreNugetPackages(log, project.FullPath, loadParameters.AllowUpgradeDowngradeRestore);
+                await VSProjectHelper.RestoreNugetPackages(log, project.FullPath, loadParameters.AllowUpgradeDowngradeRestore, loadParameters.CancelToken ?? CancellationToken.None).ConfigureAwait(false);
+                ClearCachedProject(projectPath);
+                msProject = LoadOrGetCachedProject(projectPath, loadParameters);
+                var restoredAssetsFile = msProject.GetPropertyValue("ProjectAssetsFile");
+                if (string.IsNullOrEmpty(restoredAssetsFile) || !File.Exists(restoredAssetsFile))
+                    throw new InvalidOperationException($"NuGet dependency restore did not produce project assets for [{projectPath}].");
             }
 
             // If platform was unknown, check it again using cached project
@@ -391,6 +430,7 @@ partial class PackageSession
                 }
             }
 
+            loadParameters.CancelToken?.ThrowIfCancellationRequested();
             UpdateDependencies(project, true, true);
 
             // 1. Load store package
@@ -415,6 +455,7 @@ partial class PackageSession
     {
         foreach (var projectDependency in project.FlattenedDependencies)
         {
+            loadParameters.CancelToken?.ThrowIfCancellationRequested();
             // Make all the assemblies known to the container to ensure that later assembly loads succeed
             foreach (var assembly in projectDependency.Assemblies)
                 AssemblyContainer.RegisterDependency(assembly);
@@ -436,17 +477,20 @@ partial class PackageSession
 
                 if (file != null && File.Exists(file))
                 {
+                    var sourcePackageFile = file;
+                    if (projectDependency.Type == DependencyType.Package)
+                        file = ResolveDependencyPackagePath(file, loadParameters);
                     PackageContainer loadedProject;
 
                     // A Package-type dependency whose .sdpkg sits next to a .csproj is a dev-redirect to
                     // the in-tree source (a real nupkg ships its .sdpkg under stride/ with no sibling
                     // .csproj). Load it as a read-only external package: its assets/shaders are read live
-                    // from source, but it must NOT become an editable SolutionProject — that would add the
+                    // from source, but it must NOT become an editable SolutionProject â€” that would add the
                     // engine project to the consumer's .sln, force a full MSBuild evaluation per engine
                     // package on every session load, and wire dependency write-back into the engine source
                     // csproj. Project assets come from the build manifest (.sdbuild), not MSBuild.
                     var devRedirectProject = projectDependency.Type == DependencyType.Package
-                        ? Path.ChangeExtension(file, ".csproj")
+                        ? Path.ChangeExtension(sourcePackageFile, ".csproj")
                         : null;
                     var manifestFile = devRedirectProject != null && File.Exists(devRedirectProject)
                         ? FindDevRedirectManifest(devRedirectProject)
@@ -458,7 +502,7 @@ partial class PackageSession
                         devPackage.AuthoredName ??= devPackage.Meta.Name;
                         devPackage.Meta.Name = projectDependency.Name;
                         devPackage.Meta.Version = projectDependency.Version;
-                        var devManifest = LoadProjectAssetsFromManifest(devPackage, devRedirectProject!, manifestFile);
+                        var devManifest = LoadProjectAssetsFromManifest(devPackage, devRedirectProject!, manifestFile, loadParameters);
                         if (devManifest is not null)
                             devPackage.SetCompanionDeclarations(devManifest, Path.GetDirectoryName(manifestFile)!);
 
@@ -494,7 +538,7 @@ partial class PackageSession
                 }
                 else if (projectDependency.Type == DependencyType.Package)
                 {
-                    var declared = LoadDevRedirectDeclarations(projectDependency);
+                    var declared = LoadDevRedirectDeclarations(projectDependency, loadParameters);
                     if (declared != null)
                     {
                         Projects.Add(declared);
@@ -526,7 +570,7 @@ partial class PackageSession
                 UpdateDependencies(project, false, true);
                 LoadDependencyPackages(log, project, loadParameters);
             }
-            LoadCompanionPackages(GetRootDirectory(), log, LoadEditorPackages, EditorToolkit);
+            LoadCompanionPackages(GetRootDirectory(), log, LoadEditorPackages, EditorToolkit, loadParameters);
         }
         finally
         {
@@ -578,6 +622,13 @@ partial class PackageSession
     // Call this to cleanup all cached projects when session loading is complete
     private void ClearAllCachedProjects()
     {
+        if (projectLoadCacheStorage != null) ClearAllocatedProjectCache();
+        processingProjects.Clear();
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ClearAllocatedProjectCache()
+    {
         foreach (var kvp in projectLoadCache)
         {
             try
@@ -591,7 +642,6 @@ partial class PackageSession
             }
         }
         projectLoadCache.Clear();
-        processingProjects.Clear();
     }
 
     public static void UpdateDependencies(SolutionProject project, bool directDependencies, bool flattenedDependencies)

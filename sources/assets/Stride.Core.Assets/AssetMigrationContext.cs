@@ -19,12 +19,17 @@ public class AssetMigrationContext
     /// <param name="assetFullPath"></param>
     /// <param name="log"></param>
     public AssetMigrationContext(Package? package, IReference? assetReference, string assetFullPath, ILogger log)
+        : this(package, assetReference, assetFullPath, log, System.Threading.CancellationToken.None)
+    { }
+
+    public AssetMigrationContext(Package? package, IReference? assetReference, string assetFullPath, ILogger log, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(log);
         Package = package;
         AssetReference = assetReference;
         AssetFullPath = assetFullPath;
         Log = new AssetLogger(package, assetReference, assetFullPath, log);
+        CancellationToken = cancellationToken;
     }
 
     /// <summary>
@@ -40,4 +45,5 @@ public class AssetMigrationContext
     /// The logger for this context.
     /// </summary>
     public ILogger Log { get; }
+    public CancellationToken CancellationToken { get; }
 }

@@ -503,6 +503,10 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
         // Clone this asset
         var package = AssetCloner.Clone(this);
         package.FullPath = FullPath;
+        if (metadataDiskBaselinePath != null)
+            package.RememberMetadataDiskBaseline(metadataDiskBaselinePath, metadataDiskBaselineHash);
+        foreach (var baseline in obsoleteMetadataDiskBaselines)
+            package.obsoleteMetadataDiskBaselines.Add(baseline.Key, baseline.Value.ToArray());
         // The clone is detached (no container): carry the resolved namespace so rooted
         // locations still resolve to bare disk paths (AssetItem.FullPath).
         package.AssetNamespace = Container?.AssetNamespace ?? AssetNamespace;
@@ -692,15 +696,24 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
 
         try
         {
-            var packageFile = new PackageLoadingAssetFile(filePath, Path.GetDirectoryName(filePath)) { CachedFileSize = filePath.Length };
+            // Retain a read lease across migration and deserialization so the disk
+            // certificate belongs to the loaded data, rather than a later replacement.
+            using var original = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var originalHash = System.Security.Cryptography.SHA256.HashData(original);
+            original.Position = 0;
+            var packageFile = new PackageLoadingAssetFile(filePath, Path.GetDirectoryName(filePath)) { CachedFileSize = original.Length };
             var context = new AssetMigrationContext(null, null, filePath, log);
             AssetMigration.MigrateAssetIfNeeded(context, packageFile, "Assets");
 
-            var loadResult = packageFile.AssetContent is not null
-                ? AssetFileSerializer.Load<Package>(new MemoryStream(packageFile.AssetContent), filePath, log)
-                : AssetFileSerializer.Load<Package>(filePath, log);
+            using var migrated = packageFile.AssetContent is not null ? new MemoryStream(packageFile.AssetContent) : null;
+            var loadResult = AssetFileSerializer.Load<Package>(migrated ?? (Stream)original, filePath, log);
             var package = loadResult.Asset;
             package.FullPath = packageFile.FilePath;
+            var loadedPath = package.FullPath.ToOSPath();
+            package.RememberMetadataDiskBaseline(loadedPath,
+                string.Equals(Path.GetFullPath(loadedPath), filePath, StringComparison.OrdinalIgnoreCase) ? originalHash : null);
+            if (!string.Equals(Path.GetFullPath(loadedPath), filePath, StringComparison.OrdinalIgnoreCase))
+                package.obsoleteMetadataDiskBaselines[filePath] = originalHash.ToArray();
             // .sdpkg has no serialized name (identity = file name). PackageSession derives this on
             // session load; do it here too so a direct Package.Load doesn't leave Meta.Name null.
             if (string.IsNullOrWhiteSpace(package.Meta.Name) && package.FullPath is not null)
@@ -747,6 +760,7 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
                     FullPath = packagePath,
                     IsDirty = false,
                 };
+            if (!packageExists) package.RememberMetadataDiskBaseline(packagePath, null);
             return new SolutionProject(package, Guid.NewGuid(), projectPath) { IsImplicitProject = !packageExists };
         }
         else
@@ -957,6 +971,7 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
     public void LoadTemporaryAssets(ILogger log, List<PackageLoadingAssetFile>? assetFiles = null, bool listAssetsInMsbuild = true, Func<PackageLoadingAssetFile, bool>? filterFunc = null, CancellationToken cancellationToken = default, bool listAssetsOfUnknownType = false)
     {
         ArgumentNullException.ThrowIfNull(log);
+        cancellationToken.ThrowIfCancellationRequested();
 
         // If FullPath is null, then we can't load assets from disk, just return
         if (FullPath is null)
@@ -987,36 +1002,44 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
 
         // Update step counter for log progress
         var tasks = new List<Task>();
-        for (int i = 0; i < assetFiles.Count; i++)
+        try
         {
-            var assetFile = assetFiles[i];
-
-            if (filterFunc is not null && !filterFunc(assetFile))
+            for (int i = 0; i < assetFiles.Count; i++)
             {
-                continue;
+                if (cancellationToken.IsCancellationRequested) break;
+                var assetFile = assetFiles[i];
+
+                if (filterFunc is not null && !filterFunc(assetFile))
+                {
+                    continue;
+                }
+
+                // Update the loading progress
+                loggerResult?.Progress(progressMessage, i, assetFiles.Count);
+
+                var task = Task.Factory.StartNew(() => LoadAsset(new AssetMigrationContext(this, assetFile.ToReference(), assetFile.FilePath.ToOSPath(), log, cancellationToken), assetFile, cancellationToken), cancellationToken);
+
+                tasks.Add(task);
             }
-
-            // Update the loading progress
-            loggerResult?.Progress(progressMessage, i, assetFiles.Count);
-
-            var task = Task.Factory.StartNew(() => LoadAsset(new AssetMigrationContext(this, assetFile.ToReference(), assetFile.FilePath.ToOSPath(), log), assetFile), cancellationToken);
-
-            tasks.Add(task);
         }
-
-        Task.WaitAll([.. tasks], cancellationToken);
+        finally
+        {
+            // Cancellation stops scheduling, but serializers/upgrader plugins
+            // already running retain this package until their actual terminal.
+            try { Task.WaitAll([.. tasks]); }
+            catch (AggregateException failure) when (cancellationToken.IsCancellationRequested)
+            { throw new OperationCanceledException("Package asset loading was cancelled after its workers completed.", failure, cancellationToken); }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         // DEBUG
         // StaticLog.Info("[{0}] Assets files loaded in {1}", assetFiles.Count, clock.ElapsedMilliseconds);
 
-        if (cancellationToken.IsCancellationRequested)
-        {
-            log.Warning("Skipping loading assets. PackageSession.Load cancelled");
-        }
     }
 
-    private void LoadAsset(AssetMigrationContext context, PackageLoadingAssetFile assetFile)
+    private void LoadAsset(AssetMigrationContext context, PackageLoadingAssetFile assetFile, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var fileUPath = assetFile.FilePath;
         var sourceFolder = assetFile.SourceFolder;
 
@@ -1039,6 +1062,7 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
         try
         {
             AssetMigration.MigrateAssetIfNeeded(context, assetFile);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Try to load only if asset is not already in the package or assetRef.Asset is null
             var assetPath = assetFile.AssetLocation;
@@ -1050,6 +1074,7 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
             var assetContent = assetFile.AssetContent;
 
             var asset = LoadAsset(context.Log, Meta.Name, assetFullPath, assetPath.ToOSPath(), assetContent, assetNamespace, out var aliasOccurred, out var yamlMetadata);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Create asset item
             var assetItem = new AssetItem(assetPath, asset, this)
@@ -1073,9 +1098,11 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
             // Add to temporary assets
             lock (TemporaryAssets)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 TemporaryAssets.Add(assetItem);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             if (ex is YamlException yamlException)
@@ -1309,7 +1336,11 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
             {
                 try
                 {
-                    var file = new FileInfo(filePath);
+                    // TemplateFolder.Files are package-root relative, including
+                    // when isolated library loading retains relative UPaths.
+                    var resolvedPath = filePath.IsAbsolute ? filePath
+                        : UPath.Combine(RootDirectory ?? throw new InvalidOperationException("A template package has no root directory."), filePath);
+                    var file = new FileInfo(resolvedPath.ToOSPath());
                     if (!file.Exists)
                     {
                         log.Warning($"Template [{file}] does not exist ");
@@ -1414,6 +1445,12 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
             FindAssetsInProject(listFiles, package);
         }
 
+        // Read-only folder discovery and precomputed manifests can provide the
+        // same project inputs without MSBuild. Only physically present, registered
+        // generator inputs actually collected for this package establish outputs.
+        var generatedOutputs = GetProjectGeneratedOutputPaths(listFiles.Select(asset => asset.FilePath));
+        listFiles.RemoveAll(asset => generatedOutputs.Contains(Path.GetFullPath(asset.FilePath.ToOSPath())));
+
         return listFiles;
     }
 
@@ -1453,9 +1490,15 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
         if (nameSpace?.Length == 0)
             nameSpace = null;
 
-        var result = project.Items.Where(x => (x.ItemType == "Compile" || x.ItemType == "None" || x.ItemType == "AdditionalFiles") && string.IsNullOrEmpty(x.GetMetadataValue("AutoGen")))
+        var authoredItems = project.Items.Where(x => (x.ItemType == "Compile" || x.ItemType == "None" || x.ItemType == "AdditionalFiles") && string.IsNullOrEmpty(x.GetMetadataValue("AutoGen")))
             // Build full path for Include and Link
             .Select(x => (FilePath: UPath.Combine(dir, new UFile(x.EvaluatedInclude)), Link: x.HasMetadata("Link") ? UPath.Combine(dir, new UFile(x.GetMetadataValue("Link"))) : null))
+            .ToArray();
+        // SDK default Compile globs omit AutoGen metadata. Actual project generator
+        // inputs still own their FullPath + ".cs" output; that output is compiled,
+        // but must not acquire a second independently editable source asset owner.
+        var generatedOutputs = GetProjectGeneratedOutputPaths(authoredItems.Select(item => item.FilePath));
+        var result = authoredItems.Where(item => !generatedOutputs.Contains(Path.GetFullPath(item.FilePath.ToOSPath())))
             // For items outside project, let's pretend they are link
             .Select(x => (x.FilePath, Link: x.Link ?? (!dir.Contains(x.FilePath) ? x.FilePath.GetFileName() : null)))
             .Where(x => AssetRegistry.IsProjectAssetFileExtension(x.FilePath.GetFileExtension()))
@@ -1467,6 +1510,22 @@ public sealed partial class Package : IFileSynchronizable, IAssetFinder
         project.ProjectCollection.UnloadAllProjects();
         project.ProjectCollection.Dispose();
 
+        return result;
+    }
+
+    private static HashSet<string> GetProjectGeneratedOutputPaths(IEnumerable<UFile> projectInputs)
+    {
+        var result = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var input in projectInputs)
+        {
+            var extension = input.GetFileExtension();
+            var type = extension == null ? null : AssetRegistry.GetAssetTypeFromFileExtension(extension);
+            if (type == null || !typeof(IProjectFileGeneratorAsset).IsAssignableFrom(type)) continue;
+            var physical = Path.GetFullPath(input.ToOSPath());
+            if (!File.Exists(physical)) continue;
+            // Same physical path contract as AssetItemExtensions.GetGeneratedAbsolutePath.
+            result.Add(physical + ".cs");
+        }
         return result;
     }
 

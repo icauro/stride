@@ -4,6 +4,8 @@
 using Stride.Core.Reflection;
 using Stride.Core.Serialization;
 using Stride.Core.Serialization.Contents;
+using Stride.Core.Yaml;
+using Stride.Core.Yaml.Events;
 
 namespace Stride.Core.Assets.Tests;
 
@@ -41,6 +43,47 @@ public class TestObjectReference;
 
 public class TestAssetCloner
 {
+    [Fact]
+    public void TestUnloadableContentProxyClonePreservesUnresolvedData()
+    {
+        var events = new List<ParsingEvent> { new Scalar("unresolved-font-data") };
+        var proxy = (TestContent)UnloadableObjectInstantiator.CreateUnloadableObject(typeof(TestContent), "UnknownFont", "MissingAssembly", "Unknown font content", events);
+        Assert.IsType<ReferenceSerializer<TestContent>>(AssetCloner.ClonerSelector.GetSerializer(typeof(TestContent)));
+        Assert.Null(AttachedReferenceManager.GetAttachedReference(proxy));
+        var clone = AssetCloner.Clone(new TestAssetClonerContent { Content = proxy });
+        Assert.NotSame(proxy, clone.Content);
+        var unresolved = Assert.IsAssignableFrom<IUnloadable>(clone.Content);
+        Assert.Equal("UnknownFont", unresolved.TypeName);
+        Assert.Equal("MissingAssembly", unresolved.AssemblyName);
+        Assert.Equal("Unknown font content", unresolved.Error);
+        Assert.Equal(events, unresolved.ParsingEvents);
+        Assert.Null(AttachedReferenceManager.GetAttachedReference(clone.Content));
+
+        var actualReference = AttachedReferenceManager.GetOrCreateAttachedReference(proxy);
+        actualReference.Id = AssetId.New(); actualReference.Url = "Fonts/Existing"; actualReference.IsProxy = true;
+        clone = AssetCloner.Clone(new TestAssetClonerContent { Content = proxy });
+        var clonedReference = AttachedReferenceManager.GetAttachedReference(clone.Content);
+        Assert.NotSame(actualReference, clonedReference);
+        Assert.Equal(actualReference.Id, clonedReference!.Id);
+        Assert.Equal(actualReference.Url, clonedReference.Url);
+        Assert.True(clonedReference.IsProxy);
+        Assert.Equal(events, Assert.IsAssignableFrom<IUnloadable>(clone.Content).ParsingEvents);
+    }
+
+    [Fact]
+    public void TestUnloadableOrdinaryContractCloneRetainsKnownBaseMembers()
+    {
+        var proxy = (TestAssetClonerObject)UnloadableObjectInstantiator.CreateUnloadableObject(typeof(TestAssetClonerObject), "UnknownObject", "MissingAssembly", "Missing type", []);
+        proxy.Name = "Known member";
+        proxy.SubObject = new TestAssetClonerObject { Name = "Nested member" };
+        var clone = AssetCloner.Clone(proxy);
+        Assert.NotSame(proxy, clone);
+        Assert.Equal(proxy.Name, clone.Name);
+        Assert.NotSame(proxy.SubObject, clone.SubObject);
+        Assert.Equal(proxy.SubObject.Name, clone.SubObject!.Name);
+        Assert.Equal("UnknownObject", Assert.IsAssignableFrom<IUnloadable>(clone).TypeName);
+    }
+
     [Fact]
     public void TestAssetClonerContent()
     {

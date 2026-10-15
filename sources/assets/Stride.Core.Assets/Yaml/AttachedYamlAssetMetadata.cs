@@ -44,6 +44,14 @@ public class AttachedYamlAssetMetadata
         }
     }
 
+    public void ReplaceWith(AttachedYamlAssetMetadata source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ReferenceEquals(this, source)) return;
+        yamlMetadata.Clear();
+        source.CopyInto(this);
+    }
+
     internal PropertyContainer ToPropertyContainer()
     {
         var container = new PropertyContainer();

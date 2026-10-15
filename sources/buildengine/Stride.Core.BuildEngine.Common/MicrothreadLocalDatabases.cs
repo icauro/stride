@@ -14,6 +14,8 @@ namespace Stride.Core.BuildEngine;
 /// </summary>
 public static class MicrothreadLocalDatabases
 {
+    /// <summary>Serializes common database mounts performed outside build microthreads.</summary>
+    public static readonly object OutOfMicrothreadDatabaseLock = new();
     private static readonly Dictionary<ObjectUrl, OutputObject> SharedOutputObjects = [];
     private static readonly MicroThreadLocal<DatabaseFileProvider> MicroThreadLocalDatabaseFileProvider;
 

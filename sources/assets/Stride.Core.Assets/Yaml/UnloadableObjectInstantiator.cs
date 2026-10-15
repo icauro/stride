@@ -2,6 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Reflection.Emit;
 using Stride.Core.Annotations;
 using Stride.Core.Reflection;
@@ -11,7 +12,10 @@ namespace Stride.Core.Yaml;
 
 public static class UnloadableObjectInstantiator
 {
-    private static readonly Dictionary<Type, Type> proxyTypes = [];
+    // A generated proxy references its base Type; an ephemeron cache lets both
+    // generations retire together instead of pinning a collectible user assembly.
+    private sealed class ProxyTypeHolder(Type type) { internal Type Type { get; } = type; }
+    private static readonly ConditionalWeakTable<Type, ProxyTypeHolder> proxyTypes = new();
 
     public delegate void ProcessProxyTypeDelegate(Type baseType, TypeBuilder typeBuilder);
 
@@ -32,12 +36,12 @@ public static class UnloadableObjectInstantiator
         Type? proxyType;
         lock (proxyTypes)
         {
-            if (!proxyTypes.TryGetValue(baseType, out proxyType))
+            if (!proxyTypes.TryGetValue(baseType, out var cached))
             {
                 var asmName = new AssemblyName($"YamlProxy_{Guid.NewGuid():N}");
 
                 // Create assembly (in memory)
-                var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.Run);
+                var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndCollect);
                 var moduleBuilder = asmBuilder.DefineDynamicModule("DynamicModule");
 
                 // Create type
@@ -106,8 +110,9 @@ public static class UnloadableObjectInstantiator
                 ProcessProxyType?.Invoke(baseType, typeBuilder);
 
                 proxyType = typeBuilder.CreateTypeInfo();
-                proxyTypes.Add(baseType, proxyType);
+                proxyTypes.Add(baseType, new(proxyType));
             }
+            else proxyType = cached.Type;
         }
 
         return (IUnloadable)Activator.CreateInstance(proxyType, typeName, assemblyName, error, parsingEvents)!;

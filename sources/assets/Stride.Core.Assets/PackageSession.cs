@@ -25,6 +25,7 @@ record AssetLoadingInfo(PackageSession session, ILogger log, Package package, Pa
 
 public abstract class PackageContainer
 {
+    private Action<Package, byte[]>? packageWriter;
     public PackageContainer(Package package)
     {
         Package = package;
@@ -114,7 +115,10 @@ public abstract class PackageContainer
 
                 try
                 {
-                    SavePackage();
+                    var previousWriter = packageWriter;
+                    packageWriter = saveParameters.PackageWrite;
+                    try { SavePackage(); }
+                    finally { packageWriter = previousWriter; }
 
                     // Move the package if the path has changed
                     if (Package.PreviousPackagePath is not null && Package.PreviousPackagePath != Package.FullPath)
@@ -127,6 +131,7 @@ public abstract class PackageContainer
                 }
                 catch (Exception ex)
                 {
+                    RequeueDeletionFiles(filesToDeleteLocal);
                     log.Error(Package, null, AssetMessageCode.PackageCannotSave, ex, Package.FullPath);
                     return;
                 }
@@ -134,14 +139,30 @@ public abstract class PackageContainer
                 // Delete obsolete files
                 foreach (var file in filesToDeleteLocal)
                 {
-                    if (File.Exists(file.FullPath))
+                    // A later move may reuse a queued old destination. The
+                    // successfully written current package is never obsolete.
+                    if (string.Equals(Path.GetFullPath(file.ToOSPath()), Path.GetFullPath(Package.FullPath.ToOSPath()), StringComparison.OrdinalIgnoreCase)) continue;
+                    var retainedAsset = Package.Assets.FirstOrDefault(asset => string.Equals(Path.GetFullPath(asset.FullPath.ToOSPath()), Path.GetFullPath(file.ToOSPath()), StringComparison.OrdinalIgnoreCase));
+                    if (retainedAsset != null)
+                    {
+                        try { saveParameters.FileRemoval?.Invoke(Package, file.ToOSPath(), PackageFileRemovalKind.RetainedAsset); }
+                        catch (Exception ex)
+                        {
+                            RequeueDeletionFiles([file]);
+                            log.Error(Package, null, AssetMessageCode.AssetCannotDelete, ex, file.FullPath);
+                        }
+                        continue;
+                    }
+                    if (saveParameters.FileRemoval != null || File.Exists(file.FullPath))
                     {
                         try
                         {
-                            File.Delete(file.FullPath);
+                            if (saveParameters.FileRemoval != null) saveParameters.FileRemoval(Package, file.ToOSPath(), PackageFileRemovalKind.Obsolete);
+                            else File.Delete(file.FullPath);
                         }
                         catch (Exception ex)
                         {
+                            RequeueDeletionFiles([file]);
                             log.Error(Package, null, AssetMessageCode.AssetCannotDelete, ex, file.FullPath);
                         }
                     }
@@ -168,6 +189,9 @@ public abstract class PackageContainer
                 // Add new files to .csproj
                 if (asset.Asset is IProjectAsset projectAsset)
                 {
+                    if (asset.Package.Container is SolutionProject authoredProject
+                        && saveParameters.ProjectItemChanges?.Invoke(authoredProject, asset, true) == true)
+                        continue;
                     var projectFullPath = (asset.Package.Container as SolutionProject)?.FullPath;
                     var projectInclude = asset.GetProjectInclude();
 
@@ -226,6 +250,14 @@ public abstract class PackageContainer
         }
     }
 
+    private void RequeueDeletionFiles(IEnumerable<UFile> files)
+    {
+        lock (Package.FilesToDelete)
+            foreach (var file in files)
+                if (!Package.FilesToDelete.Contains(file)) Package.FilesToDelete.Add(file);
+        Package.IsDirty = true;
+    }
+
     protected virtual void SavePackage()
     {
         // The session renames Meta.Name to the csproj-derived identity; the file keeps its authored name
@@ -234,7 +266,18 @@ public abstract class PackageContainer
             Package.Meta.Name = Package.AuthoredName;
         try
         {
-            AssetFileSerializer.Save(Package.FullPath, Package, null);
+            using var serialized = new MemoryStream();
+            AssetFileSerializer.Save(serialized, Package, null);
+            var bytes = serialized.ToArray();
+            var path = Package.FullPath.ToOSPath();
+            if (packageWriter is { } writer) writer(Package, bytes);
+            else
+            {
+                var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+                if (directory != null) Directory.CreateDirectory(directory);
+                File.WriteAllBytes(path, bytes);
+            }
+            Package.RememberSavedMetadata(path, bytes);
         }
         finally
         {
@@ -332,6 +375,20 @@ public class DependencyRange
 
 public class SolutionProject : PackageContainer
 {
+    private bool authoredDependencyChangeInProgress;
+    /// <summary>Updates the actual authored dependency collection without implicit writes to the project file.</summary>
+    public void ApplyAuthoredDirectDependencies(IReadOnlyList<DependencyRange> dependencies)
+    {
+        var previous = DirectDependencies.ToArray();
+        var wasApplying = authoredDependencyChangeInProgress;
+        authoredDependencyChangeInProgress = true;
+        try
+        {
+            try { DirectDependencies.Clear(); foreach (var dependency in dependencies) DirectDependencies.Add(dependency); }
+            catch { DirectDependencies.Clear(); foreach (var dependency in previous) DirectDependencies.Add(dependency); throw; }
+        }
+        finally { authoredDependencyChangeInProgress = wasApplying; }
+    }
     protected SolutionProject(Package package) : base(package)
     {
         DirectDependencies.CollectionChanged += DirectDependencies_CollectionChanged;
@@ -396,6 +453,7 @@ public class SolutionProject : PackageContainer
 
     private void DirectDependencies_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        if (authoredDependencyChangeInProgress) return;
         // Ignore collection being filled during dependency resolution
         if (Package.State < PackageState.DependenciesReady)
             return;
@@ -592,25 +650,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
     /// </summary>
     public void Dispose()
     {
-        dependencies?.Dispose();
-        sourceTracker?.Dispose();
-
-        // Everything this session's container loaded: the packages' assemblies and the dependencies they pulled in
-        // (the host's own are shared, never in the container)
-        var loadedAssemblies = AssemblyContainer.LoadedAssemblies.Select(x => x.Assembly).ToList();
-        for (int index = loadedAssemblies.Count - 1; index >= 0; index--)
-        {
-            var assembly = loadedAssemblies[index];
-
-            // Unregisters assemblies that have been registered in Package.Load => Package.LoadAssemblyReferencesForPackage
-            AssemblyRegistry.Unregister(assembly);
-
-            // Unload binary serialization
-            DataSerializerFactory.UnregisterSerializationAssembly(assembly);
-
-            // Unload assembly
-            AssemblyContainer.UnloadAssembly(assembly);
-        }
+        DisposeOwnedSession();
     }
 
     /// <summary>
@@ -670,16 +710,14 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
     /// <returns>IEnumerable&lt;Package&gt;.</returns>
     public IEnumerable<Package> GetPackagesFromCurrent()
     {
-        if (CurrentProject.Package is null)
-        {
-            yield return CurrentProject.Package;
-        }
+        if (CurrentProject is not { } project) yield break;
+        if (project.Package is not null) yield return project.Package;
 
-        foreach (var dependency in CurrentProject.FlattenedDependencies)
+        foreach (var dependency in project.FlattenedDependencies)
         {
             var loadedPackage = packages.Find(dependency);
             // In case the package is not found (when working with session not fully loaded/resolved with all deps)
-            if (loadedPackage is null)
+            if (loadedPackage is not null)
             {
                 yield return loadedPackage;
             }
@@ -1007,14 +1045,14 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
     // solution directory (or, for a standalone project upgrade with no solution, the project's directory).
     private void ArmUpgradeBackup(PackageLoadParameters loadParameters, ILogger log)
     {
-        if (!loadParameters.BackupBeforeUpgrade || UpgradeBackup is not null)
+        if ((!loadParameters.BackupBeforeUpgrade && loadParameters.UpgradeWriteRoot == null) || UpgradeBackup is not null)
             return;
 
-        var root = SolutionPath is not null
+        var root = loadParameters.UpgradeWriteRoot ?? (SolutionPath is not null
             ? Path.GetDirectoryName(SolutionPath.ToOSPath())
-            : Projects.OfType<SolutionProject>().Select(x => Path.GetDirectoryName(x.FullPath.ToOSPath())).FirstOrDefault();
+            : Projects.OfType<SolutionProject>().Select(x => Path.GetDirectoryName(x.FullPath.ToOSPath())).FirstOrDefault());
         if (!string.IsNullOrEmpty(root))
-            UpgradeBackup = new UpgradeBackup(root, DateTime.Now, log);
+            UpgradeBackup = new UpgradeBackup(root, DateTime.Now, log, strictRoot: loadParameters.UpgradeWriteRoot != null);
     }
 
     /// <summary>
@@ -1042,7 +1080,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
             packageUpgradeAllowed = false;
 
         // The callback may have opted out of the backup (e.g. the GameStudio dialog's checkbox).
-        if (!loadParameters.BackupBeforeUpgrade)
+        if (!loadParameters.BackupBeforeUpgrade && loadParameters.UpgradeWriteRoot == null)
             DisarmUpgradeBackup();
 
         return answer;
@@ -1076,9 +1114,10 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 try
                 {
                     log.Verbose($"Restore NuGet packages for {SolutionPath.GetFileName()}...");
-                    VSProjectHelper.RestoreNugetPackages(log, SolutionPath.ToOSPath(), loadParameters.AllowUpgradeDowngradeRestore).Wait();
+                    VSProjectHelper.RestoreNugetPackages(log, SolutionPath.ToOSPath(), loadParameters.AllowUpgradeDowngradeRestore, cancelToken ?? CancellationToken.None).GetAwaiter().GetResult();
                     solutionDependenciesRestored = true;
                 }
+                catch (OperationCanceledException) when (cancelToken?.IsCancellationRequested == true) { throw; }
                 catch (Exception ex)
                 {
                     log.Warning($"Unable to restore NuGet packages for solution [{SolutionPath}]", ex);
@@ -1093,12 +1132,19 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 {
                     var pendingCodeUpgrades = DetectPendingCodeUpgrades(log, loadParameters);
                     if (pendingCodeUpgrades.Count > 0)
-                        codeUpgradeRunner.Run(SolutionPath, pendingCodeUpgrades, UpgradeBackup, log);
+                    {
+                        cancelToken?.ThrowIfCancellationRequested();
+                        if (codeUpgradeRunner is ICancellableCodeUpgradeRunner cancellableRunner)
+                            cancellableRunner.Run(SolutionPath, pendingCodeUpgrades, UpgradeBackup, log, cancelToken ?? CancellationToken.None);
+                        else codeUpgradeRunner.Run(SolutionPath, pendingCodeUpgrades, UpgradeBackup, log);
+                        cancelToken?.ThrowIfCancellationRequested();
+                    }
                 }
+                catch (OperationCanceledException) when (cancelToken?.IsCancellationRequested == true) { throw; }
                 catch (NotImplementedException)
                 {
                     // Unsupported rule configuration (e.g. resolveSince above the from-version) is an
-                    // upgrader-authoring error — surface it loudly instead of degrading to a warning.
+                    // upgrader-authoring error â€” surface it loudly instead of degrading to a warning.
                     throw;
                 }
                 catch (Exception ex)
@@ -1119,7 +1165,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 }
 
                 if (project is SolutionProject solutionProject)
-                    PreLoadPackageDependencies(log, solutionProject, loadParameters).Wait();
+                    PreLoadPackageDependencies(log, solutionProject, loadParameters).GetAwaiter().GetResult();
                 else if (project.Package.State < PackageState.DependenciesReady) // not handling standalone packages yet
                     project.Package.State = PackageState.DependenciesReady;
             }
@@ -1127,7 +1173,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
             // Companion packages declared by the packages loaded above
             LoadEditorPackages |= loadParameters.LoadEditorPackages;
             EditorToolkit ??= loadParameters.EditorToolkit;
-            LoadCompanionPackages(GetRootDirectory(), log, LoadEditorPackages, EditorToolkit);
+            LoadCompanionPackages(GetRootDirectory(), log, LoadEditorPackages, EditorToolkit, loadParameters);
         }
         finally
         {
@@ -1162,6 +1208,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
         }
         foreach (AssetLoadingInfo assetInfo in assetLoadInfos)
         {
+            cancelToken?.ThrowIfCancellationRequested();
             // Check if the same package exists in the list but with a newer version.
             var newerPackage = packages.FirstOrDefault(p => p.Meta.Name == assetInfo.package.Meta.Name && p.Meta.Version > assetInfo.package.Meta.Version);
             if (newerPackage is not null)
@@ -1205,7 +1252,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
         var packagesDirty = false;
         try
         {
-            saveCompletion = new TaskCompletionSource<int>();
+            saveCompletion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             saveParameters ??= PackageSaveParameters.Default();
             var assetsOrPackagesToRemove = BuildAssetsOrPackagesToRemove();
@@ -1262,11 +1309,28 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 try
                 {
                     //If we are within a csproj we need to remove the file from there as well
-                    var projectFullPath = (assetItem.Package?.Container as SolutionProject)?.FullPath;
+                    // Saved package snapshots are intentionally detached. Resolve
+                    // their live project through the retained snapshot-owner map.
+                    var removalPackage = packagesCopy.FirstOrDefault(pair => ReferenceEquals(pair.Value, assetItem.Package)).Key ?? assetItem.Package!;
+                    // Asset identity changes do not make a reused destination obsolete.
+                    // Validate the current owner through the publication policy before
+                    // retiring the old identity's path/membership tombstone.
+                    var retainedAsset = LocalPackages.SelectMany(package => package.Assets).FirstOrDefault(asset =>
+                        string.Equals(Path.GetFullPath(asset.FullPath.ToOSPath()), Path.GetFullPath(assetPath.ToOSPath()), StringComparison.OrdinalIgnoreCase));
+                    if (retainedAsset != null)
+                    {
+                        saveParameters.FileRemoval?.Invoke(retainedAsset.Package!, assetPath.ToOSPath(), PackageFileRemovalKind.RetainedAsset);
+                        continue;
+                    }
+                    var owningProject = assetItem.Package?.Container as SolutionProject
+                        ?? removalPackage.Container as SolutionProject;
+                    var projectFullPath = owningProject?.FullPath;
                     if (projectFullPath is not null && assetItem.Asset is IProjectAsset projectAsset)
                     {
-                        var projectInclude = assetItem.GetProjectInclude();
-
+                        var membershipHandled = saveParameters.ProjectItemChanges?.Invoke(owningProject!, assetItem, false) == true;
+                        var projectInclude = assetItem.FullPath.MakeRelative(projectFullPath.GetFullDirectory()).ToOSPath();
+                        if (!membershipHandled)
+                        {
                         if (!vsProjs.TryGetValue(projectFullPath, out var project))
                         {
                             project = VSProjectHelper.LoadProject(projectFullPath.ToOSPath());
@@ -1283,23 +1347,45 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                         {
                             var generatedAbsolutePath = assetItem.GetGeneratedAbsolutePath().ToOSPath();
 
-                            File.Delete(generatedAbsolutePath);
+                            if (saveParameters.FileRemoval != null) saveParameters.FileRemoval(removalPackage, generatedAbsolutePath, PackageFileRemovalKind.Generated);
+                            else File.Delete(generatedAbsolutePath);
 
-                            var generatedInclude = assetItem.GetGeneratedInclude();
+                            var generatedInclude = projectInclude + ".cs";
                             var generatedItem = project.Items.FirstOrDefault(x => (x.ItemType == "Compile" || x.ItemType == "None" || x.ItemType == "AdditionalFiles") && x.EvaluatedInclude == generatedInclude);
                             if (generatedItem is not null)
                             {
                                 project.RemoveItem(generatedItem);
                             }
                         }
+                        }
+                        else if (assetItem.Asset is IProjectFileGeneratorAsset)
+                        {
+                            var generatedAbsolutePath = assetItem.GetGeneratedAbsolutePath().ToOSPath();
+                            if (saveParameters.FileRemoval != null) saveParameters.FileRemoval(removalPackage, generatedAbsolutePath, PackageFileRemovalKind.Generated);
+                            else File.Delete(generatedAbsolutePath);
+                        }
                     }
 
-                    File.Delete(assetPath);
+                    if (saveParameters.FileRemoval != null) saveParameters.FileRemoval(removalPackage, assetPath.ToOSPath(), PackageFileRemovalKind.Asset);
+                    else File.Delete(assetPath);
                 }
                 catch (Exception ex)
                 {
                     loggerResult.Error(assetItem.Package, assetItem.ToReference(), AssetMessageCode.AssetCannotDelete, ex, assetPath);
                 }
+            }
+
+            // A failed cleanup must not establish a new baseline. In particular,
+            // the old snapshot still owns removed/renamed paths for the next Save.
+            if (loggerResult.HasErrors)
+            {
+                foreach (var project in vsProjs.Values)
+                {
+                    project.ProjectCollection.UnloadAllProjects();
+                    project.ProjectCollection.Dispose();
+                }
+                IsDirty = true;
+                return;
             }
 
             foreach (var project in vsProjs.Values)
@@ -1310,10 +1396,10 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
             }
 
             // Save all dirty assets
-            packagesCopy.Clear();
+            var nextPackagesCopy = new Dictionary<Package, Package>();
             foreach (var package in LocalPackages)
             {
-                // Save the package to disk and all its assets (skip packages filtered out — e.g.
+                // Save the package to disk and all its assets (skip packages filtered out â€” e.g.
                 // template generation must not rewrite pre-existing dependency packages).
                 if (saveParameters.PackageFilter?.Invoke(package) != false)
                     package.Container.Save(loggerResult, saveParameters);
@@ -1324,37 +1410,68 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
 
                 // Clone the package (but not all assets inside, just the structure)
                 var packageClone = package.Clone();
-                packagesCopy.Add(package, packageClone);
+                nextPackagesCopy.Add(package, packageClone);
             }
+
+            // Package-level queued removals can fail after metadata has been
+            // written. Keep the previous session snapshots and retry flags until
+            // all package saves and removal callbacks complete successfully.
+            if (loggerResult.HasErrors)
+            {
+                IsDirty = true;
+                return;
+            }
+            packagesCopy.Clear();
+            foreach (var pair in nextPackagesCopy) packagesCopy.Add(pair.Key, pair.Value);
 
             packagesSaved = true;
         }
+        catch
+        {
+            IsDirty = true;
+            throw;
+        }
         finally
         {
-            sourceTracker?.EndSavingSession();
-            dependencies?.EndSavingSession();
-
-            // Once all packages and assets have been saved, we can save the solution (as we need to have fullpath to
-            // be setup for the packages). Skip when the session wasn't loaded from a .sln (empty FullPath). The
-            // callback snapshots the .sln only when Save actually rewrites it.
-            if (packagesSaved && !string.IsNullOrEmpty(VSSolution.FullPath))
+            try
             {
-                // Mark the host/Windows exec as the startup project so the saved .slnx gets a DefaultStartup
-                // (slnx ignores project order, and SolutionPersistence can't model the attribute). ??= so a
-                // startup already read from the existing .slnx isn't overridden — it round-trips.
-                VSSolution.StartupProjectGuid ??= CurrentProject is { Type: ProjectType.Executable } exec ? exec.Id : null;
-                VSSolution.Save(path => UpgradeBackup?.Snapshot(path));
+                try { sourceTracker?.EndSavingSession(); }
+                finally { dependencies?.EndSavingSession(); }
+
+                // Once packages and assets have been saved, their real paths
+                // are available for native solution serialization.
+                if (packagesSaved && !string.IsNullOrEmpty(VSSolution.FullPath))
+                {
+                    // Preserve a startup project read from the existing solution.
+                    VSSolution.StartupProjectGuid ??= CurrentProject is { Type: ProjectType.Executable } exec ? exec.Id : null;
+                    if (saveParameters?.SolutionSave is { } solutionSave) solutionSave(VSSolution);
+                    else VSSolution.Save(path => UpgradeBackup?.Snapshot(path));
+                }
+                if (packagesSaved)
+                {
+                    IsDirty = packagesDirty;
+                    // Finalize the actual successful native save before releasing
+                    // observers waiting on the terminal-work barrier.
+                    DisarmUpgradeBackup();
+                }
             }
-            saveCompletion?.SetResult(0);
-            saveCompletion = null;
+            catch
+            {
+                // A solution CAS/write failure must remain retryable even when
+                // every package file was already successfully saved.
+                IsDirty = true;
+                throw;
+            }
+            finally
+            {
+                // SaveCompletion is a terminal-work barrier, not a save result.
+                // Release it after every exit, including a failed solution writer.
+                var completion = saveCompletion;
+                saveCompletion = null;
+                completion?.TrySetResult(0);
+            }
         }
 
-        //System.Diagnostics.Trace.WriteLine("Elapsed saved: " + clock.ElapsedMilliseconds);
-        IsDirty = packagesDirty;
-
-        // The backup (armed only during an upgrade) has done its job for this save; disarm so later saves of
-        // this session don't snapshot. Normal saves run with it already null, so this is a no-op.
-        DisarmUpgradeBackup();
     }
 
     private Dictionary<UFile, AssetItem> BuildAssetsOrPackagesToRemove()
@@ -1718,13 +1835,16 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 // Perform pre assembly load upgrade
                 foreach (var pendingPackageUpgrade in pendingPackageUpgrades)
                 {
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                     var packageUpgrader = pendingPackageUpgrade.PackageUpgrader;
                     var dependencyPackage = pendingPackageUpgrade.DependencyPackage;
                     if (!packageUpgrader.UpgradeBeforeAssembliesLoaded(loadParameters, session, log, package, pendingPackageUpgrade.Dependency, dependencyPackage))
                     {
+                        loadParameters.CancelToken?.ThrowIfCancellationRequested();
                         log.Error($"Error while upgrading package [{package.Meta.Name}] for [{dependencyPackage.Meta.Name}] from version [{pendingPackageUpgrade.Dependency.Version}] to [{dependencyPackage.Meta.Version}]");
                         return false;
                     }
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                 }
             }
 
@@ -1732,9 +1852,11 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
             // TODO: Could referenced projects be associated to other packages than this one?
             newLoadParameters.ExtraCompileProperties.Add("StrideCurrentPackagePath", package.FullPath);
             package.LoadAssemblies(log, newLoadParameters);
+            loadParameters.CancelToken?.ThrowIfCancellationRequested();
 
             // Load list of assets
             newLoadParameters.AssetFiles = Package.ListAssetFiles(package, true, false, loadParameters.LoadAssetsOfUnknownType);
+            loadParameters.CancelToken?.ThrowIfCancellationRequested();
             // Sort them by size (to improve concurrency during load)
             newLoadParameters.AssetFiles.Sort(PackageLoadingAssetFile.FileSizeComparer.Default);
 
@@ -1743,13 +1865,16 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
                 // Perform upgrades
                 foreach (var pendingPackageUpgrade in pendingPackageUpgrades)
                 {
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                     var packageUpgrader = pendingPackageUpgrade.PackageUpgrader;
                     var dependencyPackage = pendingPackageUpgrade.DependencyPackage;
                     if (!packageUpgrader.Upgrade(loadParameters, session, log, package, pendingPackageUpgrade.Dependency, dependencyPackage, newLoadParameters.AssetFiles))
                     {
+                        loadParameters.CancelToken?.ThrowIfCancellationRequested();
                         log.Error($"Error while upgrading package [{package.Meta.Name}] for [{dependencyPackage.Meta.Name}] from version [{pendingPackageUpgrade.Dependency.Version}] to [{dependencyPackage.Meta.Version}]");
                         return false;
                     }
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
 
                     // Update dependency to reflect new requirement
                     pendingPackageUpgrade.Dependency.Version = pendingPackageUpgrade.PackageUpgrader.Attribute.UpdatedVersionRange;
@@ -1761,6 +1886,7 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
             info = new AssetLoadingInfo(session, log, package, loadParameters, pendingPackageUpgrades, newLoadParameters);
             return true;
         }
+        catch (OperationCanceledException) when (loadParameters.CancelToken?.IsCancellationRequested == true) { throw; }
         catch (Exception ex)
         {
             log.Error($"Error while pre-loading package [{package}]", ex);
@@ -1770,24 +1896,30 @@ public sealed partial class PackageSession : IDisposable, IAssetFinder
 
     private static void LoadAssets(PackageSession session, ILogger log, Package package, PackageLoadParameters loadParameters, List<PendingPackageUpgrade> pendingPackageUpgrades, PackageLoadParameters newLoadParameters)
     {
+        loadParameters.CancelToken?.ThrowIfCancellationRequested();
         // Load assets
         package.LoadAssets(log, newLoadParameters);
+        loadParameters.CancelToken?.ThrowIfCancellationRequested();
 
         // Validate assets from package
         package.ValidateAssets(newLoadParameters.GenerateNewAssetIds, newLoadParameters.RemoveUnloadableObjects, log);
+        loadParameters.CancelToken?.ThrowIfCancellationRequested();
 
         if (pendingPackageUpgrades.Count > 0)
         {
             // Perform post asset load upgrade
             foreach (var pendingPackageUpgrade in pendingPackageUpgrades)
             {
+                loadParameters.CancelToken?.ThrowIfCancellationRequested();
                 var packageUpgrader = pendingPackageUpgrade.PackageUpgrader;
                 var dependencyPackage = pendingPackageUpgrade.DependencyPackage;
                 if (!packageUpgrader.UpgradeAfterAssetsLoaded(loadParameters, session, log, package, pendingPackageUpgrade.Dependency, dependencyPackage, pendingPackageUpgrade.DependencyVersionBeforeUpgrade))
                 {
+                    loadParameters.CancelToken?.ThrowIfCancellationRequested();
                     log.Error($"Error while upgrading package [{package.Meta.Name}] for [{dependencyPackage.Meta.Name}] from version [{pendingPackageUpgrade.Dependency.Version}] to [{dependencyPackage.Meta.Version}]");
                     return;
                 }
+                loadParameters.CancelToken?.ThrowIfCancellationRequested();
             }
 
             // Mark package as dirty

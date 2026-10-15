@@ -34,6 +34,13 @@ public sealed class AssetItem : IFileSynchronizable
     {
     }
 
+    /// <summary>Creates an attached pending item without publishing it in the package collection.</summary>
+    public static AssetItem CreateForPackage(Package package, UFile location, Asset asset)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        return new AssetItem(package.Container?.Qualify(location) ?? location, asset, package);
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AssetItem" /> class.
     /// </summary>
@@ -141,6 +148,16 @@ public sealed class AssetItem : IFileSynchronizable
             AlternativePath = AlternativePath,
         };
         YamlMetadata.CopyInto(item.YamlMetadata);
+        return item;
+    }
+
+    /// <summary>Clones authored item metadata into a target package without publishing it.</summary>
+    public AssetItem CloneForPackage(Package package, UFile newLocation, Asset? authoredAsset = null)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        var item = Clone(false, package.Container?.Qualify(newLocation) ?? newLocation, authoredAsset ?? Asset);
+        item.Package = package;
+        item.SourceFolder = Asset is IProjectAsset && package.Container is SolutionProject ? package.RootDirectory : package.GetDefaultAssetFolder();
         return item;
     }
 

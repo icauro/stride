@@ -2,13 +2,15 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Reflection.Emit;
 
 namespace Stride.Core.Reflection;
 
 public static class AbstractObjectInstantiator
 {
-    private static readonly Dictionary<Type, Type> ConstructedTypes = [];
+    private sealed class ConstructedTypeHolder(Type type) { internal Type Type { get; } = type; }
+    private static readonly ConditionalWeakTable<Type, ConstructedTypeHolder> ConstructedTypes = new();
 
     /// <summary>
     /// Creates an instance of a type implementing the specified <paramref name="baseType"/>.
@@ -29,12 +31,12 @@ public static class AbstractObjectInstantiator
         Type? constructedType;
         lock (ConstructedTypes)
         {
-            if (!ConstructedTypes.TryGetValue(baseType, out constructedType))
+            if (!ConstructedTypes.TryGetValue(baseType, out var cached))
             {
                 var asmName = new AssemblyName($"ConcreteObject_{Guid.NewGuid():N}");
 
                 // Create assembly (in memory)
-                var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.Run);
+                var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.RunAndCollect);
                 var moduleBuilder = asmBuilder.DefineDynamicModule("DynamicModule");
 
                 // Define type
@@ -43,9 +45,10 @@ public static class AbstractObjectInstantiator
 
                 // Create type
                 constructedType = typeBuilder.CreateTypeInfo();
-                ConstructedTypes.Add(baseType, constructedType);
+                ConstructedTypes.Add(baseType, new(constructedType));
 
             }
+            else constructedType = cached.Type;
         }
         return Activator.CreateInstance(constructedType)!;
     }

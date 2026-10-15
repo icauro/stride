@@ -100,7 +100,15 @@ public static class AssetReferenceAnalysis
         {
             base.VisitArrayItem(array, descriptor, index, item, itemDescriptor);
             var attachedReference = AttachedReferenceManager.GetAttachedReference(item);
-            if (item is AssetReference assetReference)
+            if (item is UrlReferenceBase urlReference)
+            {
+                AddLink(urlReference, (guid, location) =>
+                {
+                    var value = UrlReferenceBase.New(urlReference.GetType(), guid ?? urlReference.Id, location);
+                    array.SetValue(value, index); return value;
+                });
+            }
+            else if (item is AssetReference assetReference)
             {
                 AddLink(item,
                     (guid, location) =>
@@ -136,7 +144,7 @@ public static class AssetReferenceAnalysis
                 AddLink(item,
                     (guid, location) =>
                     {
-                        var newValue = new UFile(location);
+                        var newValue = new UDirectory(location);
                         array.SetValue(newValue, index);
                         return newValue;
                     });
@@ -153,7 +161,15 @@ public static class AssetReferenceAnalysis
             if (!descriptor.HasIndexerAccessors)
                 return;
 
-            if (assetReference != null)
+            if (item is UrlReferenceBase urlReference)
+            {
+                AddLink(urlReference, (guid, location) =>
+                {
+                    var value = UrlReferenceBase.New(urlReference.GetType(), guid ?? urlReference.Id, location);
+                    descriptor.SetValue(collection, index, value); return value;
+                });
+            }
+            else if (assetReference != null)
             {
                 AddLink(assetReference, (guid, location) =>
                 {
@@ -197,7 +213,15 @@ public static class AssetReferenceAnalysis
             base.VisitDictionaryKeyValue(dictionaryObj, descriptor, key, keyDescriptor, value, valueDescriptor);
             var assetReference = value as AssetReference;
             var attachedReference = AttachedReferenceManager.GetAttachedReference(value);
-            if (assetReference != null)
+            if (value is UrlReferenceBase urlReference)
+            {
+                AddLink(urlReference, (guid, location) =>
+                {
+                    var next = UrlReferenceBase.New(urlReference.GetType(), guid ?? urlReference.Id, location);
+                    descriptor.SetValue(dictionaryObj, key, next); return next;
+                });
+            }
+            else if (assetReference != null)
             {
                 AddLink(assetReference,
                     (guid, location) =>
@@ -245,7 +269,15 @@ public static class AssetReferenceAnalysis
             base.VisitSetItem(setObject, descriptor, item, itemDescriptor);
             var assetReference = item as AssetReference;
             var attachedReference = AttachedReferenceManager.GetAttachedReference(item);
-            if (assetReference != null)
+            if (item is UrlReferenceBase urlReference)
+            {
+                AddLink(urlReference, (guid, location) =>
+                {
+                    var value = UrlReferenceBase.New(urlReference.GetType(), guid ?? urlReference.Id, location);
+                    descriptor.Add(setObject, value); return value;
+                });
+            }
+            else if (assetReference != null)
             {
                 AddLink(assetReference,
                     (guid, location) =>
@@ -292,7 +324,15 @@ public static class AssetReferenceAnalysis
             base.VisitObjectMember(container, containerDescriptor, member, value);
             var assetReference = value as AssetReference;
             var attachedReference = AttachedReferenceManager.GetAttachedReference(value);
-            if (assetReference != null)
+            if (value is UrlReferenceBase urlReference)
+            {
+                AddLink(urlReference, (guid, location) =>
+                {
+                    var next = UrlReferenceBase.New(urlReference.GetType(), guid ?? urlReference.Id, location);
+                    member.Set(container, next); return next;
+                });
+            }
+            else if (assetReference != null)
             {
                 AddLink(assetReference,
                     (guid, location) =>

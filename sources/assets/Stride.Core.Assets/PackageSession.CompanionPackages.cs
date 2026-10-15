@@ -17,7 +17,7 @@ partial class PackageSession
     /// Each comes from the session, a dev-redirect stub or a NuGet restore, at its declared version.
     /// </summary>
     /// <param name="editorToolkit">The editor's UI toolkit (Wpf); Editor companions for another toolkit are skipped.</param>
-    internal void LoadCompanionPackages(string? rootDirectory, ILogger log, bool loadEditorPackages, string? editorToolkit)
+    internal void LoadCompanionPackages(string? rootDirectory, ILogger log, bool loadEditorPackages, string? editorToolkit, PackageLoadParameters? loadParameters = null)
     {
         var loadedByName = new Dictionary<string, StandalonePackage>(StringComparer.OrdinalIgnoreCase);
         foreach (var container in Projects.OfType<StandalonePackage>())
@@ -32,18 +32,20 @@ partial class PackageSession
         var visited = new HashSet<Package>();
         while (true)
         {
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
             var package = Packages.FirstOrDefault(p => !visited.Contains(p));
             if (package is null)
                 break;
             visited.Add(package);
             foreach (var companion in package.CompanionPackages.ToList())
             {
+                loadParameters?.CancelToken?.ThrowIfCancellationRequested();
                 foreach (var name in companion.Replaces)
                     replaced.Add(name);
                 if (companion.Name is not null && replaced.Contains(companion.Name))
                     continue;
                 if (IsLoadedByThisHost(companion, loadEditorPackages, editorToolkit))
-                    LoadCompanionPackage(package, companion, loadedByName, rootDirectory, log);
+                    LoadCompanionPackage(package, companion, loadedByName, rootDirectory, log, loadParameters);
                 else
                     SkipCompanionPackage(package, companion, loadEditorPackages, editorToolkit, log);
             }
@@ -73,7 +75,7 @@ partial class PackageSession
         };
     }
 
-    private void LoadCompanionPackage(Package package, CompanionPackage declaration, Dictionary<string, StandalonePackage> loadedByName, string? rootDirectory, ILogger log)
+    private void LoadCompanionPackage(Package package, CompanionPackage declaration, Dictionary<string, StandalonePackage> loadedByName, string? rootDirectory, ILogger log, PackageLoadParameters? loadParameters)
     {
         // A declaration without a version (packed before versions were recorded) means the declaring package's own
         var companionName = declaration.Name;
@@ -88,7 +90,7 @@ partial class PackageSession
             return;
         if (companion is null)
         {
-            var loaded = LoadCompanionPackage(companionName, version, loadedByName, rootDirectory, log);
+            var loaded = LoadCompanionPackage(companionName, version, loadedByName, rootDirectory, log, loadParameters);
             if (loaded is null)
             {
                 log.Error($"{kind} package [{companionName}] version [{version}], declared by [{package.Meta.Name}], was not found; assets of that package cannot be compiled or edited.");
@@ -165,9 +167,9 @@ partial class PackageSession
         while (added);
     }
 
-    private StandalonePackage? LoadCompanionPackage(string name, PackageVersion version, Dictionary<string, StandalonePackage> loadedByName, string? rootDirectory, ILogger log)
+    private StandalonePackage? LoadCompanionPackage(string name, PackageVersion version, Dictionary<string, StandalonePackage> loadedByName, string? rootDirectory, ILogger log, PackageLoadParameters? loadParameters)
     {
-        if (TryLoadDevRedirectPackage(name, version, log) is { } devRedirect)
+        if (TryLoadDevRedirectPackage(name, version, log, loadParameters) is { } devRedirect)
             return devRedirect;
 
         // Restore into the local store (a no-op once installed)
@@ -175,9 +177,12 @@ partial class PackageSession
         LockFile lockFile;
         try
         {
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
             var outputPath = rootDirectory is not null ? Path.Combine(rootDirectory, "obj", "stride", "companions", name) : Path.Combine(Path.GetTempPath(), "stride-companions", name);
-            lockFile = PackageStore.Instance.RestorePackage(name, version, hostFramework, rootDirectory, outputPath).Result;
+            lockFile = PackageStore.Instance.RestorePackage(name, version, hostFramework, rootDirectory, outputPath).GetAwaiter().GetResult();
+            loadParameters?.CancelToken?.ThrowIfCancellationRequested();
         }
+        catch (OperationCanceledException) when (loadParameters?.CancelToken?.IsCancellationRequested == true) { throw; }
         catch (Exception ex)
         {
             log.Error($"Could not restore package [{name}] version [{version}]", ex);
@@ -186,10 +191,10 @@ partial class PackageSession
 
         // A freshly installed dev-redirect stub loads from its source tree; anything else through the lock file
         // closure like any other package dependency
-        if (TryLoadDevRedirectPackage(name, version, log) is { } installedDevRedirect)
+        if (TryLoadDevRedirectPackage(name, version, log, loadParameters) is { } installedDevRedirect)
             return installedDevRedirect;
         var loadedBefore = new HashSet<string>(loadedByName.Keys, StringComparer.OrdinalIgnoreCase);
-        LoadPackageDependenciesFromLockFile(lockFile, NuGetFramework.Parse(hostFramework), loadedByName, log);
+        LoadPackageDependenciesFromLockFile(lockFile, NuGetFramework.Parse(hostFramework), loadedByName, log, loadParameters);
 
         // A companion can depend on another plugin's companion (an asset type deriving from that plugin's): it comes
         // with this closure, so it is a companion too, not a package the game references directly
@@ -202,7 +207,7 @@ partial class PackageSession
     }
 
     // Loads a dev-redirect stub from its source tree. A plain version (4.4.0) also matches this checkout's dev stub (4.4.0-devN).
-    private StandalonePackage? TryLoadDevRedirectPackage(string name, PackageVersion version, ILogger log)
+    private StandalonePackage? TryLoadDevRedirectPackage(string name, PackageVersion version, ILogger log, PackageLoadParameters? loadParameters)
     {
         var directory = FindStorePackageDirectory(name, version, out var packageFile);
         if (directory is null && string.IsNullOrEmpty(version.SpecialVersion))
@@ -215,7 +220,7 @@ partial class PackageSession
             return null;
         var projectFile = Path.Combine(directory, name + ".csproj");
         var manifestFile = File.Exists(projectFile) ? FindDevRedirectManifest(projectFile) : null;
-        return manifestFile is not null ? LoadDevRedirectPackage(log, packageFile, projectFile, manifestFile, name, version) : null;
+        return manifestFile is not null ? LoadDevRedirectPackage(log, packageFile, projectFile, manifestFile, name, version, loadParameters) : null;
     }
 
     // The store directory of the package at exactly that version (a dev-redirect stub resolves to its source tree),
@@ -227,15 +232,15 @@ partial class PackageSession
         return packageFile is not null ? Path.GetDirectoryName(packageFile) : PackageStore.Instance.GetPackageDirectory(name, range)?.ToOSPath();
     }
 
-    private StandalonePackage LoadDevRedirectPackage(ILogger log, string? packageFile, string projectFile, string manifestFile, string name, PackageVersion version)
+    private StandalonePackage LoadDevRedirectPackage(ILogger log, string? packageFile, string projectFile, string manifestFile, string name, PackageVersion version, PackageLoadParameters? loadParameters)
     {
         var package = packageFile is not null
-            ? Package.LoadRaw(log, packageFile)
-            : new Package { FullPath = Path.ChangeExtension(projectFile, Package.PackageFileExtension), IsDirty = false, PrecomputedProjectAssets = [] };
+            ? Package.LoadRaw(log, ResolveDependencyPackagePath(packageFile, loadParameters))
+            : new Package { FullPath = Path.ChangeExtension(ResolveDependencyPackagePath(projectFile, loadParameters), Package.PackageFileExtension), IsDirty = false, PrecomputedProjectAssets = [] };
         package.AuthoredName ??= package.Meta.Name;
         package.Meta.Name = name;
         package.Meta.Version = version;
-        var manifest = LoadProjectAssetsFromManifest(package, projectFile, manifestFile);
+        var manifest = LoadProjectAssetsFromManifest(package, projectFile, manifestFile, loadParameters);
         if (manifest is not null)
             package.SetCompanionDeclarations(manifest, Path.GetDirectoryName(manifestFile)!);
 
@@ -256,7 +261,7 @@ partial class PackageSession
     /// A dev-redirect package without an authored sdpkg joins the session only when its build manifest declares
     /// a companion package.
     /// </summary>
-    private StandalonePackage? LoadDevRedirectDeclarations(Dependency dependency)
+    private StandalonePackage? LoadDevRedirectDeclarations(Dependency dependency, PackageLoadParameters? loadParameters = null)
     {
         var directory = PackageStore.Instance.GetPackageDirectory(dependency.Name, new PackageVersionRange(dependency.Version), constraintProvider);
         if (directory is null)
@@ -281,7 +286,7 @@ partial class PackageSession
         var package = new Package
         {
             Meta = { Name = dependency.Name, Version = dependency.Version },
-            FullPath = Path.ChangeExtension(projectFile, Package.PackageFileExtension),
+            FullPath = Path.ChangeExtension(ResolveDependencyPackagePath(projectFile, loadParameters), Package.PackageFileExtension),
             IsDirty = false,
             PrecomputedProjectAssets = [],
         };

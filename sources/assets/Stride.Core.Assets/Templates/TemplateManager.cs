@@ -1,6 +1,8 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net) and Silicon Studio Corp. (https://www.siliconstudio.co.jp)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+using System.Threading;
+
 namespace Stride.Core.Assets.Templates;
 
 /// <summary>
@@ -11,6 +13,9 @@ public class TemplateManager
     private static readonly object ThisLock = new();
     private static readonly List<ITemplateGenerator> Generators = [];
     private static readonly PackageCollection ExtraPackages = [];
+    private static long registryVersion;
+    /// <summary>Actual package/registered-generator generation for editor discovery.</summary>
+    public static long RegistryVersion => Interlocked.Read(ref registryVersion);
 
     /// <summary>
     /// Adds a package whose templates <see cref="FindTemplates"/> lists. May be called from any thread (template
@@ -23,6 +28,7 @@ public class TemplateManager
         {
             if (!ExtraPackages.Contains(package))
                 ExtraPackages.Add(package);
+            Interlocked.Increment(ref registryVersion);
         }
         PackagesChanged?.Invoke();
     }
@@ -47,6 +53,7 @@ public class TemplateManager
             if (!Generators.Contains(generator))
             {
                 Generators.Add(generator);
+                Interlocked.Increment(ref registryVersion);
             }
         }
     }
@@ -62,8 +69,15 @@ public class TemplateManager
 
         lock (ThisLock)
         {
-            Generators.Remove(generator);
+            if (Generators.Remove(generator)) Interlocked.Increment(ref registryVersion);
         }
+    }
+
+    /// <summary>Checks the exact retained native generator without invoking extension code.</summary>
+    public static bool IsRegistered(ITemplateGenerator generator)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        lock (ThisLock) return Generators.Any(current => ReferenceEquals(current, generator));
     }
 
     /// <summary>

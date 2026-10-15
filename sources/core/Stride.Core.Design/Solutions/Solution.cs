@@ -47,8 +47,13 @@ public class Solution
     }
 
     private Solution(Solution original)
-        : this(original.FullPath, original.Headers, original.Projects, original.GlobalSections, original.Properties)
+        : this(original.FullPath, original.Headers,
+            original.Projects.Select(project => new Project(project.Guid, project.TypeGuid, project.Name, project.FullPath,
+                project.ParentGuid, project.Sections, project.VersionControlProperties, project.PlatformProperties)),
+            original.GlobalSections, original.Properties)
     {
+        StartupProjectGuid = original.StartupProjectGuid;
+        SourceModel = original.SourceModel is { } model ? new SolutionModel(model) : null;
     }
 
     /// <summary>
@@ -160,6 +165,12 @@ public class Solution
     public void SaveAs(string solutionPath, Action<string>? onBeforeOverwrite = null)
     {
         SolutionSerialization.Write(this, solutionPath, onBeforeOverwrite);
+    }
+
+    /// <summary>Stages native solution bytes with references relative to their actual publication location.</summary>
+    public void SaveForLocation(string stagedPath, string publicationPath, string generatedRoot, string publishedRoot)
+    {
+        SolutionSerialization.WriteForLocation(this, stagedPath, publicationPath, generatedRoot, publishedRoot);
     }
 
     /// <summary>

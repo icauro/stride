@@ -87,6 +87,7 @@ public static class AssetMigration
 
     public static bool MigrateAssetIfNeeded(AssetMigrationContext context, PackageLoadingAssetFile loadAsset, string dependencyName, PackageVersion? untilVersion = null)
     {
+        context.CancellationToken.ThrowIfCancellationRequested();
         var assetFullPath = loadAsset.FilePath.FullPath;
 
         // Determine if asset was Yaml or not
@@ -131,6 +132,7 @@ public static class AssetMigration
             Scalar assetKey;
             while ((assetKey = yamlEventReader.Allow<Scalar>()) != null)
             {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 // Only allow Id before SerializedVersion
                 if (assetKey.Value == nameof(Asset.Id))
                 {
@@ -167,6 +169,7 @@ public static class AssetMigration
 
                         while (!yamlEventReader.Accept<MappingEnd>())
                         {
+                            context.CancellationToken.ThrowIfCancellationRequested();
                             var packageName = yamlEventReader.Expect<Scalar>().Value;
                             var packageVersion = PackageVersion.Parse(yamlEventReader.Expect<Scalar>().Value);
 
@@ -211,6 +214,7 @@ public static class AssetMigration
             var currentVersion = serializedVersion;
             while (currentVersion != expectedVersion)
             {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 // This will throw an exception if no upgrader is available for the given version, exiting the loop in case of error.
                 var upgrader = assetUpgraders.GetUpgrader(currentVersion, out var targetVersion);
 
@@ -219,6 +223,7 @@ public static class AssetMigration
                     break;
 
                 upgrader.Upgrade(context, dependencyName, currentVersion, targetVersion, yamlRootNode, loadAsset);
+                context.CancellationToken.ThrowIfCancellationRequested();
                 currentVersion = targetVersion;
             }
 

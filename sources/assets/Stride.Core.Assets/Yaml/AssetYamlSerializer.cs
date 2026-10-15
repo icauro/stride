@@ -17,6 +17,16 @@ public class AssetYamlSerializer : YamlSerializerBase
     private event Action<ObjectDescriptor, List<IMemberDescriptor>>? PrepareMembersEvent;
 
     private Serializer? serializer;
+    private readonly string[] additionalProfiles;
+
+    public AssetYamlSerializer() : this([]) { }
+
+    public AssetYamlSerializer(params string[] additionalProfiles)
+    {
+        ArgumentNullException.ThrowIfNull(additionalProfiles);
+        if (additionalProfiles.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("YAML serializer profiles require a name.", nameof(additionalProfiles));
+        this.additionalProfiles = additionalProfiles.ToArray();
+    }
 
     public static AssetYamlSerializer Default { get; set; } = new AssetYamlSerializer();
 
@@ -172,7 +182,7 @@ public class AssetYamlSerializer : YamlSerializerBase
                     ComparerForKeySorting = new DefaultMemberComparer(),
                     PreSerializer = new ContextAttributeSerializer(),
                     PostSerializer = new ErrorRecoverySerializer(),
-                    SerializerFactorySelector = new ProfileSerializerFactorySelector(YamlSerializerFactoryAttribute.Default, "Assets"),
+                    SerializerFactorySelector = new ProfileSerializerFactorySelector(new[] { YamlSerializerFactoryAttribute.Default, YamlAssetProfile.Name }.Concat(additionalProfiles).Distinct(StringComparer.Ordinal).ToArray()),
                     ChainedSerializerFactory = x =>
                     {
                         var routingSerializer = x.FindNext<RoutingSerializer>()

@@ -117,6 +117,30 @@ public sealed class AssetDependencyManager : IAssetDependencyManager, IDisposabl
 
     }
 
+    /// <summary>
+    /// Captures direct dependency links using optional editor-owned authored graphs.
+    /// The supplied graphs are read during this call and never installed in the session.
+    /// Callers must prevent concurrent mutation of these graphs while capturing.
+    /// </summary>
+    public IReadOnlyDictionary<AssetId, AssetDependencies> CaptureDependencies(IReadOnlyDictionary<AssetId, Asset>? authoredAssets = null)
+    {
+        lock (Initialize())
+        {
+            // Preserve each asset's package/location context for namespace and reference
+            // resolution, while allowing retained editors to supply unsaved graph data.
+            var items = session.Packages.SelectMany(package => package.Assets).ToDictionary(item => item.Id,
+                item => authoredAssets != null && authoredAssets.TryGetValue(item.Id, out var authored)
+                    ? item.Clone(true, newAsset: authored) : item);
+            var snapshot = items.ToDictionary(pair => pair.Key, pair => new AssetDependencies(pair.Value));
+            foreach (var dependencies in snapshot.Values)
+                CollectDynamicOutReferences(dependencies, id => items.GetValueOrDefault(id), false, false);
+            foreach (var dependencies in snapshot.Values)
+                foreach (var link in dependencies.LinksOut)
+                    snapshot[link.Item.Id].AddLinkIn(dependencies.Item, link.Type);
+            return snapshot;
+        }
+    }
+
 
     private object Initialize()
     {

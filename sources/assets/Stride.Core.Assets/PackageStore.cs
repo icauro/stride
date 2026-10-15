@@ -17,6 +17,23 @@ namespace Stride.Core.Assets;
 public class PackageStore
 {
     private static readonly Lazy<PackageStore> DefaultPackageStore = new(() => new PackageStore());
+    private static readonly object ConfigurationGate = new();
+    private static bool initializationStarted;
+    private static NuGet.Configuration.ISettings? explicitSettings;
+    private static string? explicitFallback;
+
+    /// <summary>Sets an isolated package context before the default store is first accessed.</summary>
+    public static void ConfigureDefaultSettings(NuGet.Configuration.ISettings settings, string? fallbackPackageDirectory = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        lock (ConfigurationGate)
+        {
+            if (initializationStarted || explicitSettings != null)
+                throw new InvalidOperationException("The default package store context is already configured or initializing.");
+            explicitSettings = settings;
+            explicitFallback = fallbackPackageDirectory;
+        }
+    }
 
     /// <summary>
     /// Associated NugetStore for our packages. Cannot be null.
@@ -30,7 +47,7 @@ public class PackageStore
     private PackageStore()
     {
         // Check if we are in a root directory with store/packages facilities
-        store = new NugetStore(null);
+        store = new NugetStore(explicitFallback, explicitSettings);
     }
 
     /// <summary>
@@ -175,7 +192,11 @@ public class PackageStore
     {
         get
         {
-            return DefaultPackageStore.Value;
+            lock (ConfigurationGate)
+            {
+                initializationStarted = true;
+                return DefaultPackageStore.Value;
+            }
         }
     }
 
