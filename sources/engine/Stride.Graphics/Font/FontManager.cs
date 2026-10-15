@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Linq;
 using Stride.Core;
 using Stride.Core.Diagnostics;
 using Stride.Core.IO;
@@ -53,7 +55,10 @@ namespace Stride.Graphics.Font
         /// <summary>
         /// Boolean specifying if we need to quit the bitmap building thread.
         /// </summary>
-        private bool bitmapShouldEndThread;
+        private volatile bool bitmapShouldEndThread;
+        private readonly object shutdownLock = new object();
+        private Task shutdown;
+        private bool signalReleased;
 
         /// <summary>
         /// A handle to the freetype library.
@@ -107,6 +112,7 @@ namespace Stride.Graphics.Font
         /// <param name="synchronously">Indicate if the generation of the bitmap must by done synchronously or asynchronously</param>
         public void GenerateBitmap(CharacterSpecification characterSpecification, bool synchronously)
         {
+            if (bitmapShouldEndThread) throw new ObjectDisposedException(nameof(FontManager));
             // Synchronous: render glyph info and bitmap immediately on the calling thread.
             // Hold dataStructuresLock so we never render the same glyph concurrently with the
             // builder thread (whichever takes the lock first renders it, the other skips), which
@@ -143,6 +149,7 @@ namespace Stride.Graphics.Font
         /// </summary>
         public void LoadFontFromFileSystem(string fontName, string filePath, FontStyle style)
         {
+            if (bitmapShouldEndThread) throw new ObjectDisposedException(nameof(FontManager));
             var cacheKey = FontHelper.GetFontPath(fontName, style);
 
             lock (freetypeLock)
@@ -256,6 +263,7 @@ namespace Stride.Graphics.Font
         /// </summary>
         public void GetFontInfo(string fontFamily, FontStyle fontStyle, out float lineSpacing, out float baseLine, out float maxWidth, out float maxHeight)
         {
+            if (bitmapShouldEndThread) throw new ObjectDisposedException(nameof(FontManager));
             var fontFace = GetOrCreateFontFace(fontFamily, fontStyle);
 
             lineSpacing = fontFace->height / (float)fontFace->units_per_EM;
@@ -269,6 +277,7 @@ namespace Stride.Graphics.Font
         /// </summary>
         public bool DoesFontContains(string fontFamily, FontStyle fontStyle, char character)
         {
+            if (bitmapShouldEndThread) throw new ObjectDisposedException(nameof(FontManager));
             var fontFace = GetOrCreateFontFace(fontFamily, fontStyle);
 
             // FT_Get_Char_Index only reads charmap data, safe to call without the FreeType lock
@@ -278,10 +287,39 @@ namespace Stride.Graphics.Font
 
         public void Dispose()
         {
-            // terminate the build thread
-            bitmapShouldEndThread = true;
-            bitmapBuildSignal.Set();
-            bitmapBuilderThread.Join();
+            BeginShutdown().GetAwaiter().GetResult();
+            ReleaseStoppedResources();
+        }
+
+        internal Task BeginShutdown()
+        {
+            lock (shutdownLock)
+            {
+                if (shutdown != null && !shutdown.IsFaulted) return shutdown;
+                bitmapShouldEndThread = true;
+                if (!signalReleased) bitmapBuildSignal.Set();
+                // Joining away from the owner actor proves actual thread termination.
+                return shutdown = Task.Run(() => bitmapBuilderThread.Join());
+            }
+        }
+
+        internal bool TryDispose()
+        {
+            if (!TryStopBitmapWorker()) return false;
+            ReleaseStoppedResources();
+            return true;
+        }
+
+        internal bool TryStopBitmapWorker()
+        {
+            var terminal = BeginShutdown();
+            if (!terminal.IsCompleted) return false;
+            terminal.GetAwaiter().GetResult();
+            return true;
+        }
+
+        private void ReleaseStoppedResources()
+        {
 
             // free and clear the list of generated bitmaps
             foreach (var character in generatedBitmaps)
@@ -293,19 +331,30 @@ namespace Stride.Graphics.Font
                 }
             }
             generatedBitmaps.Clear();
+            bitmapsToGenerate.Clear();
 
             // free font faces and their pinned data
-            foreach (var (face, dataHandle) in cachedFontFaces.Values)
+            foreach (var entry in cachedFontFaces.ToArray())
             {
-                FreeTypeNative.FT_Done_Face((FT_FaceRec*)face);
-                dataHandle.Free();
+                var (face, dataHandle) = entry.Value;
+                if (face != 0)
+                {
+                    var error = FreeTypeNative.FT_Done_Face((FT_FaceRec*)face);
+                    if (error != 0) throw new InvalidOperationException($"Failed to release font face (FreeType error {error})");
+                    cachedFontFaces[entry.Key] = (0, dataHandle);
+                }
+                if (dataHandle.IsAllocated) dataHandle.Free();
+                cachedFontFaces.Remove(entry.Key);
             }
-            cachedFontFaces.Clear();
 
             // free freetype library
             if (freetypeLibrary != 0)
-                FreeTypeNative.FT_Done_FreeType(freetypeLibrary);
+            {
+                var error = FreeTypeNative.FT_Done_FreeType(freetypeLibrary);
+                if (error != 0) throw new InvalidOperationException($"Failed to release FreeType library (error {error})");
+            }
             freetypeLibrary = 0;
+            if (!signalReleased) { bitmapBuildSignal.Dispose(); signalReleased = true; }
         }
 
         private FT_FaceRec* GetOrCreateFontFace(string fontFamily, FontStyle fontStyle)
@@ -363,12 +412,12 @@ namespace Stride.Graphics.Font
             {
                 bitmapBuildSignal.WaitOne();
 
-                while (bitmapsToGenerate.Count > 0)
+                while (!bitmapShouldEndThread)
                 {
-                    var character = bitmapsToGenerate.Peek();
-
                     lock (dataStructuresLock)
                     {
+                        if (bitmapShouldEndThread || bitmapsToGenerate.Count == 0) break;
+                        var character = bitmapsToGenerate.Peek();
                         // Metrics were already computed when this glyph was enqueued; only render the
                         // bitmap here (computeMetrics: false) so we never disturb XAdvance, which the
                         // main thread reads lock-free during measurement. A synchronous draw-time

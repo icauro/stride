@@ -342,7 +342,7 @@ namespace Stride.Graphics
             if (vkResult == VkResult.ErrorDeviceLost)
             {
                 deviceLost = true;
-                throw new GraphicsDeviceException($"Vulkan call {call} returned {vkResult}", GraphicsDeviceStatus.Lost);
+                throw GraphicsDeviceException.FromDeviceFailure(this, $"Vulkan call {call} returned {vkResult}", GraphicsDeviceStatus.Lost);
             }
 
             throw new InvalidOperationException($"Vulkan call {call} returned {vkResult}");

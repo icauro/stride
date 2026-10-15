@@ -2,7 +2,7 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 #if STRIDE_GRAPHICS_API_VULKAN
 using System;
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Linq;
 using Stride.Core;
 using Vortice.Vulkan;
@@ -14,6 +14,8 @@ namespace Stride.Graphics
     /// </summary>
     public class SwapChainGraphicsPresenter : GraphicsPresenter
     {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr GetModuleHandle(string moduleName);
         private VkSwapchainKHR swapChain;
         private VkSurfaceKHR surface;
 
@@ -624,7 +626,7 @@ namespace Stride.Graphics
                 var surfaceCreateInfo = new VkWin32SurfaceCreateInfoKHR
                 {
                     sType = VkStructureType.Win32SurfaceCreateInfoKHR,
-                    hinstance = Process.GetCurrentProcess().Handle,
+                    hinstance = GetModuleHandle(null),
                     hwnd = controlHandle,
                 };
                 GraphicsDevice.CheckResult(GraphicsDevice.NativeInstanceApi.vkCreateWin32SurfaceKHR(GraphicsDevice.NativeInstance, &surfaceCreateInfo, null, out surface));

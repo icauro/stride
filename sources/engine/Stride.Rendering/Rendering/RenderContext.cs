@@ -23,6 +23,8 @@ namespace Stride.Rendering
         private const string SharedImageEffectContextKey = "__SharedRenderContext__";
         private readonly ThreadLocal<RenderDrawContext> threadContext;
         private readonly object threadContextLock = new object();
+        private List<RenderDrawContext> retiringThreadContexts;
+        private bool threadContextsReleased;
 
         // Used for API that don't support multiple command lists
         internal CommandList SharedCommandList;
@@ -114,17 +116,6 @@ namespace Stride.Rendering
         [CanBeNull]
         public StreamingManager StreamingManager { get; set; }
 
-        protected override void Destroy()
-        {
-            foreach (var renderDrawContext in threadContext.Values)
-            {
-                renderDrawContext.Dispose();
-            }
-            threadContext.Dispose();
-
-            base.Destroy();
-        }
-
         /// <summary>
         /// Gets a global shared context.
         /// </summary>
@@ -133,10 +124,26 @@ namespace Stride.Rendering
         public static RenderContext GetShared(IServiceRegistry services)
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
+            if (services.GetService<RenderContext>() is { } scoped) return scoped;
 
             // Store RenderContext shared into the GraphicsDevice
             var graphicsDevice = services.GetSafeServiceAs<IGraphicsDeviceService>().GraphicsDevice;
             return graphicsDevice.GetOrCreateSharedData(SharedImageEffectContextKey, d => new RenderContext(services));
+        }
+
+        /// <summary>Creates an explicitly owned rendering context for an independent scene scope.</summary>
+        public static RenderContext Create(IServiceRegistry services) => new RenderContext(services);
+
+        protected override void Destroy()
+        {
+            if (!threadContextsReleased)
+            {
+                retiringThreadContexts ??= new List<RenderDrawContext>(threadContext.Values);
+                while (retiringThreadContexts.Count > 0)
+                { retiringThreadContexts[0].Dispose(); retiringThreadContexts.RemoveAt(0); }
+                threadContext.Dispose(); threadContextsReleased = true;
+            }
+            base.Destroy();
         }
 
         /// <summary>

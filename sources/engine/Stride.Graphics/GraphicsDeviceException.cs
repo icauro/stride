@@ -17,6 +17,16 @@ public class GraphicsDeviceException : GraphicsException
     ///   Gets the status of the Graphics Device when the exception occurred.
     /// </summary>
     public GraphicsDeviceStatus Status { get; } = GraphicsDeviceStatus.Normal;
+    /// <summary>The actual local device which reported the failure, when known.</summary>
+    public GraphicsDevice? Device { get; private init; }
+
+    /// <summary>Records an actual device failure without inferring a remote process's device identity.</summary>
+    public static GraphicsDeviceException FromDeviceFailure(GraphicsDevice device, string? message,
+        GraphicsDeviceStatus status, Exception? innerException = null)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return new GraphicsDeviceException(message, innerException, status) { Device = device };
+    }
 
 
     /// <summary>
@@ -69,6 +79,6 @@ public class GraphicsDeviceException : GraphicsException
         if (details is not null)
             message += Environment.NewLine + details;
 
-        return new GraphicsDeviceException(message, innerException, status);
+        return FromDeviceFailure(device, message, status, innerException);
     }
 }

@@ -124,6 +124,20 @@ namespace Stride.Rendering
             }
         }
 
+        protected override void Destroy()
+        {
+            lock (sharedEffects)
+            {
+                foreach (var key in new List<Type>(sharedEffects.Keys))
+                {
+                    sharedEffects[key].Dispose();
+                    sharedEffects.Remove(key);
+                }
+            }
+            QueryManager.Dispose();
+            base.Destroy();
+        }
+
         /// <summary>
         ///   Holds a captured snapshot of Viewports and Render Targets set in a Command List.
         /// </summary>

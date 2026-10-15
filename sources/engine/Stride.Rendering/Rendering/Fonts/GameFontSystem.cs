@@ -15,6 +15,22 @@ namespace Stride.Rendering.Fonts
     {
         public FontSystem FontSystem { get; private set; }
 
+        private bool graphicsContentLoaded;
+
+        public void ReleaseGraphicsResourcesForRecovery()
+        {
+            if (!graphicsContentLoaded) return;
+            FontSystem.Unload();
+            graphicsContentLoaded = false;
+        }
+
+        public void RebindGraphicsResourcesAfterRecovery()
+        {
+            if (graphicsContentLoaded) return;
+            FontSystem.Load(GraphicsDevice, Services.GetSafeServiceAs<IDatabaseFileProviderService>());
+            graphicsContentLoaded = true;
+        }
+
         public GameFontSystem(IServiceRegistry registry)
             : base(registry)
         {
@@ -33,14 +49,14 @@ namespace Stride.Rendering.Fonts
         {
             base.LoadContent();
 
-            FontSystem.Load(GraphicsDevice, Services.GetSafeServiceAs<IDatabaseFileProviderService>());
+            RebindGraphicsResourcesAfterRecovery();
         }
 
         protected override void UnloadContent()
         {
             base.UnloadContent();
 
-            FontSystem.Unload();
+            ReleaseGraphicsResourcesForRecovery();
         }
     }
 }

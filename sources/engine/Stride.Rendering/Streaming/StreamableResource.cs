@@ -101,12 +101,21 @@ namespace Stride.Streaming
 
         protected void Init(IDatabaseFileProviderService databaseFileProviderService, ContentStorage storage)
         {
-            Storage?.RemoveDisposeBy(this);
+            if (!ReferenceEquals(Storage, storage))
+            {
+                // Multiple texture instances can share one service-owned storage.
+                // Each streaming wrapper needs its own collector-owned reference.
+                ((IReferencable)storage).AddReference();
+                if (Storage != null)
+                {
+                    Storage.RemoveDisposeBy(this);
+                    ((IReferencable)Storage).Release();
+                }
+                Storage = storage;
+                Storage.DisposeBy(this);
+            }
 
-            Storage = storage;
             fileProvider = databaseFileProviderService.FileProvider;
-
-            Storage.DisposeBy(this);
         }
 
         /// <summary>
@@ -192,5 +201,8 @@ namespace Stride.Streaming
             }
             streamingTask = null;
         }
+
+        // Recovery must drain across editor frames, never synchronously wait on IO.
+        internal void RequestStopStreamingForRecovery() => cancellationToken?.Cancel();
     }
 }

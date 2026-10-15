@@ -20,6 +20,8 @@ namespace Stride.Graphics.Font
         internal GraphicsDevice GraphicsDevice { get; private set; }
         internal FontCacheManager FontCacheManager { get; private set; }
         internal readonly HashSet<SpriteFont> AllocatedSpriteFonts = new HashSet<SpriteFont>();
+        private bool managerReleased, cacheReleased;
+        private readonly HashSet<SpriteFont> releasedFontReferences = new HashSet<SpriteFont>();
 
         /// <summary>
         /// When <c>true</c> (the default), a dynamic (runtime-rasterized) glyph that is not yet
@@ -56,6 +58,10 @@ namespace Stride.Graphics.Font
         {
             // TODO possibly load cached character bitmaps from the disk
             if (graphicsDevice == null) throw new ArgumentNullException("graphicsDevice");
+            if (FontManager != null || FontCacheManager != null || AllocatedSpriteFonts.Count != 0)
+                throw new InvalidOperationException("The previous font system generation must finish unloading before loading another.");
+            managerReleased = cacheReleased = false;
+            releasedFontReferences.Clear();
             GraphicsDevice = graphicsDevice;
             FontManager = new FontManager(fileProviderService);
             FontCacheManager = new FontCacheManager(this);
@@ -85,13 +91,41 @@ namespace Stride.Graphics.Font
 
         public void Unload()
         {
+            if (!managerReleased) { FontManager?.Dispose(); managerReleased = true; }
+            ReleaseUnloadedResources();
+        }
+
+        /// <summary>Requests native bitmap-worker shutdown without blocking, retaining all factory resources until termination.</summary>
+        /// <remarks>Consumers must stop before calling this. A true result permits owner-thread font/cache cleanup.</remarks>
+        public bool TryStopBitmapWorker() => FontManager == null || FontManager.TryStopBitmapWorker();
+
+        /// <summary>Starts native bitmap-worker shutdown and completes cleanup only after its actual termination.</summary>
+        /// <remarks>Call on the owner thread after rendering and font consumers have stopped. False retains all unfinished owners.</remarks>
+        public bool TryUnload()
+        {
+            if (!managerReleased)
+            {
+                if (FontManager != null && !FontManager.TryDispose()) return false;
+                managerReleased = true;
+            }
+            ReleaseUnloadedResources();
+            return true;
+        }
+
+        private void ReleaseUnloadedResources()
+        {
             // TODO possibly save generated characters bitmaps on the disk
-            FontManager.Dispose();
-            FontCacheManager.Dispose();
+            if (!cacheReleased) { FontCacheManager?.Dispose(); cacheReleased = true; }
 
             // Dispose create sprite fonts
             foreach (var allocatedSpriteFont in AllocatedSpriteFonts.ToArray())
-                allocatedSpriteFont.Dispose();
+            {
+                if (!releasedFontReferences.Contains(allocatedSpriteFont))
+                { allocatedSpriteFont.Dispose(); releasedFontReferences.Add(allocatedSpriteFont); }
+            }
+            FontManager = null;
+            FontCacheManager = null;
+            RuntimeFonts = null;
         }
 
         public SpriteFont NewStatic(float size, IList<Glyph> glyphs, IList<Image> images, float baseOffset, float defaultLineSpacing, IList<Kerning> kernings = null, float extraSpacing = 0, float extraLineSpacing = 0, char defaultCharacter = ' ')

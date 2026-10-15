@@ -26,7 +26,7 @@ namespace Stride.Streaming
     /// </summary>
     /// <seealso cref="Stride.Games.GameSystemBase" />
     /// <seealso cref="Stride.Graphics.Data.ITexturesStreamingProvider" />
-    public class StreamingManager : GameSystemBase, IStreamingManager, ITexturesStreamingProvider
+    public partial class StreamingManager : GameSystemBase, IStreamingManager, ITexturesStreamingProvider
     {
         private readonly List<StreamableResource> resources = new List<StreamableResource>(512);
         private readonly ConcurrentDictionary<object, StreamableResource> resourcesLookup = new ConcurrentDictionary<object, StreamableResource>();
@@ -336,6 +336,8 @@ namespace Stride.Streaming
 
         private StreamingTexture CreateStreamingTexture(Texture obj, ref ImageDescription imageDescription, ref ContentStorageHeader storageHeader)
         {
+            if (isGraphicsRecoveryPending)
+                throw new InvalidOperationException("Texture streaming is suspended for graphics recovery.");
             // Get content storage container
             var storage = ContentStreaming.GetStorage(ref storageHeader);
             if (storage == null)
@@ -430,6 +432,7 @@ namespace Stride.Streaming
 
         public override void Update(GameTime gameTime)
         {
+            if (isGraphicsRecoveryPending) return;
             base.Update(gameTime);
 
             // Make sure enough time passed
