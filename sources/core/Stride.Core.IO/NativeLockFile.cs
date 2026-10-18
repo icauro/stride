@@ -69,6 +69,7 @@ public static partial class NativeLockFile
     /// <returns><c>true</c> if the lock was acquired, <c>false</c> if the lock could not be acquired.</returns>
     public static bool TryLockFile(FileStream fileStream, long offset, long count, bool exclusive, bool failImmediately = false)
     {
+        if (OperatingSystem.IsBrowser()) return false;
         if (Platform.Type == PlatformType.Android)
         {
             count = (count + offset > int.MaxValue) ? int.MaxValue - offset : count;
@@ -98,6 +99,9 @@ public static partial class NativeLockFile
     /// <summary>Non-blocking lock acquisition that classifies failure for retry decisions.</summary>
     public static FileLockResult TryAcquireFile(FileStream fileStream, long offset, long count, bool exclusive)
     {
+        // The browser's private WASM filesystem has no cross-process locking.
+        // Let callers use their explicit unsupported-filesystem path.
+        if (OperatingSystem.IsBrowser()) return FileLockResult.Unsupported;
         if (Platform.Type == PlatformType.Android)
         {
             count = (count + offset > int.MaxValue) ? int.MaxValue - offset : count;
@@ -133,6 +137,7 @@ public static partial class NativeLockFile
     /// </summary>
     public static void TryUnlockFile(FileStream fileStream, long offset, long count)
     {
+        if (OperatingSystem.IsBrowser()) return;
         if (Platform.Type == PlatformType.Android)
         {
             count = (count + offset > int.MaxValue) ? int.MaxValue - offset : count;
