@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { PNG } = require('pngjs');
 
 // Serve only the publish tree on loopback. A fresh browser context exercises the
 // actual WASM download/runtime, with no dependency on a developer's browser tabs.
@@ -81,8 +82,30 @@ async function main() {
         const url = `http://127.0.0.1:${server.address().port}/`;
         const runs = [];
         for (let run = 0; run < 2; run++) {
-            if (run === 0) await page.goto(url);
+            if (run === 0) await page.goto(managedWebgpu ? `${url}?verify-canvas` : url);
             else await page.reload();
+            let canvasScreenshots;
+            if (managedWebgpu) {
+                await page.waitForFunction(() => globalThis.smokeResult?.canvasReady || globalThis.smokeResult?.status === 'failed', null, { timeout: 60000 });
+                const pending = await page.evaluate(() => globalThis.smokeResult);
+                assert.notEqual(pending.status, 'failed', JSON.stringify(pending));
+                assert.equal(pending.status, 'running', 'Canvas inspection must keep the device and surfaces alive');
+                canvasScreenshots = [];
+                for (const [selector, expected] of [['#engine-gamma', [64, 128, 191]], ['#engine-linear', [137, 188, 225]]]) {
+                    const png = PNG.sync.read(await page.locator(selector).screenshot({ timeout: 10000 }));
+                    const center = ((png.height >> 1) * png.width + (png.width >> 1)) * 4;
+                    assert.equal(png.width, 260, 'Canvas screenshot geometry changed');
+                    assert.equal(png.height, 252, 'Canvas screenshot must not include fractional CSS edges');
+                    for (let pixel = 0; pixel < png.data.length; pixel += 4) {
+                        for (let channel = 0; channel < 3; channel++)
+                            assert.ok(Math.abs(png.data[pixel + channel] - expected[channel]) <= 1,
+                                `${selector} composited pixel ${pixel / 4} channel ${channel}: ${png.data[pixel + channel]} != ${expected[channel]}; center=${Array.from(png.data.slice(center, center + 4))}`);
+                        assert.equal(png.data[pixel + 3], 255);
+                    }
+                    canvasScreenshots.push({ selector, width: png.width, height: png.height, expected, verifiedPixels: png.width * png.height });
+                }
+                await page.evaluate(() => globalThis.continueAfterCanvasChecks());
+            }
             await page.waitForFunction(() => ['passed', 'failed'].includes(globalThis.smokeResult?.status), null, { timeout: 60000 });
             const result = await page.evaluate(() => globalThis.smokeResult);
             assert.equal(result.status, 'passed', JSON.stringify(result));
@@ -112,7 +135,7 @@ async function main() {
                 assert.equal(result.sum, 42);
             }
             assert.equal(await page.locator('#result').getAttribute('data-status'), 'passed');
-            runs.push(result);
+            runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots } : {}) });
         }
         assert.deepEqual(errors, [], 'Browser errors occurred');
         let unavailable;

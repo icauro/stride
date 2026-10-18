@@ -98,11 +98,11 @@ clears through Stride CommandList, Texture.Copy and nonblocking GetData. Every
 pixel must match before async device disposal. It verifies factory disposal of an
 unused prepared device. It requires `sharedContextVerified` and
 `engineDeviceVerified` across load and reload. The published import table now
-contains83 audited core functions;
+contains85 audited core functions;
 native polling, timestamp-period queries and surfacePresent must remain absent.
 This verifies context/GraphicsDevice startup and clears, not a running game.
-Space Escape still needs its complete effect/variant set, canvas presentation,
-input and packaged game assets.
+Space Escape still needs its complete effect/variant set, game loop, input and
+packaged game assets.
 
 Desktop preparation compiles real SDSL texture/compute effects and converts them
 with pinned Naga29.0.0 using the shared package tool. Generated assets stay in the
@@ -113,6 +113,22 @@ including orientation, then dispatches compute and verifies all64buffer values.
 The harness requires `wgslEffectsVerified` on load/reload. No converter executable
 or runtime SDSL compilation is needed in browser startup. This is shader asset
 delivery evidence; it does not establish the full game data/db content mount.
+
+The actual SwapChainGraphicsPresenter now accepts a Browser WindowHandle whose
+NativeWindow is the CSS selector of an existing canvas. The host supplies canvas
+pixel dimensions and advances browser animation frames; it never calls the
+unsupported surfacePresent import. The shared renderer performs the final blit.
+Linear rendering uses an sRGB view of the UNorm canvas surface for correct color
+encoding. Resize occurs between submitted frames, with resource retirement handled
+by WebGPU rather than a blocking CPU wait.
+
+BrowserPresenterCheck verifies submitted pixels survive texture replacement,
+zero-size acquisition is skipped, resize restores rendering, and final offscreen
+pixels remain correct. The headless harness keeps both presenters alive and checks
+all65520pixels in each260x252composited canvas screenshot, for gamma and linear
+output, across reload (color tolerance1/255). Integer CSS geometry excludes page
+background edges without reducing the checked canvas area. PNGJS7.0.0 is a pinned
+test-only screenshot decoder. This is real canvas evidence, not a playable game.
 
 The project registers the existing logical import module `wgpu_native` with the
 pinned .NET11 RC2 Mono WASM import generator. Its final linker supplies Emdawn;
@@ -130,16 +146,16 @@ Invalid-map validation/retry, DLL-loader rejection and unavailable-adapter start
 are checked alongside the shared triangle pixel assertions and reload.
 
 The validator also checks the generated pinvoke-table.h against core-imports.json:
-exactly83 imports whose signatures match both audited headers. Any change requires
+exactly85 imports whose signatures match both audited headers. Any change requires
 review against the pinned headers. Native-only calls, incompatible multi-draw
 signatures and the browser-aborting surfacePresent call are excluded. This is a
 fixture allowlist, not a compile-time ban on those methods for every future host.
 
-This proves the generated import path; it does not yet integrate Stride's full
-GraphicsDevice, shader permutation pipeline or asset host. The fixture has one
-in-flight operation and no cancellation/device-loss recovery. Those lifetime
-contracts must be designed before using it as a production context. Native
-Vulkan/D3D12 behavior and DLL loading remain supported by the same binding assembly.
+The integrated tests cover async context cancellation, GraphicsDevice, basic
+offline shader assets and canvas presentation. The original ManagedFrame diagnostic
+remains a single-in-flight reference with no device-loss recovery. Full game
+lifecycle, the complete shader permutation set and the game content host remain
+open. Native Vulkan/D3D12 behavior and DLL loading use the same binding assembly.
 
 ## C API transport probe (diagnostic reference)
 

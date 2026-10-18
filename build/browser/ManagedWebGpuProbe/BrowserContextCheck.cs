@@ -91,6 +91,7 @@ internal static class BrowserContextCheck
             }
             await device.WaitForWebGPUIdleAsync();
             await VerifyEffects(device, commands, effectBaseUrl);
+            await BrowserPresenterCheck.RunAsync(device);
         }
         finally { GraphicsAdapterFactory.Dispose(); }
     }

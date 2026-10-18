@@ -52,12 +52,12 @@ internal sealed class ManagedFrame : IDisposable
         instance = Api.wgpuCreateInstance(null);
         if (instance.Handle == 0) throw new InvalidOperationException("No WebGPU instance.");
         // Only this canvas extension is provider-specific; core types/imports are generated.
-        byte[] selector = Encoding.UTF8.GetBytes("#canvas");
+        byte[] selector = Encoding.UTF8.GetBytes("#canvas\0");
         fixed (byte* data = selector)
         {
             var canvas = new CanvasSource {
                 chain = new WGPUChainedStruct { sType = (WGPUSType)262144 },
-                selector = new WGPUStringView { data = data, length = (nuint)selector.Length }
+                selector = new WGPUStringView { data = data, length = (nuint)(selector.Length - 1) }
             };
             var descriptor = WGPUSurfaceDescriptor.CreateDefault();
             descriptor.nextInChain = &canvas.chain;

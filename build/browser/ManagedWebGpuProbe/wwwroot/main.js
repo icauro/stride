@@ -3,10 +3,21 @@ import { dotnet } from './_framework/dotnet.js';
 const result = globalThis.smokeResult = { status: 'running', transport: 'generated-csharp', frames: [] };
 const output = document.getElementById('result');
 const noAdapter = new URLSearchParams(location.search).has('no-adapter');
+const verifyCanvas = new URLSearchParams(location.search).has('verify-canvas');
+let continueCanvas;
+const canvasGate = new Promise(resolve => { continueCanvas = resolve; });
+globalThis.continueAfterCanvasChecks = () => continueCanvas();
 try {
     const runtime = await dotnet.create();
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
+        resizeCanvas(selector, width, height) {
+            const canvas = document.querySelector(selector);
+            canvas.width = width;
+            canvas.height = height;
+        },
+        canvasReady: () => { result.canvasReady = true; },
+        waitForCanvasChecks: () => verifyCanvas ? canvasGate : Promise.resolve(),
         effectBaseUrl: () => new URL('./effects/', document.baseURI).href,
         reportEffects: (pixels, values) => {
             result.wgslEffectsVerified = true;
