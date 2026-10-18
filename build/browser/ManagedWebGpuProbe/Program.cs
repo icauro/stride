@@ -30,6 +30,7 @@ public static partial class Program
         if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
         await BrowserContextCheck.RunAsync();
         ReportContext();
+        ReportEngineDevice(3, 17 * 9 * 3);
         ReportSuccess();
     }
 
@@ -39,4 +40,5 @@ public static partial class Program
     private static partial void ReportFrame(int iteration, int foreground, int background, bool invalidMap, double milliseconds);
     [JSImport("reportSuccess", "managed-gpu-probe")] private static partial void ReportSuccess();
     [JSImport("reportContext", "managed-gpu-probe")] private static partial void ReportContext();
+    [JSImport("reportEngineDevice", "managed-gpu-probe")] private static partial void ReportEngineDevice(int clearFrames, int verifiedPixels);
 }

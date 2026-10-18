@@ -8,6 +8,11 @@ try {
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
         reportContext: () => { result.sharedContextVerified = true; },
+        reportEngineDevice: (clearFrames, verifiedPixels) => {
+            result.engineDeviceVerified = true;
+            result.engineClearFrames = clearFrames;
+            result.engineVerifiedPixels = verifiedPixels;
+        },
         nextFrame: () => new Promise(resolve => requestAnimationFrame(() => resolve())),
         reportFrame(iteration, foreground, background, invalidMap, elapsedMilliseconds) {
             result.frames.push({ iteration, foreground, background, elapsedMilliseconds });
@@ -23,7 +28,7 @@ try {
         }
     });
     await runtime.runMain();
-    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || result.frames.length !== 3)
+    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || !result.engineDeviceVerified || result.frames.length !== 3)
         throw new Error('Managed binding verification did not complete.');
     result.status = 'passed';
 } catch (error) {

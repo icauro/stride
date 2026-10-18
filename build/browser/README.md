@@ -74,7 +74,7 @@ shader-variant, asset-loading or lifecycle compatibility.
 ```powershell
 pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe
 $wasmProbeCache = Join-Path $env:LOCALAPPDATA 'Stride/WasmCache/net11-rc2-emscripten-6.0.2'
-dotnet publish build/browser/ManagedWebGpuProbe/ManagedWebGpuProbe.csproj -c Release "-p:WasmCachePath=$wasmProbeCache"
+dotnet publish build/browser/ManagedWebGpuProbe/ManagedWebGpuProbe.csproj -c Release -p:StridePlatforms=Browser -p:StrideSkipAutoPack=true -p:StrideAssemblyProcessorFramework=net10.0 "-p:WasmCachePath=$wasmProbeCache"
 Push-Location build/browser
 npm run webgpu:managed
 Pop-Location
@@ -90,11 +90,16 @@ types, defaults, function signatures and callbacks use the shared bindings.
 The same lane compiles the production `WebGpuDeviceContext` sources used by native
 validation. It checks portable async adapter/device creation, negotiated limits,
 exact buffer readback and reuse, queue completion, cancellation followed by retry,
-and disposing with a read pending. It requires `sharedContextVerified` across load
-and reload. The published import table now contains52 audited core functions;
+and disposing with a read pending. It also references the actual Graphics assembly,
+prepares/creates a GraphicsDevice, uploads a buffer, and checks three17x9 red/green
+clears through Stride CommandList, Texture.Copy and nonblocking GetData. Every
+pixel must match before async device disposal. It verifies factory disposal of an
+unused prepared device. It requires `sharedContextVerified` and
+`engineDeviceVerified` across load and reload. The published import table now
+contains68 audited core functions;
 native polling, timestamp-period queries and surfacePresent must remain absent.
-This checks the internal context, not the engine's GraphicsDevice startup or
-Space Escape. Those still require adapter/device integration and WGSL effects.
+This verifies context/GraphicsDevice startup and clears, not a running game.
+Space Escape still needs WGSL effects, canvas presentation, input and assets.
 
 The project registers the existing logical import module `wgpu_native` with the
 pinned .NET11 RC2 Mono WASM import generator. Its final linker supplies Emdawn;

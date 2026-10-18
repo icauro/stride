@@ -93,6 +93,9 @@ async function main() {
                     assert.equal(result.pendingCallbacks, 0);
                     assert.equal(result.nativeLoaderRejected, true);
                     assert.equal(result.sharedContextVerified, true);
+                    assert.equal(result.engineDeviceVerified, true);
+                    assert.equal(result.engineClearFrames, 3);
+                    assert.equal(result.engineVerifiedPixels, 17 * 9 * 3);
                 }
                 assert.equal(result.managedPixelsVerified, true);
                 assert.equal(result.invalidMapRejected, true);

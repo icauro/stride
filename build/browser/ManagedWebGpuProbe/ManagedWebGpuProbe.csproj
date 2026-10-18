@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../sources/engine/Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
+    <ProjectReference Include="../../../sources/engine/Stride.Graphics/Stride.Graphics.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
     <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
     <!-- Compile the same internal context sources as the native validation lane. -->
     <Compile Include="../../../sources/engine/Stride.Graphics/WebGPU/WebGpuDeviceContext*.cs" Link="Backend/%(Filename)%(Extension)" />
