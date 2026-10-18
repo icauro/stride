@@ -1,0 +1,39 @@
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices.JavaScript;
+using System.Runtime.Versioning;
+using System.Threading.Tasks;
+
+[SupportedOSPlatform("browser")]
+public static partial class Program
+{
+    public static async Task Main()
+    {
+        for (int iteration = 0; iteration < 3; iteration++)
+        {
+            var started = Stopwatch.GetTimestamp();
+            using (var frame = await ManagedFrame.CreateAsync(NoAdapter()))
+            {
+                var pixels = await frame.ReadPixelsAsync(iteration == 0);
+                var counts = TrianglePixels.Verify(pixels.Length, 65, 63, index => pixels[index]);
+                ReportFrame(iteration, counts.Foreground, counts.Background, frame.InvalidMapRejected,
+                    Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                await NextFrame();
+            }
+            if (ManagedFrame.LiveFrames != 0 || ManagedFrame.PendingCallbacks != 0)
+                throw new InvalidOperationException("Managed frame/callback ownership leaked.");
+        }
+        // The shared loader must reject a native DLL request explicitly in browser.
+        bool rejected = false;
+        try { Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary("unused.dll"); }
+        catch (PlatformNotSupportedException) { rejected = true; }
+        if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
+        ReportSuccess();
+    }
+
+    [JSImport("noAdapter", "managed-gpu-probe")] private static partial bool NoAdapter();
+    [JSImport("nextFrame", "managed-gpu-probe")] private static partial Task NextFrame();
+    [JSImport("reportFrame", "managed-gpu-probe")]
+    private static partial void ReportFrame(int iteration, int foreground, int background, bool invalidMap, double milliseconds);
+    [JSImport("reportSuccess", "managed-gpu-probe")] private static partial void ReportSuccess();
+}

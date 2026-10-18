@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+    <WasmBuildNative>true</WasmBuildNative>
+    <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false</EmccExtraLDFlags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../sources/engine/Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
+    <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
+    <Content Include="../CWebGpuProbe/wwwroot/THIRD-PARTY-NOTICES.txt" Link="wwwroot/THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckEmdawnInputs" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py')" Text="Run build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe before building." />
+  </Target>
+  <!-- .NET 11 RC2's Mono WASM generator requires explicit static-module identity
+       when a port supplies its library at final link instead of NativeFileReference.
+       This is intentionally a pinned-SDK proof, not a general SDK extension. -->
+  <Target Name="RegisterWebGpuStaticModule" BeforeTargets="_GenerateManagedToNative">
+    <ItemGroup>
+      <_WasmPInvokeModules Include="wgpu_native" />
+    </ItemGroup>
+  </Target>
+</Project>

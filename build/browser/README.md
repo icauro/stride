@@ -61,7 +61,52 @@ Only default device capabilities are requested; advertised adapter features do
 not imply they were enabled on that device. This test does not establish Stride
 shader-variant, asset-loading or lifecycle compatibility.
 
-## C API transport probe
+## Generated C# bindings probe (integration path)
+
+```powershell
+pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe
+$wasmProbeCache = Join-Path $env:LOCALAPPDATA 'Stride/WasmCache/net11-rc2-emscripten-6.0.2'
+dotnet publish build/browser/ManagedWebGpuProbe/ManagedWebGpuProbe.csproj -c Release "-p:WasmCachePath=$wasmProbeCache"
+Push-Location build/browser
+npm run webgpu:managed
+Pop-Location
+```
+
+This is the intended language boundary: C# rendering/resource code calls the
+existing generated C# bindings, which call statically linked Emdawn. There is no
+handwritten C source or NativeFileReference rendering helper in this project.
+Emdawn's own C++/JavaScript implementation remains a dependency. Only the canvas
+extension struct is declared locally, from the pinned browser header; common
+types, defaults, function signatures and callbacks use the shared bindings.
+
+The project registers the existing logical import module `wgpu_native` with the
+pinned .NET11 RC2 Mono WASM import generator. Its final linker supplies Emdawn;
+the module name does not request the Windows DLL. This uses an SDK-private target
+hook intentionally scoped to the pinned proof. Re-evaluate it when upgrading the
+SDK or targeting browser CoreCLR. Shared bindings bypass the DLL resolver on
+browser hosts, and LoadNativeLibrary explicitly rejects browser invocation.
+
+ManagedFrame owns resource handles and callback GCHandles, requests adapter/device
+and pipeline asynchronously, encodes draws/copies and awaits map completion.
+Mapped bytes are copied into a byte array while valid. Managed callbacks copy
+native error text and complete Tasks rather than unwinding an exception through
+native code. Frame/callback counts return to zero after each fixture lifetime.
+Invalid-map validation/retry, DLL-loader rejection and unavailable-adapter startup
+are checked alongside the shared triangle pixel assertions and reload.
+
+The validator also checks the generated pinvoke-table.h against core-imports.json:
+exactly43 imports whose signatures match both audited headers. Any change requires
+review against the pinned headers. Native-only calls, incompatible multi-draw
+signatures and the browser-aborting surfacePresent call are excluded. This is a
+fixture allowlist, not a compile-time ban on those methods for every future host.
+
+This proves the generated import path; it does not yet integrate Stride's full
+GraphicsDevice, shader permutation pipeline or asset host. The fixture has one
+in-flight operation and no cancellation/device-loss recovery. Those lifetime
+contracts must be designed before using it as a production context. Native
+Vulkan/D3D12 behavior and DLL loading remain supported by the same binding assembly.
+
+## C API transport probe (diagnostic reference)
 
 Prepare the pinned Emdawn package (SHA512 verified; sources remain in ignored
 obj/), then publish using a private writable Emscripten cache:
