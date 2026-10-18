@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <StrideRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../../'))</StrideRoot>
+    <DirectoryPackagesPropsPath>$(StrideRoot)sources/Directory.Packages.props</DirectoryPackagesPropsPath>
+  </PropertyGroup>
+  <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk/Sdk/Sdk.props" />
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <!-- Serialized sample scripts use this assembly identity. -->
+    <AssemblyName>SpaceEscape.Game</AssemblyName>
+    <RootNamespace>SpaceEscape</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <StrideAssemblyProcessor>true</StrideAssemblyProcessor>
+    <StrideSkipAutoPack>true</StrideSkipAutoPack>
+    <StrideAssemblyProcessorFramework>net10.0</StrideAssemblyProcessorFramework>
+    <SampleSource>$(StrideRoot)samples/Games/SpaceEscape/SpaceEscape.Game/</SampleSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(SampleSource)**/*.cs" Exclude="$(SampleSource)bin/**/*;$(SampleSource)obj/**/*" Link="Sample/%(RecursiveDir)%(Filename)%(Extension)" />
+    <StrideShaderFiles Include="$(SampleSource)Effects/*.sdsl;$(SampleSource)Effects/*.sdfx" />
+    <ProjectReference Include="$(StrideRoot)sources/engine/Stride.Engine/Stride.Engine.csproj" />
+    <ProjectReference Include="$(StrideRoot)sources/engine/Stride.UI/Stride.UI.csproj" />
+    <ProjectReference Include="$(StrideRoot)sources/engine/Stride.Particles/Stride.Particles.csproj" />
+  </ItemGroup>
+  <Import Project="$(StrideRoot)sources/sdk/Stride.Build.Sdk/Sdk/Sdk.targets" />
+</Project>
