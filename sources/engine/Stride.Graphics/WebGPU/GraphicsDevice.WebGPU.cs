@@ -2,6 +2,8 @@
 // Distributed under the MIT license. See LICENSE.md in the project root.
 #if STRIDE_GRAPHICS_API_WEBGPU
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Stride.Graphics.WebGPU;
 using Api = Stride.Graphics.WebGPU.WebGPU;
 namespace Stride.Graphics;
@@ -13,7 +15,7 @@ public partial class GraphicsDevice
     internal GraphicsProfile WebGpuCurrentProfile { get; private set; }
     private WebGpuBufferClear bufferClear;
     internal WebGpuBufferClear BufferClear => bufferClear ??= new WebGpuBufferClear(WebGpuContext);
-    public long TimestampFrequency => WebGpuContext.HasEncoderTimestamps
+    public long TimestampFrequency => !OperatingSystem.IsBrowser() && WebGpuContext.HasEncoderTimestamps
         ? checked((long)Math.Round(1_000_000_000.0 / Api.wgpuQueueGetTimestampPeriod(WebGpuContext.Queue))) : 0;
     internal int ConstantBufferDataPlacementAlignment = 256;
     private unsafe partial void InitializePlatformDevice(GraphicsProfile[] graphicsProfiles, DeviceCreationFlags deviceCreationFlags, object windowHandle)
@@ -21,11 +23,18 @@ public partial class GraphicsDevice
         WebGpuRequestedProfile = graphicsProfiles[0];
         WebGpuCurrentProfile = Array.Find(graphicsProfiles, profile => Adapter.IsProfileSupported(profile));
         if (WebGpuCurrentProfile == 0) throw new NotSupportedException("No requested graphics profile is supported by the WebGPU backend.");
-        var nativePath = Environment.GetEnvironmentVariable("STRIDE_WEBGPU_NATIVE_LIBRARY") ?? throw new InvalidOperationException("STRIDE_WEBGPU_NATIVE_LIBRARY is required.");
-        WebGpuContext = WebGpuDeviceContext.Create(nativePath, Adapter.BackendType,
-            message => new GraphicsDeviceException(message, GraphicsDeviceStatus.Lost), debug: (deviceCreationFlags & DeviceCreationFlags.Debug) != 0);
+        WebGpuContext = Adapter.TakePreparedDevice();
+        if (WebGpuContext is null)
+        {
+            if (OperatingSystem.IsBrowser()) throw new InvalidOperationException("No prepared browser device remains. Dispose the adapter factory and await InitializeWebGPUAsync before creating another device.");
+            var nativePath = Environment.GetEnvironmentVariable("STRIDE_WEBGPU_NATIVE_LIBRARY") ?? throw new InvalidOperationException("STRIDE_WEBGPU_NATIVE_LIBRARY is required.");
+            WebGpuContext = WebGpuDeviceContext.Create(nativePath, Adapter.BackendType,
+                message => new GraphicsDeviceException(message, GraphicsDeviceStatus.Lost), debug: (deviceCreationFlags & DeviceCreationFlags.Debug) != 0);
+        }
         ConstantBufferDataPlacementAlignment = checked((int)WebGpuContext.Limits.minUniformBufferOffsetAlignment);
     }
+    /// <summary>Asynchronously waits for WebGPU work; browser callers must yield rather than block the event loop.</summary>
+    public Task WaitForWebGPUIdleAsync(CancellationToken cancellationToken = default) => WebGpuContext.WaitForIdleAsync(cancellationToken);
     private bool simulateReset;
     public GraphicsDeviceStatus GraphicsDeviceStatus => simulateReset ? GraphicsDeviceStatus.Reset : WebGpuContext.IsLost ? GraphicsDeviceStatus.Lost : GraphicsDeviceStatus.Normal;
     /// <summary>Simulates device loss for the shared graphics regression suite.</summary>

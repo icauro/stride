@@ -3,6 +3,24 @@
 using Stride.Graphics;
 using Stride.Core.Mathematics;
 
+if (args.Contains("--portable"))
+{
+    Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary(Environment.GetEnvironmentVariable("STRIDE_WEBGPU_NATIVE_LIBRARY") ?? throw new Exception("Missing native provider."));
+    GraphicsAdapterFactory.Dispose();
+    await GraphicsAdapterFactory.InitializeWebGPUAsync();
+    using (var portable = GraphicsDevice.New())
+    {
+        using var commands = CommandList.New(portable);
+        using var data = Stride.Graphics.Buffer.New(portable, new uint[] { 1, 2, 3, 4 }, BufferFlags.VertexBuffer, GraphicsResourceUsage.Default);
+        await portable.WaitForWebGPUIdleAsync();
+        if (!data.GetData<uint>(commands).SequenceEqual(new uint[] { 1, 2, 3, 4 }))
+            throw new Exception("Portable GraphicsDevice buffer roundtrip failed.");
+        Console.WriteLine($"PASS: prepared portable GraphicsDevice startup, queue and buffer roundtrip on {portable.RendererName}.");
+    }
+    GraphicsAdapterFactory.Dispose();
+    return;
+}
+
 if (GraphicsDevice.Platform != GraphicsPlatform.WebGPU) throw new InvalidOperationException("This validation must be built with StrideGraphicsApi=WebGPU.");
 Console.WriteLine($"Adapter: {GraphicsAdapterFactory.DefaultAdapter.Description}");
 using (var device = GraphicsDevice.New(GraphicsAdapterFactory.DefaultAdapter, DeviceCreationFlags.None, windowHandle: null))

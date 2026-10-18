@@ -16,6 +16,7 @@ namespace Stride.Graphics
         private static ObjectCollector staticCollector;
 
         private static bool isInitialized;
+        private static int initializationVersion;
         private static GraphicsAdapter[] adapters;
         private static GraphicsAdapter defaultAdapter;
 
@@ -54,6 +55,7 @@ namespace Stride.Graphics
         {
             lock (StaticLock)
             {
+                initializationVersion++;
                 staticCollector.Dispose();
                 adapters = null;
                 defaultAdapter = null;

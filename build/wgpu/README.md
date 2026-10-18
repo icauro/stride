@@ -267,6 +267,17 @@ readback/reuse and callback ownership checks on Vulkan and D3D12, alongside the
 existing synchronous rendering checks. Device-loss recovery and browser canvas
 presentation require separate integration evidence.
 
+`await GraphicsAdapterFactory.InitializeWebGPUAsync()` prepares the first portable
+device and adapter metadata before the synchronous game startup path runs.
+`GraphicsDevice.New` consumes that prepared context once; the adapter factory owns
+it until consumption and releases an unused context on disposal. The created
+GraphicsDevice owns it afterwards. Existing native lazy initialization continues
+to use the native capabilities path. Dispose/reinitialize the factory to prepare
+another browser device. Factory disposal during initialization invalidates that
+pending initialization. `GraphicsDevice.WaitForWebGPUIdleAsync` exposes yielding
+queue completion to hosts. This does not make synchronous game shutdown browser
+compatible; the host must integrate asynchronous completion before disposal.
+
 ### Editor line rasterization
 
 Like Stride's Vulkan backend, WebGPU accepts the legacy

@@ -29,6 +29,8 @@ try {
         Write-Output "Validating Stride WebGPU through $nativeBackend"
         & dotnet (Join-Path $checkout 'sources/engine/Stride.Graphics.WebGPU.Tests/bin/Debug/net10.0/EngineValidation.dll') @arguments
         if ($LASTEXITCODE -ne 0) { throw "Stride WebGPU validation failed through $nativeBackend." }
+        & dotnet (Join-Path $checkout 'sources/engine/Stride.Graphics.WebGPU.Tests/bin/Debug/net10.0/EngineValidation.dll') --portable
+        if ($LASTEXITCODE -ne 0) { throw "Portable Stride WebGPU startup validation failed through $nativeBackend." }
         if ($Game) {
             $gameDll = Join-Path $checkout 'sources/engine/Stride.Games.WebGPU.Tests/bin/Debug/net10.0/GameValidation.dll'
             & dotnet $gameDll
