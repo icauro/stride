@@ -877,6 +877,9 @@ namespace Stride.Graphics
             var descriptor = WGPURenderPassDescriptor.CreateDefault();
             descriptor.colorAttachmentCount = (nuint)renderTargetCount; descriptor.colorAttachments = attachments;
             var depthAttachment = WGPURenderPassDepthStencilAttachment.CreateDefault();
+            // Load/read-only passes ignore this value. Keep it finite because the
+            // browser WebIDL conversion rejects the native NaN default before validation.
+            depthAttachment.depthClearValue = 1f;
             if (depthStencilBuffer != null)
             {
                 EnsureResource(depthStencilBuffer);
