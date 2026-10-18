@@ -13,15 +13,18 @@
     <ProjectReference Include="../../../sources/engine/Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
     <ProjectReference Include="../../../sources/engine/Stride.Graphics/Stride.Graphics.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
     <ProjectReference Include="../../../sources/engine/Stride.Games/Stride.Games.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
+    <ProjectReference Include="../../../sources/engine/Stride.Engine/Stride.Engine.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
     <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
     <!-- Compile the same internal context sources as the native validation lane. -->
     <Compile Include="../../../sources/engine/Stride.Graphics/WebGPU/WebGpuDeviceContext*.cs" Link="Backend/%(Filename)%(Extension)" />
     <Content Include="../CWebGpuProbe/wwwroot/THIRD-PARTY-NOTICES.txt" Link="wwwroot/THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="obj/effects/portable/*.effect" Link="wwwroot/effects/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="obj/content/web/**/*" Link="wwwroot/content/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckEmdawnInputs" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py')" Text="Run build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe before building." />
     <Error Condition="!Exists('obj/effects/portable/WebGpuValidation.effect') Or !Exists('obj/effects/portable/WebGpuCompute.effect')" Text="Run build/browser/PrepareEngineShaders.ps1 -Naga path/to/naga-29.0.0 before publishing." />
+    <Error Condition="!Exists('obj/content/web/manifest.json')" Text="Run build/browser/PrepareContent.ps1 before publishing." />
   </Target>
   <!-- .NET 11 RC2's Mono WASM generator requires explicit static-module identity
        when a port supplies its library at final link instead of NativeFileReference.

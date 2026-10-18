@@ -26,6 +26,9 @@ try {
         },
         reportContext: () => { result.sharedContextVerified = true; },
         reportGameLoop: () => { result.gameLoopVerified = true; result.gameLoopCycles = 2; },
+        contentBaseUrl: () => new URL('./content/', document.baseURI).href,
+        reportAssets: () => { result.contentDatabaseVerified = true; result.contentAssets = 3; },
+        reportManagedError: error => { result.managedError = error; },
         reportEngineDevice: (clearFrames, verifiedPixels) => {
             result.engineDeviceVerified = true;
             result.engineClearFrames = clearFrames;

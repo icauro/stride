@@ -75,6 +75,7 @@ shader-variant, asset-loading or lifecycle compatibility.
 pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe
 cargo install naga-cli --version 29.0.0 --locked --root build/wgpu/ShaderPackageTool/obj/naga
 pwsh -NoProfile -File build/browser/PrepareEngineShaders.ps1 -Naga build/wgpu/ShaderPackageTool/obj/naga/bin/naga.exe
+pwsh -NoProfile -File build/browser/PrepareContent.ps1
 $wasmProbeCache = Join-Path $env:LOCALAPPDATA 'Stride/WasmCache/net11-rc2-emscripten-6.0.2'
 dotnet publish build/browser/ManagedWebGpuProbe/ManagedWebGpuProbe.csproj -c Release -p:StridePlatforms=Browser -p:StrideSkipAutoPack=true -p:StrideAssemblyProcessorFramework=net10.0 "-p:WasmCachePath=$wasmProbeCache"
 Push-Location build/browser
@@ -101,8 +102,8 @@ unused prepared device. It requires `sharedContextVerified` and
 contains85 audited core functions;
 native polling, timestamp-period queries and surfacePresent must remain absent.
 This verifies context/GraphicsDevice startup and clears, not a running game.
-Space Escape still needs its complete effect/variant set, game loop, input and
-packaged game assets.
+Space Escape still needs its complete effect/variant set, input, runtime
+subsystems and its own packaged game assets.
 
 Desktop preparation compiles real SDSL texture/compute effects and converts them
 with pinned Naga29.0.0 using the shared package tool. Generated assets stay in the
@@ -112,7 +113,37 @@ reflection and parameter keys. The renderer verifies four exact textured pixels
 including orientation, then dispatches compute and verifies all64buffer values.
 The harness requires `wgslEffectsVerified` on load/reload. No converter executable
 or runtime SDSL compilation is needed in browser startup. This is shader asset
-delivery evidence; it does not establish the full game data/db content mount.
+delivery evidence, separate from the database tests below.
+
+PrepareContent.ps1 uses desktop engine serializers to build actual GameSettings,
+a namespaced Scene containing an entity/transform, and a GraphicsCompositor into
+a compressed Stride bundle. ContentPackageTool packages a database's index,
+bundles and aliases with a version1 manifest containing sizes and SHA256 hashes.
+Its normal command is `ContentPackageTool <data/db directory> <web output> [default bundle]`.
+The web output must be outside the input database. Generated fixture files stay
+in ignored obj/content and publish under content/; they are not Space Escape's
+assets and do not require a GPU or a shader compiler to deserialize.
+
+Before starting a browser game, await
+`BrowserContent.PreloadAsync(httpClient, absoluteManifestUri)` and assign the
+returned default bundle name to `Game.AssetBundleName`. The helper installs a
+complete verified database in the existing /data/db filesystem mount. Game's
+existing synchronous content loader then reads local files; it never waits for
+HTTP. Installation refuses an already populated database, stages downloads until
+all checks pass, and cleans failed/cancelled staging data. It rejects invalid
+paths, ambiguous casing, unsupported manifest versions, missing index/default
+bundle, and content exceeding the declared byte budget (default1GiB).
+
+BrowserAssetCheck reads the compressed bundle through ObjectDatabase and
+ContentManager, checks GameSettings, the namespaced scene/entity/transform and
+compositor, and confirms a bare alias resolves to the same scene instance.
+Negative cases cover corrupt hashes, an actual HTTP404, path traversal, duplicate
+case variants, incorrectly cased index, version mismatch, size budget,
+cancellation and refusal to replace an existing database. Native file locks
+explicitly report Unsupported in the browser's private WASM filesystem; Store
+uses its existing unsupported-filesystem fallback. No OS lock is reported as
+acquired. This is content delivery/deserialization evidence; asset-backed scene
+rendering and full Game initialization remain to be integrated.
 
 The actual SwapChainGraphicsPresenter now accepts a Browser WindowHandle whose
 NativeWindow is the CSS selector of an existing canvas. The host supplies canvas
@@ -169,7 +200,7 @@ The integrated tests cover async context cancellation, GraphicsDevice, basic
 offline shader assets, canvas presentation and GameBase lifecycle. The original
 ManagedFrame diagnostic remains a single-in-flight reference with no device-loss
 recovery. Full asset-backed Game initialization, the complete shader permutation
-set, input and the game content host remain open. Native Vulkan/D3D12 behavior
+set, input and sample content preparation remain open. Native Vulkan/D3D12 behavior
 and DLL loading use the same binding assembly.
 
 ## C API transport probe (diagnostic reference)

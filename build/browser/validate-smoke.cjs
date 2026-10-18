@@ -71,13 +71,21 @@ async function main() {
         });
         const page = await browser.newPage();
         const errors = [];
+        let missingContentResponses = 0;
         page.on('pageerror', error => errors.push(String(error)));
         page.on('console', message => {
-            if (message.type() === 'error') errors.push(message.text());
+            const missingContent = managedWebgpu && message.text().includes('404') &&
+                message.location().url && new URL(message.location().url).pathname === '/content/missing.aliases';
+            if (message.type() === 'error' && !missingContent) errors.push(message.text());
         });
-        page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
+        page.on('requestfailed', request => {
+            if (managedWebgpu && new URL(request.url()).pathname === '/content/missing.aliases' && request.failure()?.errorText === 'net::ERR_ABORTED') return;
+            errors.push(`${request.url()}: ${request.failure()?.errorText}`);
+        });
         page.on('response', response => {
-            if (!response.ok()) errors.push(`HTTP ${response.status()}: ${response.url()}`);
+            if (managedWebgpu && response.status() === 404 && new URL(response.url()).pathname === '/content/missing.aliases') missingContentResponses++;
+            else if (!response.ok())
+                errors.push(`HTTP ${response.status()}: ${response.url()}`);
         });
         const url = `http://127.0.0.1:${server.address().port}/`;
         const runs = [];
@@ -119,6 +127,8 @@ async function main() {
                     assert.equal(result.engineDeviceVerified, true);
                     assert.equal(result.gameLoopVerified, true);
                     assert.equal(result.gameLoopCycles, 2);
+                    assert.equal(result.contentDatabaseVerified, true);
+                    assert.equal(result.contentAssets, 3);
                     assert.equal(result.engineClearFrames, 3);
                     assert.equal(result.engineVerifiedPixels, 17 * 9 * 3);
                     assert.equal(result.wgslEffectsVerified, true);
@@ -139,6 +149,7 @@ async function main() {
             assert.equal(await page.locator('#result').getAttribute('data-status'), 'passed');
             runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots } : {}) });
         }
+        if (managedWebgpu) assert.equal(missingContentResponses, 2, 'Missing-content negative case must receive one real HTTP404 per load');
         assert.deepEqual(errors, [], 'Browser errors occurred');
         let unavailable;
         if (webgpu) {

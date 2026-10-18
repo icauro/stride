@@ -9,6 +9,12 @@ public static partial class Program
 {
     public static async Task Main()
     {
+        try { await RunAsync(); }
+        catch (Exception error) { ReportManagedError(error.ToString()); throw; }
+    }
+
+    private static async Task RunAsync()
+    {
         for (int iteration = 0; iteration < 3; iteration++)
         {
             var started = Stopwatch.GetTimestamp();
@@ -28,6 +34,8 @@ public static partial class Program
         try { Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary("unused.dll"); }
         catch (PlatformNotSupportedException) { rejected = true; }
         if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
+        await BrowserAssetCheck.RunAsync(ContentBaseUrl());
+        ReportAssets();
         await BrowserContextCheck.RunAsync(EffectBaseUrl());
         await BrowserGameLoopCheck.RunAsync();
         ReportGameLoop();
@@ -47,4 +55,7 @@ public static partial class Program
     [JSImport("effectBaseUrl", "managed-gpu-probe")] private static partial string EffectBaseUrl();
     [JSImport("reportEffects", "managed-gpu-probe")] private static partial void ReportEffects(int pixels, int values);
     [JSImport("reportGameLoop", "managed-gpu-probe")] private static partial void ReportGameLoop();
+    [JSImport("contentBaseUrl", "managed-gpu-probe")] private static partial string ContentBaseUrl();
+    [JSImport("reportAssets", "managed-gpu-probe")] private static partial void ReportAssets();
+    [JSImport("reportManagedError", "managed-gpu-probe")] private static partial void ReportManagedError(string error);
 }
