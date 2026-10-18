@@ -81,6 +81,11 @@ namespace SpaceEscape.Rendering
         {
             foreach (var renderNode in ((RootEffectRenderFeature)RootRenderFeature).RenderNodes)
             {
+                // The root feature leaves nodes unprepared while their effects
+                // are compiling. Their reflection/resources are not available yet.
+                if (renderNode.RenderEffect?.Effect == null || renderNode.Resources == null)
+                    continue;
+
                 var perDrawLayout = renderNode.RenderEffect.Reflection.PerDrawLayout;
                 if (perDrawLayout == null)
                     continue;
