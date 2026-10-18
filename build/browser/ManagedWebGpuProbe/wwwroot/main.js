@@ -4,6 +4,7 @@ import { attachBrowserInput } from './browser-input.js';
 const result = globalThis.smokeResult = { status: 'running', transport: 'generated-csharp', frames: [] };
 const output = document.getElementById('result');
 const noAdapter = new URLSearchParams(location.search).has('no-adapter');
+const errorCallbacksOnly = new URLSearchParams(location.search).has('error-callbacks');
 const verifyCanvas = !new URLSearchParams(location.search).has('run-tests');
 let continueCanvas;
 const canvasGate = new Promise(resolve => { continueCanvas = resolve; });
@@ -16,6 +17,8 @@ try {
     let detachInput;
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
+        errorCallbacksOnly: () => errorCallbacksOnly,
+        reportErrorCallbacks: message => { result.errorCallbacksVerified = true; result.gpuErrorMessage = message; },
         resizeCanvas(selector, width, height) {
             const canvas = document.querySelector(selector);
             canvas.width = width;
@@ -69,7 +72,8 @@ try {
         }
     });
     await runtime.runMain();
-    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || !result.engineDeviceVerified || !result.wgslEffectsVerified || result.frames.length !== 3)
+    if (errorCallbacksOnly ? !result.errorCallbacksVerified :
+        (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || !result.engineDeviceVerified || !result.wgslEffectsVerified || result.frames.length !== 3))
         throw new Error('Managed binding verification did not complete.');
     result.status = 'passed';
 } catch (error) {

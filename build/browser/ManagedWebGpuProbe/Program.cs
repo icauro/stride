@@ -15,6 +15,11 @@ public static partial class Program
 
     private static async Task RunAsync()
     {
+        if (ErrorCallbacksOnly())
+        {
+            ReportErrorCallbacks(await BrowserErrorCallbackCheck.RunAsync());
+            return;
+        }
         for (int iteration = 0; iteration < 3; iteration++)
         {
             var started = Stopwatch.GetTimestamp();
@@ -49,6 +54,8 @@ public static partial class Program
     }
 
     [JSImport("noAdapter", "managed-gpu-probe")] private static partial bool NoAdapter();
+    [JSImport("errorCallbacksOnly", "managed-gpu-probe")] private static partial bool ErrorCallbacksOnly();
+    [JSImport("reportErrorCallbacks", "managed-gpu-probe")] private static partial void ReportErrorCallbacks(string message);
     [JSImport("nextFrame", "managed-gpu-probe")] private static partial Task NextFrame();
     [JSImport("reportFrame", "managed-gpu-probe")]
     private static partial void ReportFrame(int iteration, int foreground, int background, bool invalidMap, double milliseconds);
