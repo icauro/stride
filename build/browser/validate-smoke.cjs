@@ -92,6 +92,7 @@ async function main() {
                     assert.equal(result.transport, 'generated-csharp');
                     assert.equal(result.pendingCallbacks, 0);
                     assert.equal(result.nativeLoaderRejected, true);
+                    assert.equal(result.sharedContextVerified, true);
                 }
                 assert.equal(result.managedPixelsVerified, true);
                 assert.equal(result.invalidMapRejected, true);

@@ -5,11 +5,14 @@
     <Nullable>enable</Nullable>
     <WasmEnableHotReload>false</WasmEnableHotReload>
     <WasmBuildNative>true</WasmBuildNative>
+    <DefineConstants>$(DefineConstants);STRIDE_GRAPHICS_API_WEBGPU</DefineConstants>
     <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false</EmccExtraLDFlags>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../sources/engine/Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
     <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
+    <!-- Compile the same internal context sources as the native validation lane. -->
+    <Compile Include="../../../sources/engine/Stride.Graphics/WebGPU/WebGpuDeviceContext*.cs" Link="Backend/%(Filename)%(Extension)" />
     <Content Include="../CWebGpuProbe/wwwroot/THIRD-PARTY-NOTICES.txt" Link="wwwroot/THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckEmdawnInputs" BeforeTargets="PrepareForBuild">

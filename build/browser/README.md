@@ -87,6 +87,15 @@ Emdawn's own C++/JavaScript implementation remains a dependency. Only the canvas
 extension struct is declared locally, from the pinned browser header; common
 types, defaults, function signatures and callbacks use the shared bindings.
 
+The same lane compiles the production `WebGpuDeviceContext` sources used by native
+validation. It checks portable async adapter/device creation, negotiated limits,
+exact buffer readback and reuse, queue completion, cancellation followed by retry,
+and disposing with a read pending. It requires `sharedContextVerified` across load
+and reload. The published import table now contains52 audited core functions;
+native polling, timestamp-period queries and surfacePresent must remain absent.
+This checks the internal context, not the engine's GraphicsDevice startup or
+Space Escape. Those still require adapter/device integration and WGSL effects.
+
 The project registers the existing logical import module `wgpu_native` with the
 pinned .NET11 RC2 Mono WASM import generator. Its final linker supplies Emdawn;
 the module name does not request the Windows DLL. This uses an SDK-private target

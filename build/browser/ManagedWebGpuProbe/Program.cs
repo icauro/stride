@@ -28,6 +28,8 @@ public static partial class Program
         try { Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary("unused.dll"); }
         catch (PlatformNotSupportedException) { rejected = true; }
         if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
+        await BrowserContextCheck.RunAsync();
+        ReportContext();
         ReportSuccess();
     }
 
@@ -36,4 +38,5 @@ public static partial class Program
     [JSImport("reportFrame", "managed-gpu-probe")]
     private static partial void ReportFrame(int iteration, int foreground, int background, bool invalidMap, double milliseconds);
     [JSImport("reportSuccess", "managed-gpu-probe")] private static partial void ReportSuccess();
+    [JSImport("reportContext", "managed-gpu-probe")] private static partial void ReportContext();
 }

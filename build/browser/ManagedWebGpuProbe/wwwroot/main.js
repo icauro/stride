@@ -7,6 +7,7 @@ try {
     const runtime = await dotnet.create();
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
+        reportContext: () => { result.sharedContextVerified = true; },
         nextFrame: () => new Promise(resolve => requestAnimationFrame(() => resolve())),
         reportFrame(iteration, foreground, background, invalidMap, elapsedMilliseconds) {
             result.frames.push({ iteration, foreground, background, elapsedMilliseconds });
@@ -22,7 +23,7 @@ try {
         }
     });
     await runtime.runMain();
-    if (!result.managedPixelsVerified || !result.invalidMapRejected || result.frames.length !== 3)
+    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || result.frames.length !== 3)
         throw new Error('Managed binding verification did not complete.');
     result.status = 'passed';
 } catch (error) {
