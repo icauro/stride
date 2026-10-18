@@ -6,10 +6,11 @@ const { chromium } = require('playwright');
 
 // Serve only the publish tree on loopback. A fresh browser context exercises the
 // actual WASM download/runtime, with no dependency on a developer's browser tabs.
-const webgpu = process.argv.includes('--webgpu');
+const cWebgpu = process.argv.includes('--c-webgpu');
+const webgpu = cWebgpu || process.argv.includes('--webgpu');
 const root = process.env.BROWSER_PUBLISH_ROOT
     ? path.resolve(process.env.BROWSER_PUBLISH_ROOT)
-    : path.resolve(__dirname, `${webgpu ? 'WebGpuProbe' : 'Smoke'}/bin/Release/net11.0/publish/wwwroot`);
+    : path.resolve(__dirname, `${cWebgpu ? 'CWebGpuProbe' : webgpu ? 'WebGpuProbe' : 'Smoke'}/bin/Release/net11.0/publish/wwwroot`);
 const mime = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
@@ -70,6 +71,7 @@ async function main() {
             const result = await page.evaluate(() => globalThis.smokeResult);
             assert.equal(result.status, 'passed', JSON.stringify(result));
             if (webgpu) {
+                if (cWebgpu) assert.equal(result.transport, 'emdawn-c-api');
                 assert.equal(result.managedPixelsVerified, true);
                 assert.equal(result.invalidMapRejected, true);
                 assert.equal(result.disposed, true);

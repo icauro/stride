@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+    <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false</EmccExtraLDFlags>
+  </PropertyGroup>
+  <ItemGroup>
+    <NativeFileReference Include="triangle.c" />
+    <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
+  </ItemGroup>
+  <Target Name="CheckEmdawnInputs" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py')" Text="Run build/browser/PrepareEmdawn.ps1 before building the C WebGPU probe." />
+  </Target>
+</Project>

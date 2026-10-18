@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "smoke": "node validate-smoke.cjs",
-    "webgpu": "node validate-smoke.cjs --webgpu"
+    "webgpu": "node validate-smoke.cjs --webgpu",
+    "webgpu:c": "node validate-smoke.cjs --c-webgpu"
   },
   "devDependencies": {
     "playwright": "1.62.1"

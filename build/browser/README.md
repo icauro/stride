@@ -61,6 +61,54 @@ Only default device capabilities are requested; advertised adapter features do
 not imply they were enabled on that device. This test does not establish Stride
 shader-variant, asset-loading or lifecycle compatibility.
 
+## C API transport probe
+
+Prepare the pinned Emdawn package (SHA512 verified; sources remain in ignored
+obj/), then publish using a private writable Emscripten cache:
+
+```powershell
+pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1
+$wasmProbeCache = Join-Path $env:LOCALAPPDATA 'Stride/WasmCache/net11-rc2-emscripten-6.0.2'
+dotnet publish build/browser/CWebGpuProbe/CWebGpuProbe.csproj -c Release "-p:WasmCachePath=$wasmProbeCache"
+Push-Location build/browser
+npm run webgpu:c
+Pop-Location
+```
+
+The cache must be on the same Windows volume as the Emscripten toolchain with
+this version: Emscripten6.0.2 cannot build ports with source/cache on different
+drives. Do not change the installed frozen cache or copy the full installed
+cache. A private cache builds only the required dependencies. Keep SDK/cache
+versions aligned.
+
+CWebGpuProbe performs instance/surface creation, adapter/device and pipeline
+requests, WGSL shader creation, draw/submit, texture copies and asynchronous
+mapping through the C API. Its C helper is statically linked using
+NativeFileReference; managed imports use the triangle source basename. All GPU
+calls use the pinned provider header. JavaScript only boots .NET, schedules a
+browser frame and reports results; it does not issue GPU commands for this probe.
+Native map callbacks copy padded bytes directly into a managed byte array before
+unmapping, without expanding pixels to JS/managed int arrays.
+
+Both GPU probes use Shared/TrianglePixels.cs for the same color/geometry checks.
+The C probe also captures a real invalid-map validation failure, retries a valid
+map, checks that owned native frame contexts were released, and injects an
+unavailable-adapter failure. Each frame creates and releases its own device and
+surface to exercise cleanup; timings therefore include initialization and cannot
+be compared with the JS probe as a transport benchmark. Native adapter type is
+recorded without forcing hardware/software mode.
+
+The C probe submits a copy to the canvas, but pixel assertions read an offscreen
+texture. It does not verify a browser-composited screenshot. Emdawn explicitly
+aborts on wgpuSurfacePresent: use browser frame scheduling, not the native
+presentation call. A production presenter still needs persistent resources,
+resize/device-loss handling and independently verified visible frames.
+
+This proves C API transport, not reuse of Stride's generated import loader or
+engine renderer. The native DLL loader, native extensions and blocking waits
+still need separation before engine integration. Downloaded dependency licenses
+are retained in the package; THIRD-PARTY-NOTICES.txt accompanies the published app.
+
 ## Browser selection and validation
 
 Set `BROWSER_EXECUTABLE` to an installed Chromium browser's
