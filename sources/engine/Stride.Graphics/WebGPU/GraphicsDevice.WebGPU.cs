@@ -7,13 +7,14 @@ using System.Threading.Tasks;
 using Stride.Graphics.WebGPU;
 using Api = Stride.Graphics.WebGPU.WebGPU;
 namespace Stride.Graphics;
-public partial class GraphicsDevice
+public partial class GraphicsDevice : IAsyncDisposable
 {
     private const GraphicsPlatform GraphicPlatform = GraphicsPlatform.WebGPU;
     internal WebGpuDeviceContext WebGpuContext { get; private set; }
     internal GraphicsProfile WebGpuRequestedProfile { get; private set; }
     internal GraphicsProfile WebGpuCurrentProfile { get; private set; }
     private WebGpuBufferClear bufferClear;
+    private bool drainedForDisposal;
     internal WebGpuBufferClear BufferClear => bufferClear ??= new WebGpuBufferClear(WebGpuContext);
     public long TimestampFrequency => !OperatingSystem.IsBrowser() && WebGpuContext.HasEncoderTimestamps
         ? checked((long)Math.Round(1_000_000_000.0 / Api.wgpuQueueGetTimestampPeriod(WebGpuContext.Queue))) : 0;
@@ -35,6 +36,17 @@ public partial class GraphicsDevice
     }
     /// <summary>Asynchronously waits for WebGPU work; browser callers must yield rather than block the event loop.</summary>
     public Task WaitForWebGPUIdleAsync(CancellationToken cancellationToken = default) => WebGpuContext.WaitForIdleAsync(cancellationToken);
+    /// <summary>
+    /// Drains submitted work before releasing the device. Call on the rendering
+    /// thread after stopping frame production; required for browser disposal.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (IsDisposed) return;
+        await WaitForWebGPUIdleAsync();
+        drainedForDisposal = true;
+        Dispose();
+    }
     private bool simulateReset;
     public GraphicsDeviceStatus GraphicsDeviceStatus => simulateReset ? GraphicsDeviceStatus.Reset : WebGpuContext.IsLost ? GraphicsDeviceStatus.Lost : GraphicsDeviceStatus.Normal;
     /// <summary>Simulates device loss for the shared graphics regression suite.</summary>
@@ -71,7 +83,13 @@ public partial class GraphicsDevice
         bufferClear?.Dispose(); bufferClear = null;
         WebGpuContext?.Dispose();
     }
-    partial void WaitForGPUIdle() => WebGpuContext?.WaitForIdle();
+    partial void WaitForGPUIdle()
+    {
+        // DisposeAsync already completed a real queue wait immediately before
+        // entering the common synchronous resource teardown, on the render thread.
+        if (drainedForDisposal) return;
+        WebGpuContext?.WaitForIdle();
+    }
     internal partial void TagResourceAsNotAlive(GraphicsResourceLink resourceLink) { }
 }
 #endif

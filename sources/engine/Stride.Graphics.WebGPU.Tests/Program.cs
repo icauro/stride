@@ -8,7 +8,7 @@ if (args.Contains("--portable"))
     Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary(Environment.GetEnvironmentVariable("STRIDE_WEBGPU_NATIVE_LIBRARY") ?? throw new Exception("Missing native provider."));
     GraphicsAdapterFactory.Dispose();
     await GraphicsAdapterFactory.InitializeWebGPUAsync();
-    using (var portable = GraphicsDevice.New())
+    await using (var portable = GraphicsDevice.New())
     {
         using var commands = CommandList.New(portable);
         using var data = Stride.Graphics.Buffer.New(portable, new uint[] { 1, 2, 3, 4 }, BufferFlags.VertexBuffer, GraphicsResourceUsage.Default);

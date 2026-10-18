@@ -278,6 +278,13 @@ pending initialization. `GraphicsDevice.WaitForWebGPUIdleAsync` exposes yielding
 queue completion to hosts. This does not make synchronous game shutdown browser
 compatible; the host must integrate asynchronous completion before disposal.
 
+WebGPU GraphicsDevice implements `IAsyncDisposable`: stop producing frames, then
+`await device.DisposeAsync()` on the rendering thread. It completes a real async
+queue wait immediately before the common resource teardown. The teardown then
+uses that completed wait, without blocking the browser. Ordinary synchronous
+disposal still rejects an undrained browser device. Game/window closing needs its
+own async host sequence; this device API does not implement a game shutdown loop.
+
 ### Editor line rasterization
 
 Like Stride's Vulkan backend, WebGPU accepts the legacy
