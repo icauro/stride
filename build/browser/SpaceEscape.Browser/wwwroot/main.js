@@ -4,6 +4,7 @@ import { attachBrowserInput } from './browser-input.js';
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
 const result = globalThis.spaceEscapeResult = { status: 'loading', frames: 0 };
+globalThis.spaceEscapeRequests = [];
 let managed, detach, stopped = false;
 const fail = error => {
     stopped = true;
@@ -17,7 +18,8 @@ try {
     const runtime = await dotnet.create();
     runtime.setModuleImports('space-escape', {
         managedError: error => { result.managedError = error; },
-        log: (message, level) => { if (level >= 4) console.error(message); else console.log(message); }
+        log: (message, level) => { if (level >= 4) console.error(message); else console.log(message); },
+        effectRequest: (hash, payload) => { globalThis.spaceEscapeRequests.push({ hash, payload }); }
     });
     const config = runtime.getConfig();
     managed = (await runtime.getAssemblyExports(config.mainAssemblyName)).Program;
@@ -35,6 +37,11 @@ try {
             managed.Frame(canvas.width, canvas.height, document.hasFocus(), !document.hidden);
             result.frames = managed.Frames();
             result.entities = managed.Entities();
+            result.lane = managed.Lane();
+            result.dead = managed.Dead();
+            result.characterX = managed.CharacterX();
+            result.hitboxHeight = managed.HitboxHeight();
+            result.ui = managed.UiText();
             requestAnimationFrame(frame);
         } catch (error) { fail(error); }
     };
