@@ -1,15 +1,17 @@
 # Browser toolchain smoke
 
-This minimal .NET WebAssembly app verifies the browser toolchain before Stride
-integration. It runs managed startup, calls JavaScript from C#, exports a C#
-function to JavaScript, and checks the result after initial load and reload.
-It does not create a WebGPU device or render a Stride scene.
+This .NET WebAssembly app verifies managed startup, JavaScript interop and the
+actual Stride Core, Foundation and Games assemblies across initial load and
+reload. It checks browser platform selection, the virtual filesystem, exact PNG
+decoding and canvas window creation, resize, host state and disposal. It does not
+initialize a graphics device, advance a game or render a Stride scene.
 
 Run from the repository root with the SDK pinned in global.json:
 
 ```powershell
 dotnet workload install wasm-tools
-dotnet publish build/browser/Smoke/Smoke.csproj -c Release
+pwsh -NoProfile -File build/browser/ValidatePlatform.ps1
+dotnet publish build/browser/Smoke/Smoke.csproj -c Release -p:StridePlatforms=Browser -p:StrideSkipAutoPack=true -p:StrideAssemblyProcessorFramework=net10.0
 ```
 
 The initial verified installation used workload set
@@ -17,6 +19,12 @@ The initial verified installation used workload set
 `6.0.2`. Publish uses the SDK's default Mono browser runtime, with trimming and
 native runtime relinking, without managed AOT. Selecting .NET 11 does not itself
 select the experimental browser CoreCLR runtime.
+
+Pass `StridePlatforms=Browser` globally when building or publishing Stride runtime
+projects: NuGet restore must select the same framework as compilation. Browser
+runtime libraries target net11.0; existing desktop targets retain net10.0. Host
+asset tools remain separate desktop builds. The assembly processor uses its
+existing net10.0 host binary and the platform-neutral Shared processing mode.
 
 Install the pinned browser-test dependency and run validation:
 

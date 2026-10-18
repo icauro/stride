@@ -5,4 +5,9 @@
     <Nullable>enable</Nullable>
     <WasmEnableHotReload>false</WasmEnableHotReload>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../sources/core/Stride.Core/Stride.Core.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
+    <ProjectReference Include="../../../sources/engine/Stride.Foundation/Stride.Foundation.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
+    <ProjectReference Include="../../../sources/engine/Stride.Games/Stride.Games.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
+  </ItemGroup>
 </Project>
