@@ -41,7 +41,7 @@ public partial class ShaderMixer
         var typeId = context.Types[a];
         arrayStride = alignmentRules switch
         {
-            SpirvBuilder.AlignmentRules.CBuffer => (SpirvBuilder.TypeSizeInBuffer(a.BaseType, typeModifier, alignmentRules).Size + 15) / 16 * 16,
+            SpirvBuilder.AlignmentRules.CBuffer or SpirvBuilder.AlignmentRules.WebGpuCBuffer => (SpirvBuilder.TypeSizeInBuffer(a.BaseType, typeModifier, alignmentRules).Size + 15) / 16 * 16,
             SpirvBuilder.AlignmentRules.StructuredBuffer or SpirvBuilder.AlignmentRules.StructuredBufferTight => SpirvBuilder.StorageBufferArrayStride(a.BaseType, typeModifier, alignmentRules),
             _ => throw new NotSupportedException($"Unsupported alignment rules: {alignmentRules}"),
         };

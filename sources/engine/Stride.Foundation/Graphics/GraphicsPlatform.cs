@@ -29,5 +29,9 @@ namespace Stride.Graphics
         /// GLSL/SPIR-V Shader.
         /// </summary>
         Vulkan,
+        /// <summary>
+        /// Native WebGPU through wgpu-native.
+        /// </summary>
+        WebGPU,
     }
 }

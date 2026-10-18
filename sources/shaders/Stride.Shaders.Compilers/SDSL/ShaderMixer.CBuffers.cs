@@ -424,8 +424,9 @@ namespace Stride.Shaders.Compilers.SDSL
             };
         }
 
-        private void ComputeCBufferReflection(MixinGlobalContext globalContext, SpirvContext context, SpirvBuffer buffer)
+        private void ComputeCBufferReflection(MixinGlobalContext globalContext, SpirvContext context, SpirvBuffer buffer, bool webGpuUniformLayout = false)
         {
+            var layout = webGpuUniformLayout ? SpirvBuilder.AlignmentRules.WebGpuCBuffer : SpirvBuilder.AlignmentRules.CBuffer;
             var cbuffers = buffer
                 .Where(x => x.Op == Op.OpVariableSDSL)
                 // Note: MemberIndexOffset is simply a shift in Members index, not something like a byte offset
@@ -452,15 +453,15 @@ namespace Stride.Shaders.Compilers.SDSL
                 {
                     // Properly compute size and offset according to DirectX rules
                     var member = cb.Members[index];
-                    var memberSize = SpirvBuilder.ComputeBufferOffset(member.Type, member.TypeModifier, ref constantBufferOffset, SpirvBuilder.AlignmentRules.CBuffer).Size;
+                    var memberSize = SpirvBuilder.ComputeBufferOffset(member.Type, member.TypeModifier, ref constantBufferOffset, layout).Size;
 
-                    DecorateMember(context, structTypeId, index, constantBufferOffset, member.Type, member.TypeModifier, SpirvBuilder.AlignmentRules.CBuffer);
+                    DecorateMember(context, structTypeId, index, constantBufferOffset, member.Type, member.TypeModifier, layout);
 
                     var metadata = cbufferMetadata[index];
 
                     memberInfos[index] = new EffectValueDescription
                     {
-                        Type = ConvertType(context, member.Type, member.TypeModifier, SpirvBuilder.AlignmentRules.CBuffer),
+                        Type = ConvertType(context, member.Type, member.TypeModifier, layout),
                         RawName = member.Name,
                         KeyInfo = new EffectParameterKeyInfo { KeyName = metadata.Link },
                         Offset = constantBufferOffset,
@@ -480,7 +481,7 @@ namespace Stride.Shaders.Compilers.SDSL
 
                     // Adjust offset for next item
                     constantBufferOffset += memberSize;
-                    SpirvBuilder.PadOffsetAfterArray(member.Type, member.TypeModifier, memberInfos[index].Offset, ref constantBufferOffset, SpirvBuilder.AlignmentRules.CBuffer);
+                    SpirvBuilder.PadOffsetAfterArray(member.Type, member.TypeModifier, memberInfos[index].Offset, ref constantBufferOffset, layout);
                 }
 
                 var cbufferDesc = new EffectConstantBufferDescription

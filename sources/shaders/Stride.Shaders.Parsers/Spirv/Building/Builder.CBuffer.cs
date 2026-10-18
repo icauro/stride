@@ -20,6 +20,8 @@ partial class SpirvBuilder
         /// (<see cref="StructuredBufferLayout"/>).
         /// </summary>
         StructuredBufferTight,
+        /// <summary>WebGPU uniform layout: vector alignment and complete 16-byte array/matrix/struct strides.</summary>
+        WebGpuCBuffer,
     }
 
     public static (int Size, int Alignment) TypeSizeInBuffer(SymbolType symbol, TypeModifier typeModifier, AlignmentRules alignmentRules)
@@ -31,6 +33,7 @@ partial class SpirvBuilder
         {
             // HLSL array size: last element is not padded to stride
             AlignmentRules.CBuffer => ((current.Size + 15) / 16 * 16 * (count - 1) + current.Size, 16),
+            AlignmentRules.WebGpuCBuffer => ((current.Size + 15) / 16 * 16 * count, Math.Max(16, current.Alignment)),
             AlignmentRules.StructuredBuffer or AlignmentRules.StructuredBufferTight => (current.Size * count, current.Alignment),
             _ => throw new NotSupportedException($"Unsupported AlignmentRules value: {alignmentRules}"),
         };
@@ -43,7 +46,7 @@ partial class SpirvBuilder
             // to satisfy Vulkan's relaxed block layout rule that a vector must not straddle a
             // 16-byte boundary. CBuffer keeps scalar alignment — ComputeBufferOffset handles the
             // "vector crossing 16-byte boundary" bump separately for that path.
-            VectorType v when alignmentRules == AlignmentRules.StructuredBuffer
+            VectorType v when alignmentRules is AlignmentRules.StructuredBuffer or AlignmentRules.WebGpuCBuffer
                 => (TypeSizeInBuffer(v.BaseType, typeModifier, alignmentRules).Size * v.Size,
                     TypeSizeInBuffer(v.BaseType, typeModifier, alignmentRules).Alignment * (v.Size == 2 ? 2 : 4)),
             VectorType v => MultiplySize(TypeSizeInBuffer(v.BaseType, typeModifier, alignmentRules), v.Size),
@@ -57,6 +60,8 @@ partial class SpirvBuilder
             // Tight: the matrix vectors follow each other with no padding
             MatrixType m when alignmentRules == AlignmentRules.StructuredBufferTight
                 => (MatrixStride(m, typeModifier, alignmentRules) * MatrixLayoutVectors(m, typeModifier).Count, TypeSizeInBuffer(m.BaseType, typeModifier, alignmentRules).Alignment),
+            MatrixType m when alignmentRules == AlignmentRules.WebGpuCBuffer
+                => (16 * MatrixLayoutVectors(m, typeModifier).Count, 16),
             MatrixType m when typeModifier == TypeModifier.ColumnMajor || typeModifier == TypeModifier.None
                 => MultiplySize(TypeSizeInBuffer(m.BaseType, typeModifier, alignmentRules), (4 * (m.Rows - 1)) + m.Columns),
             MatrixType m when typeModifier == TypeModifier.RowMajor
@@ -83,7 +88,7 @@ partial class SpirvBuilder
     /// </summary>
     public static int MatrixStride(MatrixType m, TypeModifier typeModifier, AlignmentRules alignmentRules) => alignmentRules switch
     {
-        AlignmentRules.CBuffer => 16,
+        AlignmentRules.CBuffer or AlignmentRules.WebGpuCBuffer => 16,
         AlignmentRules.StructuredBufferTight => TypeSizeInBuffer(m.BaseType, typeModifier, alignmentRules).Size * MatrixLayoutVectors(m, typeModifier).VectorSize,
         _ => StorageBufferArrayStride(new VectorType(m.BaseType, MatrixLayoutVectors(m, typeModifier).VectorSize)),
     };
@@ -118,10 +123,12 @@ partial class SpirvBuilder
         var alignment = alignmentRules switch
         {
             AlignmentRules.CBuffer => 16,
+            AlignmentRules.WebGpuCBuffer => Math.Max(16, maxAlignment),
             AlignmentRules.StructuredBuffer or AlignmentRules.StructuredBufferTight => maxAlignment,
             _ => throw new NotSupportedException($"Unsupported AlignmentRules value: {alignmentRules}"),
         };
 
+        if (alignmentRules == AlignmentRules.WebGpuCBuffer) offset = (offset + alignment - 1) / alignment * alignment;
         return (offset, alignment);
     }
 

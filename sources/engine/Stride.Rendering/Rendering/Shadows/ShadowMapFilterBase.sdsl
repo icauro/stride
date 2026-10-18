@@ -86,6 +86,15 @@ namespace Stride.Rendering.Shadows
                                        float4x4 inverseWorldToShadowCascadeUV,  // Transforms from shadow cascade UV to world space.
                                        bool isOrthographic);
         
+#if STRIDE_GRAPHICS_API_WEBGPU
+        float LoadThicknessDepth(int2 texel)
+        {
+            if (any(texel < int2(0, 0)) || any(texel >= int2(ShadowMapTextureSize)))
+                return 0.0;
+            return ShadowMapTexture.Load(int3(texel, 0)).r;
+        }
+#endif
+
         // TODO: Maybe implement separate linear and a perspective functions?
         float SampleThickness(float3 shadowSpaceCoordinate,
                               float3 pixelPositionWS,
@@ -93,7 +102,19 @@ namespace Stride.Rendering.Shadows
                               float4x4 inverseWorldToShadowCascadeUV,
                               bool isOrthographic)
         {
+#if STRIDE_GRAPHICS_API_WEBGPU
+            // Naga's SPIR-V reader cannot combine ordinary and comparison
+            // sampling of one image. Preserve LinearBorderSampler's bilinear
+            // level-zero reads (black border) with explicit texel fetches.
+            float2 texel = shadowSpaceCoordinate.xy * ShadowMapTextureSize - 0.5;
+            int2 baseTexel = int2(floor(texel));
+            float2 weight = frac(texel);
+            float top = lerp(LoadThicknessDepth(baseTexel), LoadThicknessDepth(baseTexel + int2(1, 0)), weight.x);
+            float bottom = lerp(LoadThicknessDepth(baseTexel + int2(0, 1)), LoadThicknessDepth(baseTexel + int2(1, 1)), weight.x);
+            const float shadowMapDepth = lerp(top, bottom, weight.y);
+#else
             const float shadowMapDepth = ShadowMapTexture.SampleLevel(LinearBorderSampler, shadowSpaceCoordinate.xy, 0).r;
+#endif
 
             float thickness;
             

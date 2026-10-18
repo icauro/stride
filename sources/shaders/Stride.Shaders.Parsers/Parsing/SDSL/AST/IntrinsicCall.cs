@@ -23,7 +23,7 @@ public enum IntrinsicLookupFailure
 public class IntrinsicCallHelper
 {
     private static IntrinsicTemplateExpander? TemplateExpander { get; set; }
-    private static Dictionary<SymbolType, IntrinsicTemplateExpander> ClassTemplateExpanders = new();
+    private static Dictionary<(SymbolType Type, string Namespace), IntrinsicTemplateExpander> ClassTemplateExpanders = new();
 
     public static bool TryResolveIntrinsic(SymbolTable table, SymbolType? thisType, string name, SymbolType[] argumentTypes, out (IIntrinsicCompiler Compiler, string Namespace, IntrinsicTemplateExpander.IntrinsicOverload Overload) resolvedIntrinsic)
         => TryResolveIntrinsic(table, thisType, name, argumentTypes, out resolvedIntrinsic, out _);
@@ -37,8 +37,8 @@ public class IntrinsicCallHelper
         {
             lock (ClassTemplateExpanders)
             {
-                if (!ClassTemplateExpanders.TryGetValue(type, out var value))
-                    ClassTemplateExpanders.Add(type, value = new(type, @namespace, intrinsicsDefinitions));
+                if (!ClassTemplateExpanders.TryGetValue((type, @namespace), out var value))
+                    ClassTemplateExpanders.Add((type, @namespace), value = new(type, @namespace, intrinsicsDefinitions));
                 return value;
             }
         }
@@ -71,6 +71,10 @@ public class IntrinsicCallHelper
 
             AppendStructuredBufferType => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.AppendStructuredBufferMethods), IntrinsicsDefinitions.AppendStructuredBufferMethods), AppendStructuredBufferMethodsImplementations.Instance),
             ConsumeStructuredBufferType => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.ConsumeStructuredBufferMethods), IntrinsicsDefinitions.ConsumeStructuredBufferMethods), ConsumeStructuredBufferMethodsImplementations.Instance),
+            StructuredBufferType { WriteAllowed: false } when name == "GetDimensions" && argumentTypes.Length == 1 && table.CurrentMacros.Any(macro => macro.Name == "STRIDE_WEBGPU_TYPED_BUFFERS")
+                => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.BufferMethods), IntrinsicsDefinitions.BufferMethods), BufferMethodsImplementations.Instance),
+            StructuredBufferType { WriteAllowed: true } when name == "GetDimensions" && argumentTypes.Length == 1 && table.CurrentMacros.Any(macro => macro.Name == "STRIDE_WEBGPU_TYPED_BUFFERS")
+                => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.RWBufferMethods), IntrinsicsDefinitions.RWBufferMethods), BufferMethodsImplementations.Instance),
             StructuredBufferType { WriteAllowed: false } => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.StructuredBufferMethods), IntrinsicsDefinitions.StructuredBufferMethods), StructuredBufferMethodsImplementations.Instance),
             StructuredBufferType { WriteAllowed: true } => (GetOrCreateExpander(thisType, nameof(IntrinsicsDefinitions.RWStructuredBufferMethods), IntrinsicsDefinitions.RWStructuredBufferMethods), StructuredBufferMethodsImplementations.Instance),
 

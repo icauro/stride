@@ -136,6 +136,10 @@ namespace Stride.Shaders.Compiler
                 case GraphicsPlatform.Vulkan:
                     shaderMixinSource.AddMacro("STRIDE_GRAPHICS_API_VULKAN", 1);
                     break;
+                case GraphicsPlatform.WebGPU:
+                    shaderMixinSource.AddMacro("STRIDE_GRAPHICS_API_WEBGPU", 1);
+                    shaderMixinSource.AddMacro("STRIDE_WEBGPU_TYPED_BUFFERS", 1);
+                    break;
                 default:
                     throw new NotSupportedException();
             }
@@ -159,15 +163,52 @@ namespace Stride.Shaders.Compiler
                 // D3D12 also goes through SPIR-V (then DXIL via mesa), so it needs the unified
                 // binding scheme — only D3D11/FXC consumes the per-class b#/t#/u#/s# bank style.
                 ResourcesRegisterSeparate: effectParameters.Platform is GraphicsPlatform.Direct3D11,
-                StripGoogleUserType: effectParameters.Platform is GraphicsPlatform.Vulkan,
+                StripGoogleUserType: effectParameters.Platform is GraphicsPlatform.Vulkan or GraphicsPlatform.WebGPU,
                 // Vulkan and D3D12 (spirv_to_dxil) read the SPIR-V layout; D3D11 packs the HLSL like Direct3D already
-                Direct3DStructuredBufferLayout: effectParameters.Platform is GraphicsPlatform.Vulkan or GraphicsPlatform.Direct3D12), log, out var spirvBytecode, out var effectReflection, out var usedHashSources, out var entryPoints))
+                Direct3DStructuredBufferLayout: effectParameters.Platform is GraphicsPlatform.Vulkan or GraphicsPlatform.Direct3D12,
+                WebGpuUniformLayout: effectParameters.Platform == GraphicsPlatform.WebGPU), log, out var spirvBytecode, out var effectReflection, out var usedHashSources, out var entryPoints))
                 return new EffectBytecodeCompilerResult(null, log);
+
+            if (effectParameters.Platform == GraphicsPlatform.WebGPU)
+            {
+                var inputValidation = Spirv.Tools.Spv.ValidateBinary(spirvBytecode, targetVulkan: true);
+                if (!inputValidation.IsValid)
+                {
+                    log.Error($"SPIR-V input validation failed before WebGPU optimization for effect {fullEffectName}: {inputValidation.Output}");
+                    return new EffectBytecodeCompilerResult(null, log);
+                }
+                // The mixer can leave unused stage interface types, including an
+                // empty CS_OUTPUT. Naga validates every declared type, so remove
+                // dead declarations. Run cleanup after dead globals as well:
+                // their unused pointer types/null constants can keep empty
+                // stage-stream structs alive through the first pass.
+                // Only opaque resource arguments need inlining for depth-image
+                // specialization. Prepare control flow as required by the
+                // SPIRV-Tools inliner; avoid expanding every material function.
+                // WebGPU pipelines use the compiled defaults for specialization
+                // constants. Freeze and evaluate their operations before Naga
+                // parses array lengths and other type declarations.
+                // Fold generic constant conditions before branch cleanup: SH
+                // evaluators contain higher-order array indices in dead branches.
+                foreach (var pass in new[] { "--freeze-spec-const", "--fold-spec-const-op-composite", "--wrap-opkill", "--ccp", "--eliminate-dead-branches", "--merge-return", "--inline-entry-points-opaque", "--ccp", "--eliminate-dead-branches", "--eliminate-dead-functions", "--eliminate-dead-code-aggressive", "--eliminate-dead-variables", "--eliminate-dead-const", "--eliminate-dead-code-aggressive" })
+                {
+                    try
+                    {
+                        var optimized = SpirvTools.Optimize(MemoryMarshal.Cast<byte, uint>(spirvBytecode), [pass], preserveInterface: false, env: SpirvTools.TargetEnv.Vulkan_1_4);
+                        spirvBytecode = MemoryMarshal.AsBytes(optimized.AsSpan()).ToArray();
+                    }
+                    catch (Exception exception)
+                    {
+                        log.Error($"WebGPU SPIR-V pass {pass} failed for {fullEffectName}: {exception.Message}", exception);
+                        break;
+                    }
+                }
+            }
 
             // Optional SPIR-V validation (requires spirv-val from Vulkan SDK)
             if (ValidateSpirv && spirvBytecode is { Length: > 0 })
             {
-                var validationResult = Spirv.Tools.Spv.ValidateBinary(spirvBytecode, targetVulkan: effectParameters.Platform is GraphicsPlatform.Vulkan);
+                var validationResult = Spirv.Tools.Spv.ValidateBinary(spirvBytecode, targetVulkan: effectParameters.Platform is GraphicsPlatform.Vulkan or GraphicsPlatform.WebGPU);
                 if (!validationResult.IsValid)
                     log.Error($"SPIR-V validation failed for effect {fullEffectName} (id: {mixinObjectId}): {validationResult.Output}");
             }
@@ -207,6 +248,7 @@ namespace Stride.Shaders.Compiler
                     break;
 #endif
                 case GraphicsPlatform.Vulkan:
+                case GraphicsPlatform.WebGPU:
                 case GraphicsPlatform.Direct3D12:
                     compiler = null;
                     break;
@@ -215,6 +257,12 @@ namespace Stride.Shaders.Compiler
             }
 
             var shaderStageBytecodes = new List<ShaderBytecode>();
+
+            if (effectParameters.Platform == GraphicsPlatform.WebGPU && entryPoints.Any(e => e.Stage is not (ShaderStage.Vertex or ShaderStage.Pixel or ShaderStage.Compute)))
+            {
+                log.Error("WebGPU supports vertex, pixel and compute shaders; geometry and tessellation stages are not supported.");
+                return new EffectBytecodeCompilerResult(null, log);
+            }
 
 #if STRIDE_PLATFORM_DESKTOP
             var stageStringBuilder = new StringBuilder();

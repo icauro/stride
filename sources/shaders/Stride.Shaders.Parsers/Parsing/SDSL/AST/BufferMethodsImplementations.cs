@@ -30,6 +30,12 @@ public class BufferMethodsImplementations : BufferMethodsDeclarations
     public override SpirvValue CompileGetDimensions(SymbolTable table, SpirvContext context, SpirvBuilder builder, FunctionType functionType, SpirvValue buffer, SpirvValue width, TextLocation location = default)
     {
         var uintType = context.GetOrRegister(ScalarType.UInt);
+        if (context.ReverseTypes[buffer.TypeId] is PointerType { BaseType: StructuredBufferType })
+        {
+            var length = builder.Insert(new OpArrayLength(uintType, context.Bound++, buffer.Id, 0));
+            builder.Insert(new OpStore(width.Id, length.ResultId, null, []));
+            return default;
+        }
         var sizeResult = builder.Insert(new OpImageQuerySize(uintType, context.Bound++, buffer.Id));
         builder.Insert(new OpStore(width.Id, sizeResult.ResultId, null, []));
         return default;

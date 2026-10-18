@@ -983,11 +983,13 @@ public partial class TypeName(string name, TextLocation info) : Literal(info)
             }
             else if (!IsArray && Generics.Count == 0 && SymbolType.TryGetBufferType(Name, null, out var bufferType))
             {
+                bufferType = LowerTypedBufferForWebGpu(table, bufferType);
                 table.DeclaredTypes.Add(fullTypeName, bufferType);
                 symbolType = bufferType;
             }
             else if (Generics.Count == 1 && SymbolType.TryGetBufferType(Name, (TypeName)Generics[0], out var genericBufferType))
             {
+                genericBufferType = LowerTypedBufferForWebGpu(table, genericBufferType);
                 table.DeclaredTypes.Add(fullTypeName, genericBufferType);
                 symbolType = genericBufferType;
             }
@@ -1023,6 +1025,16 @@ public partial class TypeName(string name, TextLocation info) : Literal(info)
         }
 
         return true;
+    }
+
+    private static SymbolType LowerTypedBufferForWebGpu(SymbolTable table, SymbolType type)
+    {
+        // WebGPU has storage buffers, but no SPIR-V DimBuffer/texel buffers.
+        // Lower the semantic type rather than renaming source tokens, keeping
+        // resource names and the caller's Buffer<T> syntax unchanged.
+        if (type is BufferType buffer && table.CurrentMacros.Any(macro => macro.Name == "STRIDE_WEBGPU_TYPED_BUFFERS"))
+            return new StructuredBufferType(buffer.BaseType, buffer.WriteAllowed);
+        return type;
     }
 
     public static SymbolType GenerateArrayType(SymbolTable table, SpirvContext context, SymbolType arraySymbolType, List<Expression> arraySizes)

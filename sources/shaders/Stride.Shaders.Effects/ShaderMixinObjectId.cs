@@ -83,6 +83,7 @@ namespace Stride.Shaders
             writer.Write(effectCompilerParameters.Profile);
             writer.Write(effectCompilerParameters.Debug);
             writer.Write(effectCompilerParameters.OptimizationLevel);
+            WriteWebGpuCompilerRevision(effectCompilerParameters.Platform);
 
             // Compute hash
             objectIdBuilder.Reset();
@@ -104,6 +105,7 @@ namespace Stride.Shaders
             writer.Write(compilerParameters.EffectParameters.Profile);
             writer.Write(compilerParameters.EffectParameters.Debug);
             writer.Write(compilerParameters.EffectParameters.OptimizationLevel);
+            WriteWebGpuCompilerRevision(compilerParameters.EffectParameters.Platform);
 
             writer.Write(compilerParameters);
 
@@ -112,6 +114,13 @@ namespace Stride.Shaders
             objectIdBuilder.Write(new ReadOnlySpan<byte>((void*)buffer, (int)memStream.Position));
 
             return objectIdBuilder.ComputeHash();
+        }
+
+        private void WriteWebGpuCompilerRevision(Graphics.GraphicsPlatform platform)
+        {
+            // WebGPU-specific SPIR-V preparation evolves independently. Keep
+            // every existing backend's serialized cache input unchanged.
+            if (platform == Graphics.GraphicsPlatform.WebGPU) writer.Write(6);
         }
     }
 }

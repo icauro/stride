@@ -30,7 +30,7 @@ public partial class ShaderMixer(IExternalShaderLoader shaderLoader)
     /// For the APIs that read the SPIR-V layout (Vulkan, Direct3D 12): structured buffers whose std430 layout differs from Direct3D's
     /// (3-element vectors...) use Direct3D's tight layout, so they read the same CPU data as on Direct3D 11.
     /// </param>
-    public record struct Options(bool ResourcesRegisterSeparate, bool StripGoogleUserType = false, bool Direct3DStructuredBufferLayout = false);
+    public record struct Options(bool ResourcesRegisterSeparate, bool StripGoogleUserType = false, bool Direct3DStructuredBufferLayout = false, bool WebGpuUniformLayout = false);
 
     public IExternalShaderLoader ShaderLoader { get; } = shaderLoader;
 
@@ -124,7 +124,7 @@ public partial class ShaderMixer(IExternalShaderLoader shaderLoader)
 
         // Merge cbuffers and rgroups
         MergeCBuffers(globalContext, context, temp);
-        ComputeCBufferReflection(globalContext, context, temp);
+        ComputeCBufferReflection(globalContext, context, temp, options.WebGpuUniformLayout);
 
         // From this point, assume ShaderInfo.StartInstruction/EndInstruction are not valid anymore, as we add instructions without updating them
 
