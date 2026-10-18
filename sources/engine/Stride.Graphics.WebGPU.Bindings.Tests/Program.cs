@@ -13,7 +13,7 @@ switch (args[0])
 {
     case "--async-context": await AsyncContextValidation.Run(args[1]); break;
     case "--write-probe": LayoutValidation.WriteProbe(args[1]); break;
-    case "--abi": LayoutValidation.Compare(args[1]); break;
+    case "--abi": LayoutValidation.Compare(args[1]); ShaderPackageValidation.Run(); break;
     case "--native": NativeValidation.Run(args[1]); break;
     case "--spirv": ShaderValidation.Run(args[1]); break;
     case "--context":

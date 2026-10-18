@@ -6,6 +6,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Stride.Shaders;
 
 namespace Stride.Graphics;
 
@@ -101,6 +102,7 @@ internal static partial class WebGpuShaderBytecode
 
     public static byte[] Prepare(ReadOnlySpan<byte> source, ISet<uint>? depthBindings = null, IReadOnlyDictionary<uint, PixelFormat>? storageFormats = null)
     {
+        source = WebGpuShaderPackage.GetSpirV(source);
         if (source.Length < 20 || source.Length % 4 != 0 || BinaryPrimitives.ReadUInt32LittleEndian(source) != 0x07230203)
             throw new ArgumentException("Expected a little-endian SPIR-V module.", nameof(source));
         var words = MemoryMarshal.Cast<byte, uint>(source);
@@ -127,6 +129,19 @@ internal static partial class WebGpuShaderBytecode
         if (depthBindings != null) knownDepthBindings.UnionWith(depthBindings);
         if (knownDepthBindings.Count > 0) output = SpecializeDepth(output, knownDepthBindings);
         return MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(output)).ToArray();
+    }
+
+    internal static string WgslVariantKey(byte[] source, ISet<uint>? depthBindings = null, IReadOnlyDictionary<uint, PixelFormat>? storageFormats = null)
+    {
+        var eligibleDepth = NullableFloat2DTextures(source);
+        if (depthBindings is null) eligibleDepth.Clear();
+        else eligibleDepth.IntersectWith(depthBindings);
+        var resources = ResourceBindings(source);
+        var formats = new List<KeyValuePair<uint, uint>>();
+        if (storageFormats is not null)
+            foreach (var format in storageFormats)
+                if (resources.Contains(format.Key)) formats.Add(new(format.Key, (uint)format.Value));
+        return WebGpuShaderPackage.VariantKey(eligibleDepth, formats);
     }
 
     private static HashSet<uint> ComparisonDepthBindings(List<uint> source)

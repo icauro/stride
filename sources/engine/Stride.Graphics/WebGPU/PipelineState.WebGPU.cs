@@ -189,6 +189,20 @@ public unsafe partial class PipelineState
 
     private WGPUShaderModule CreateModule(byte[] bytecode)
     {
+        if (OperatingSystem.IsBrowser() || WebGpuShaderPackage.IsPackage(bytecode))
+        {
+            var wgsl = System.Text.Encoding.UTF8.GetBytes(WebGpuShaderPackage.SelectWgsl(bytecode,
+                WebGpuShaderBytecode.WgslVariantKey(bytecode, webGpuDepthBindings, webGpuStorageFormats)));
+            fixed (byte* code = wgsl)
+            {
+                var source = WGPUShaderSourceWGSL.CreateDefault();
+                source.code = new WGPUStringView { data = code, length = (nuint)wgsl.Length };
+                var descriptor = WGPUShaderModuleDescriptor.CreateDefault(); descriptor.nextInChain = &source.chain;
+                var module = Api.wgpuDeviceCreateShaderModule(GraphicsDevice.WebGpuContext.Device, &descriptor);
+                try { GraphicsDevice.WebGpuContext.ThrowIfFailed(); return module; }
+                catch { if (module.Handle != 0) Api.wgpuShaderModuleRelease(module); throw; }
+            }
+        }
         var prepared = WebGpuShaderBytecode.Prepare(bytecode, webGpuDepthBindings, webGpuStorageFormats);
         fixed (byte* code = prepared)
         {
