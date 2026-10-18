@@ -310,6 +310,14 @@ public partial class SpirvContext
 
     private void ImportShaderStruct(int shaderId, StructuredType structType, out int structImportedId)
     {
+        // Synthetic buffer structs describe resources, not a shader-owned
+        // user struct. Register them locally so an opaque-buffer helper does
+        // not require its declaring shader to be mixed into the calling stage.
+        if (structType is StructuredBufferType)
+        {
+            structImportedId = GetOrRegister(structType);
+            return;
+        }
         var @struct = Add(new OpImportStructSDSL(Bound++, structType.ToId(), shaderId));
         AddName(@struct.ResultId, structType.Name);
 

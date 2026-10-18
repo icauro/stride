@@ -332,6 +332,11 @@ public sealed partial record StructType(string Name, List<StructuredTypeMember> 
 
 public sealed partial record StructuredBufferType(SymbolType BaseType, bool WriteAllowed = false) : StructuredType($"{(WriteAllowed ? "RW" : "")}StructuredBuffer<{BaseType.ToId()}>", [new(string.Empty, new ArrayType(BaseType, -1), TypeModifier.None)])
 {
+    // Resource identity comes from its element type and access, not the
+    // reference identity of the synthetic Members list recreated on import.
+    public bool Equals(StructuredBufferType? other) => other is not null && BaseType == other.BaseType && WriteAllowed == other.WriteAllowed;
+    public override int GetHashCode() => HashCode.Combine(BaseType, WriteAllowed);
+
     public override string ToId() => $"{(WriteAllowed ? "RW" : "")}StructuredBuffer<{BaseType.ToId()}>";
     public override string ToString() => $"{(WriteAllowed ? "RW" : "")}StructuredBuffer<{BaseType}>";
 }

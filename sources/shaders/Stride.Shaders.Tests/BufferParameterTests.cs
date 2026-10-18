@@ -29,6 +29,31 @@ public class BufferParameterTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    [Theory]
+    [InlineData("StructuredBuffer<uint>")]
+    [InlineData("RWStructuredBuffer<uint>")]
+    public void ImportedBufferParametersMatchOverrides(string type)
+    {
+        File.WriteAllText(Path.Combine(sourceDir.FullName, "BufferBase.sdsl"), $$"""
+            shader BufferBase
+            {
+                void Use({{type}} values, uint address) { }
+            }
+            """);
+        var (ok, log) = Compile("BufferDerived", $$"""
+            shader BufferDerived : BufferBase
+            {
+                override void Use({{type}} values, uint address) { }
+                {{type}} Input;
+                RWStructuredBuffer<uint> Output;
+                [numthreads(1, 1, 1)]
+                void CSMain() { Use(Input, 0); Output[0] = 1; }
+            }
+            """);
+        Assert.True(ok, log);
+        Mix(sourceDir.FullName, "BufferDerived", RendererBackend.Vulkan);
+    }
+
     [Fact]
     public void EachSetOfBuffersGetsOneCopy()
     {
