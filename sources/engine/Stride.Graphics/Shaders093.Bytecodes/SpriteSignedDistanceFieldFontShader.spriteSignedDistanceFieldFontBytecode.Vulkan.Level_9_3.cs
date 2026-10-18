@@ -9,7 +9,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-#if STRIDE_GRAPHICS_API_VULKAN
+#if STRIDE_GRAPHICS_API_VULKAN || STRIDE_GRAPHICS_API_WEBGPU
 
 namespace Stride.Graphics
 {

@@ -64,6 +64,11 @@
     <StrideGraphicsApiDefines>STRIDE_GRAPHICS_API_VULKAN</StrideGraphicsApiDefines>
   </PropertyGroup>
 
+  <!-- Experimental backend: opt-in only, excluded from the default API list. -->
+  <PropertyGroup Condition=" '$(StrideGraphicsApi)' == 'WebGPU' ">
+    <StrideGraphicsApiDefines>STRIDE_GRAPHICS_API_WEBGPU</StrideGraphicsApiDefines>
+  </PropertyGroup>
+
   <!-- Apply graphics API defines to compiler -->
   <PropertyGroup>
     <DefineConstants Condition="'$(StrideGraphicsApiDefines)' != ''">$(DefineConstants);$(StrideGraphicsApiDefines)</DefineConstants>
@@ -88,7 +93,7 @@
   <!-- ================================================================ -->
   <PropertyGroup>
     <StrideUI Condition="'$(StrideTargetFramework)' != '$(StrideFrameworkUWP)'">SDL</StrideUI>
-    <StrideUI Condition="'$(StrideTargetFramework)' == '$(StrideFrameworkWindows)' AND ('$(StrideGraphicsApi)' == 'Direct3D11' Or '$(StrideGraphicsApi)' == 'Direct3D12' Or '$(StrideGraphicsApi)' == 'Vulkan')">$(StrideUI);WINFORMS;WPF</StrideUI>
+    <StrideUI Condition="'$(StrideTargetFramework)' == '$(StrideFrameworkWindows)' AND ('$(StrideGraphicsApi)' == 'Direct3D11' Or '$(StrideGraphicsApi)' == 'Direct3D12' Or '$(StrideGraphicsApi)' == 'Vulkan' Or '$(StrideGraphicsApi)' == 'WebGPU')">$(StrideUI);WINFORMS;WPF</StrideUI>
 
     <DefineConstants Condition="$(StrideUI.Contains('SDL'))">$(DefineConstants);STRIDE_UI_SDL</DefineConstants>
     <DefineConstants Condition="$(StrideUI.Contains('WINFORMS'))">$(DefineConstants);STRIDE_UI_WINFORMS</DefineConstants>

@@ -16,7 +16,7 @@ public static class GraphicsApiSelector
 {
     // Canonical names matching the per-API package/bin subfolders and StrideGraphicsApi msbuild values,
     // in fallback-preference order.
-    internal static readonly string[] KnownApis = ["Direct3D11", "Direct3D12", "Vulkan"];
+    internal static readonly string[] KnownApis = ["Direct3D11", "Direct3D12", "Vulkan", "WebGPU"];
 
     /// <summary>API used when nothing is selected — Windows uses Direct3D11, other platforms Vulkan.</summary>
     public static string Default => OperatingSystem.IsWindows() ? "Direct3D11" : "Vulkan";

@@ -51,6 +51,9 @@
     <PackageReference Include="Microsoft.Direct3D.D3D12" Condition="'$(TargetFramework)' == '$(StrideFramework)'" GeneratePathProperty="true" />
     <PackageReference Include="Silk.NET.Windowing.Sdl" Condition="'$(TargetFramework)' == '$(StrideFrameworkAndroid)'" PrivateAssets="compile" />
   </ItemGroup>
+  <ItemGroup Condition="'$(StrideGraphicsApi)' == 'WebGPU'">
+    <ProjectReference Include="../Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
+  </ItemGroup>
   <Choose>
     <When Condition=" '$(TargetFramework)' == '$(StrideFramework)' And '$(StrideGraphicsApi)' == 'Direct3D12' ">
       <ItemGroup>

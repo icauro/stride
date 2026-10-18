@@ -84,7 +84,7 @@ namespace Stride.Games
 #endif
 
                  case AppContextType.DesktopWinForms:
-#if (STRIDE_GRAPHICS_API_DIRECT3D || STRIDE_GRAPHICS_API_VULKAN) && STRIDE_UI_WINFORMS
+#if (STRIDE_GRAPHICS_API_DIRECT3D || STRIDE_GRAPHICS_API_VULKAN || STRIDE_GRAPHICS_API_WEBGPU) && STRIDE_UI_WINFORMS
                     if (GameContextFactory.WinFormsBackendEnabled)
                         return new GameWindowWinforms();
 #endif
