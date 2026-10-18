@@ -2,14 +2,19 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Net.Http;
+using System.Linq;
+using System.Runtime.InteropServices;
 using Stride.Graphics;
 using Stride.Graphics.WebGPU;
 using Stride.Core.Mathematics;
+using Stride.Rendering;
+using Stride.Shaders;
 using Api = Stride.Graphics.WebGPU.WebGPU;
 
 internal static class BrowserContextCheck
 {
-    public static async Task RunAsync()
+    public static async Task RunAsync(string effectBaseUrl)
     {
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
@@ -49,10 +54,10 @@ internal static class BrowserContextCheck
             context.Dispose();
         }
         finally { ReleaseBuffer(buffer); }
-        await VerifyEngineDevice();
+        await VerifyEngineDevice(effectBaseUrl);
     }
 
-    private static async Task VerifyEngineDevice()
+    private static async Task VerifyEngineDevice(string effectBaseUrl)
     {
         GraphicsAdapterFactory.Dispose();
         try
@@ -85,8 +90,66 @@ internal static class BrowserContextCheck
                     if (pixel != expected) throw new Exception("Stride browser command-list clear returned incorrect pixels.");
             }
             await device.WaitForWebGPUIdleAsync();
+            await VerifyEffects(device, commands, effectBaseUrl);
         }
         finally { GraphicsAdapterFactory.Dispose(); }
+    }
+
+    private static async Task VerifyEffects(GraphicsDevice device, CommandList commands, string effectBaseUrl)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(effectBaseUrl), Timeout = TimeSpan.FromSeconds(10) };
+        var textureCode = EffectBytecode.FromBytes(await http.GetByteArrayAsync("WebGpuValidation.effect"));
+        var computeCode = EffectBytecode.FromBytes(await http.GetByteArrayAsync("WebGpuCompute.effect"));
+        if (textureCode.Stages.Concat(computeCode.Stages).Any(stage => !WebGpuShaderPackage.IsPackage(stage.Data)))
+            throw new Exception("Browser effect contains raw SPIR-V instead of packaged WGSL.");
+        using var effect = new Effect(device, textureCode);
+        using var instance = new EffectInstance(effect);
+        instance.Parameters.Set(SpriteBaseKeys.MatrixTransform, Matrix.Identity);
+        using var pattern = Texture.New2D(device, 2, 2, PixelFormat.R8G8B8A8_UNorm,
+            new uint[] { 0xffffffff, 0xff0000ff, 0xff00ff00, 0xffff0000 });
+        instance.Parameters.Set(TexturingKeys.Texture0, pattern);
+        instance.Parameters.Set(TexturingKeys.Sampler, device.SamplerStates.PointClamp);
+        using var output = Texture.New2D(device, 2, 2, PixelFormat.R8G8B8A8_UNorm, TextureFlags.RenderTarget);
+        using var staging = output.ToStaging();
+        commands.SetRenderTargetAndViewport(null, output);
+        var graphics = new GraphicsContext(device, commandList: commands);
+        graphics.DrawQuad(instance);
+        commands.Copy(output, staging);
+        var pixels = new uint[4];
+        var started = Stopwatch.GetTimestamp();
+        while (!staging.GetData(commands, pixels, doNotWait: true))
+        {
+            if (Stopwatch.GetElapsedTime(started).TotalSeconds > 10) throw new TimeoutException("WGSL textured readback timed out.");
+            await Task.Delay(1);
+        }
+        if (!pixels.SequenceEqual(new uint[] { 0xffbf8040, 0xff000040, 0xff008000, 0xffbf0000 }))
+            throw new Exception("Browser SDSL/WGSL texture pixels or orientation changed.");
+        using var computeEffect = new Effect(device, computeCode);
+        using var compute = new EffectInstance(computeEffect);
+        using var values = Stride.Graphics.Buffer.Structured.New(device, 64, sizeof(uint), unorderedAccess: true);
+        compute.Parameters.Set(ParameterKeys.NewObject<Stride.Graphics.Buffer>(name: "WebGpuCompute.Values"), values);
+        compute.UpdateEffect(device);
+        var pipeline = new MutablePipelineState(device);
+        pipeline.State.RootSignature = compute.RootSignature;
+        pipeline.State.EffectBytecode = computeCode;
+        pipeline.Update();
+        commands.SetPipelineState(pipeline.CurrentState!);
+        compute.Apply(graphics);
+        commands.Dispatch(8, 1, 1);
+        using var readback = values.ToStaging();
+        commands.Copy(values, readback);
+        var data = new int[64];
+        started = Stopwatch.GetTimestamp();
+        MappedResource mapped;
+        while ((mapped = commands.MapSubResource(readback, 0, MapMode.Read, doNotWait: true)).DataBox.IsEmpty)
+        {
+            if (Stopwatch.GetElapsedTime(started).TotalSeconds > 10) throw new TimeoutException("WGSL compute readback timed out.");
+            await Task.Delay(1);
+        }
+        try { Marshal.Copy(mapped.DataBox.DataPointer, data, 0, data.Length); }
+        finally { commands.UnmapSubResource(mapped); }
+        if (!data.SequenceEqual(Enumerable.Range(0, 64).Select(index => index * 3 + 7)))
+            throw new Exception("Browser SDSL/WGSL compute returned incorrect values.");
     }
 
     private static unsafe WGPUBuffer CreateBuffer(WebGpuDeviceContext context)

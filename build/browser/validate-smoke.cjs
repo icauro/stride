@@ -96,6 +96,9 @@ async function main() {
                     assert.equal(result.engineDeviceVerified, true);
                     assert.equal(result.engineClearFrames, 3);
                     assert.equal(result.engineVerifiedPixels, 17 * 9 * 3);
+                    assert.equal(result.wgslEffectsVerified, true);
+                    assert.equal(result.wgslPixels, 4);
+                    assert.equal(result.wgslComputeValues, 64);
                 }
                 assert.equal(result.managedPixelsVerified, true);
                 assert.equal(result.invalidMapRejected, true);

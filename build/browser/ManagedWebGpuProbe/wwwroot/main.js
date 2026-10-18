@@ -7,6 +7,12 @@ try {
     const runtime = await dotnet.create();
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
+        effectBaseUrl: () => new URL('./effects/', document.baseURI).href,
+        reportEffects: (pixels, values) => {
+            result.wgslEffectsVerified = true;
+            result.wgslPixels = pixels;
+            result.wgslComputeValues = values;
+        },
         reportContext: () => { result.sharedContextVerified = true; },
         reportEngineDevice: (clearFrames, verifiedPixels) => {
             result.engineDeviceVerified = true;
@@ -28,7 +34,7 @@ try {
         }
     });
     await runtime.runMain();
-    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || !result.engineDeviceVerified || result.frames.length !== 3)
+    if (!result.managedPixelsVerified || !result.invalidMapRejected || !result.sharedContextVerified || !result.engineDeviceVerified || !result.wgslEffectsVerified || result.frames.length !== 3)
         throw new Error('Managed binding verification did not complete.');
     result.status = 'passed';
 } catch (error) {

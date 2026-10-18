@@ -73,6 +73,8 @@ shader-variant, asset-loading or lifecycle compatibility.
 
 ```powershell
 pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe
+cargo install naga-cli --version 29.0.0 --locked --root build/wgpu/ShaderPackageTool/obj/naga
+pwsh -NoProfile -File build/browser/PrepareEngineShaders.ps1 -Naga build/wgpu/ShaderPackageTool/obj/naga/bin/naga.exe
 $wasmProbeCache = Join-Path $env:LOCALAPPDATA 'Stride/WasmCache/net11-rc2-emscripten-6.0.2'
 dotnet publish build/browser/ManagedWebGpuProbe/ManagedWebGpuProbe.csproj -c Release -p:StridePlatforms=Browser -p:StrideSkipAutoPack=true -p:StrideAssemblyProcessorFramework=net10.0 "-p:WasmCachePath=$wasmProbeCache"
 Push-Location build/browser
@@ -96,10 +98,21 @@ clears through Stride CommandList, Texture.Copy and nonblocking GetData. Every
 pixel must match before async device disposal. It verifies factory disposal of an
 unused prepared device. It requires `sharedContextVerified` and
 `engineDeviceVerified` across load and reload. The published import table now
-contains68 audited core functions;
+contains83 audited core functions;
 native polling, timestamp-period queries and surfacePresent must remain absent.
 This verifies context/GraphicsDevice startup and clears, not a running game.
-Space Escape still needs WGSL effects, canvas presentation, input and assets.
+Space Escape still needs its complete effect/variant set, canvas presentation,
+input and packaged game assets.
+
+Desktop preparation compiles real SDSL texture/compute effects and converts them
+with pinned Naga29.0.0 using the shared package tool. Generated assets stay in the
+probe's ignored obj/effects folder and publish under effects/. At runtime C#
+HttpClient fetches them and Stride deserializes their actual EffectBytecode,
+reflection and parameter keys. The renderer verifies four exact textured pixels
+including orientation, then dispatches compute and verifies all64buffer values.
+The harness requires `wgslEffectsVerified` on load/reload. No converter executable
+or runtime SDSL compilation is needed in browser startup. This is shader asset
+delivery evidence; it does not establish the full game data/db content mount.
 
 The project registers the existing logical import module `wgpu_native` with the
 pinned .NET11 RC2 Mono WASM import generator. Its final linker supplies Emdawn;
@@ -117,7 +130,7 @@ Invalid-map validation/retry, DLL-loader rejection and unavailable-adapter start
 are checked alongside the shared triangle pixel assertions and reload.
 
 The validator also checks the generated pinvoke-table.h against core-imports.json:
-exactly43 imports whose signatures match both audited headers. Any change requires
+exactly83 imports whose signatures match both audited headers. Any change requires
 review against the pinned headers. Native-only calls, incompatible multi-draw
 signatures and the browser-aborting surfacePresent call are excluded. This is a
 fixture allowlist, not a compile-time ban on those methods for every future host.
