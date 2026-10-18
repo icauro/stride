@@ -16,7 +16,7 @@
     <Compile Include="obj/browser-shaders/*.cs" />
   </ItemGroup>
   <Target Name="CheckBrowserBuiltinShaders" BeforeTargets="CoreCompile" Condition="'$(TargetFramework)' == '$(StrideFrameworkBrowser)'">
-    <Error Condition="!Exists('obj/browser-shaders/SpriteEffect.bytecode.Vulkan.Level_9_1.cs')" Text="Run build/browser/PrepareBuiltinShaders.ps1 -Naga path/to/naga-29.0.0 before building browser graphics." />
+    <Error Condition="!Exists('obj/browser-shaders/SpriteEffect.bytecode.WebGPU.Level_9_1.cs')" Text="Run build/browser/PrepareBuiltinShaders.ps1 -Naga path/to/naga-29.0.0 before building browser graphics." />
   </Target>
   <ItemGroup Condition=" '$(StrideGraphicsApi)' == 'Vulkan' ">
     <StrideNativeLib Include="..\..\..\deps\MoltenVK\$(StridePlatformDeps)\**\*.*">
