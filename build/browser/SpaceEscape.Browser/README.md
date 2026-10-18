@@ -1,10 +1,12 @@
 # Space Escape browser host
 
-Experimental source-backed port of the original sample. Browser startup loads
-seven scene entities after the splash. The first scene frames currently fail:
-the recorded material cache lacks a runtime variant, and Chrome rejects the
-built-in sprite shader's non-uniform texture sampling. The end-to-end validator
-reports these failures. A successful publish is not proof of playable gameplay.
+Source-backed port of the original sample. Chrome verification covers rendered
+menu/gameplay, mouse/touch Start, keyboard/swipe lane changes and sliding,
+advancing distance, game over, Menu, Retry, GPU backbuffer and viewport resize,
+focus loss/resume, reload and async shutdown. Both keyboard/mouse and touch lanes
+exercise fresh startup and reload, audit the native imports and validate the
+exact active WASM module. This does not establish support for every browser or
+device-loss recovery.
 
 Run from the checkout root with the pinned .NET SDK/workload installed and required
 Space Escape/engine/native-tool LFS inputs hydrated:
@@ -17,6 +19,7 @@ Space Escape/engine/native-tool LFS inputs hydrated:
 dotnet publish build/browser/SpaceEscape.Browser/SpaceEscape.Browser.csproj -m:1 -c Release -p:StridePlatforms=Browser -p:StrideSkipAutoPack=true -p:StrideAssemblyProcessorFramework=net10.0 -p:WasmCachePath=C:/path/to/private-cache
 $env:BROWSER_EXECUTABLE = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 node build/browser/validate-space-escape.cjs
+node build/browser/validate-space-escape.cjs --touch
 ```
 
 Use a private cache on the SDK drive with this Windows Emscripten release. Serve
@@ -30,5 +33,15 @@ produce an actionable failure rather than trying to load a native compiler or
 submitting SPIR-V to browser WebGPU. Content conversion uses a separate database
 and preserves asset namespaces, aliases and transitive bundled objects. It
 currently retains original cached effect objects alongside their WGSL replacements.
-Only default WGSL resource variants are prepared; runtime requirements still need
-to be verified against the actual sample. DOM text/IME input remains unimplemented.
+Only default WGSL resource variants are prepared. `effect-requests.json` contains
+the sample's exact resolved material requests captured from browser execution.
+Desktop replay verifies their hashes before compiling and packaging them; no
+native shader compiler runs in the browser. To refresh captures, set
+`BROWSER_EFFECT_REQUESTS_PATH` to a local file when running the validator, then
+pass that file as `-EffectRequests` to the content preparer. Review and update
+the versioned requests when the sample's permutations change. Built-in sprite/UI/
+font effects are compiled separately from current SDSL under ignored `obj/` paths.
+DOM text/IME input remains unimplemented; this sample uses labels and buttons.
+GPU error callback text has an outstanding WASM aggregate-marshalling issue
+observed during earlier invalid-shader diagnostics; normal sample runs report
+no GPU errors. That error-reporting path needs a separate focused regression.
