@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <WasmEnableHotReload>false</WasmEnableHotReload>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
+  </ItemGroup>
 </Project>
