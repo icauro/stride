@@ -245,6 +245,28 @@ explicit native depthSlice. The regression checks every texel and verifies that
 clearing another mip does not disturb earlier values. This does not establish
 geometry-shader/layered 3D drawing or partial-depth view support.
 
+### Portable asynchronous context
+
+The shared context also offers `CreatePortableAsync`, `WaitForIdleAsync` and
+`ReadBufferAsync`. Portable creation requests only core feature names; native
+clamp-to-border, encoder timestamp and adapter-specific format extensions stay
+on the existing native creation path. Load the native provider before portable
+creation on desktop; a statically linked browser provider needs no DLL loader.
+
+Browser requests yield to callbacks without polling or blocking sleeps. Desktop
+async requests poll with asynchronous delays. Cancellation/timeout abandons
+unconsumed results, and late adapter/device callbacks release their handles.
+Readback holds a buffer reference through completion and unmaps before returning
+copied bytes. Await it before copying into, mapping or otherwise reusing that
+buffer; overlapping reads/reuse reject explicitly. Disposing the context cancels
+outstanding async queue/readback waits. Synchronous queue waits and maps reject
+in a browser. Full browser game startup and async shutdown require host integration.
+
+`Validate.ps1 -NativeLibrary ...` includes portable async device, queue, exact
+readback/reuse and callback ownership checks on Vulkan and D3D12, alongside the
+existing synchronous rendering checks. Device-loss recovery and browser canvas
+presentation require separate integration evidence.
+
 ### Editor line rasterization
 
 Like Stride's Vulkan backend, WebGPU accepts the legacy

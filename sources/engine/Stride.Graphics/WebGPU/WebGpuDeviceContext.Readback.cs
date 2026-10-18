@@ -26,6 +26,7 @@ internal sealed unsafe partial class WebGpuDeviceContext
     public bool TryMapBufferRead(WGPUBuffer buffer, ulong length, out nint pointer)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        if (asyncReadBuffers.ContainsKey(buffer)) throw new InvalidOperationException("Await asynchronous readback before reusing this buffer.");
         pointer = 0;
         lock (pendingReadBuffers)
         {
@@ -36,7 +37,7 @@ internal sealed unsafe partial class WebGpuDeviceContext
                 pendingReadBuffers.Add(buffer, request);
                 pendingReadCallbacks[request.Token] = request;
                 var callback = WGPUBufferMapCallbackInfo.CreateDefault();
-                callback.mode = WGPUCallbackMode.AllowProcessEvents;
+                callback.mode = OperatingSystem.IsBrowser() ? WGPUCallbackMode.AllowSpontaneous : WGPUCallbackMode.AllowProcessEvents;
                 callback.callback = &OnReadMap;
                 callback.userdata1 = (void*)request.Token;
                 Api.wgpuBufferMapAsync(buffer, WGPUMapMode.Read, 0, (nuint)length, callback);
@@ -63,6 +64,7 @@ internal sealed unsafe partial class WebGpuDeviceContext
     // the token before Unmap makes cancellation callbacks harmless.
     public void CancelPendingRead(WGPUBuffer buffer)
     {
+        if (asyncReadBuffers.ContainsKey(buffer)) throw new InvalidOperationException("Await asynchronous readback before reusing this buffer.");
         lock (pendingReadBuffers)
         {
             if (!pendingReadBuffers.Remove(buffer, out var request)) return;

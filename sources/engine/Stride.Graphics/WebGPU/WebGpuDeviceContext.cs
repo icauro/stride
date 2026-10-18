@@ -28,6 +28,7 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
     private readonly Func<string, Exception> deviceLostException;
     private readonly Dictionary<uint, WGPUBuffer> nullReadBuffers = new();
     private bool disposed;
+    private readonly CancellationTokenSource lifetime = new();
     public WGPUInstance Instance { get; private set; }
     public WGPUAdapter Adapter { get; private set; }
     public WGPUDevice Device { get; private set; }
@@ -165,6 +166,7 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
 
     private void Poll()
     {
+        if (OperatingSystem.IsBrowser()) return;
         Api.wgpuInstanceProcessEvents(Instance);
         if (Device.Handle != 0) Api.wgpuDevicePoll(Device, 0, null);
     }
@@ -213,6 +215,7 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
 
     public void WaitForIdle()
     {
+        if (OperatingSystem.IsBrowser()) throw new PlatformNotSupportedException("Use asynchronous WebGPU queue completion in a browser.");
         ObjectDisposedException.ThrowIf(disposed, this);
         ThrowIfFailed();
         var request = new Pending<bool>(_ => { });
@@ -263,6 +266,7 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
 
     public nint MapBufferRead(WGPUBuffer buffer, ulong length)
     {
+        if (OperatingSystem.IsBrowser()) throw new PlatformNotSupportedException("Use asynchronous WebGPU readback in a browser.");
         CancelPendingRead(buffer);
         ObjectDisposedException.ThrowIf(disposed, this);
         if (length <= 0 || length % 4 != 0) throw new ArgumentOutOfRangeException(nameof(length));
@@ -297,6 +301,7 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
     {
         if (disposed) return;
         disposed = true;
+        lifetime.Cancel();
         ReleaseNullReadTexture();
         lock (pendingReadBuffers)
         {

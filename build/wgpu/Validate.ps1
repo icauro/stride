@@ -34,4 +34,6 @@ if ($NativeLibrary) {
     if ($LASTEXITCODE -ne 0) { throw 'Native smoke validation failed.' }
     & dotnet run --no-build --project $tests -- --context ([IO.Path]::GetFullPath($NativeLibrary))
     if ($LASTEXITCODE -ne 0) { throw 'WebGPU context/render validation failed.' }
+    & dotnet run --no-build --project $tests -- --async-context ([IO.Path]::GetFullPath($NativeLibrary))
+    if ($LASTEXITCODE -ne 0) { throw 'Portable async WebGPU context/readback validation failed.' }
 } else { Write-Output 'Native GPU validation not run; supply -NativeLibrary to enable it.' }

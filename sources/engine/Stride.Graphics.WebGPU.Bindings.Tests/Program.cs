@@ -8,9 +8,10 @@ using System.Text.RegularExpressions;
 using Stride.Graphics.WebGPU;
 using Api = Stride.Graphics.WebGPU.WebGPU;
 
-if (args.Length != 2) throw new ArgumentException("Usage: BindingsValidation --write-probe <probe.c> | --abi <probe-output> | --native <absolute-library-path> | --context <absolute-library-path>");
+if (args.Length != 2) throw new ArgumentException("Usage: BindingsValidation --write-probe <probe.c> | --abi <probe-output> | --native <absolute-library-path> | --context <absolute-library-path> | --async-context <absolute-library-path>");
 switch (args[0])
 {
+    case "--async-context": await AsyncContextValidation.Run(args[1]); break;
     case "--write-probe": LayoutValidation.WriteProbe(args[1]); break;
     case "--abi": LayoutValidation.Compare(args[1]); break;
     case "--native": NativeValidation.Run(args[1]); break;
