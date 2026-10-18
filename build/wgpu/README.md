@@ -285,6 +285,43 @@ uses that completed wait, without blocking the browser. Ordinary synchronous
 disposal still rejects an undrained browser device. Game/window closing needs its
 own async host sequence; this device API does not implement a game shutdown loop.
 
+### Offline WGSL shaders
+
+WebGPU shader packages retain original SPIR-V for native specialization and
+reflection, plus explicitly converted WGSL variants. Package version1 and the
+converter identity participate in the shader data hash; converted ShaderBytecode
+IDs are recomputed without changing the common EffectBytecode serialization
+layout. Native raw SPIR-V remains supported. Packaged shaders use WGSL on both
+native and browser paths so native validation exercises the browser shader form.
+Browsers reject raw SPIR-V and missing depth/storage variants explicitly.
+
+The C# ShaderPackageTool runs Naga only during asset preparation. Pin the external
+converter (MIT/Apache-2.0, [Naga](https://github.com/gfx-rs/wgpu/tree/v29.0.0/naga)):
+
+```powershell
+cargo install naga-cli --version 29.0.0 --locked --root build/wgpu/ShaderPackageTool/obj/naga
+pwsh -NoProfile -File build/wgpu/ValidateWgsl.ps1 -NativeLibrary <absolute-wgpu-native.dll> -Naga build/wgpu/ShaderPackageTool/obj/naga/bin/naga.exe
+```
+
+This lane compiles real SDSL effects, converts/validates WGSL and checks texture
+pixels/orientation and compute values on Vulkan and D3D12. The tool verifies Naga's
+version and records the executable SHA256 and preparation revision in each package.
+It uses `--keep-coordinate-space` to match the native SPIR-V import convention;
+the CLI default flips Y and changes winding. No converter runs in browser startup.
+
+For a serialized effect, run ShaderPackageTool with `<naga> <input-effect>
+<output-effect> [variant-requests.json]`. It always includes the default variant.
+Optional requests use this shape (numeric binding indices come from reflection):
+
+```json
+[{ "DepthBindings": [3], "StorageFormats": { "7": "R8G8B8A8_UNorm" } }]
+```
+
+The canonical key filters resources to the shader module and removes already
+inferred comparison-depth bindings. Missing variants never fall back to an
+incompatible layout. Variant enumeration and asset-pipeline integration for the
+complex sample remain separate work; this tool does not establish sample coverage.
+
 ### Editor line rasterization
 
 Like Stride's Vulkan backend, WebGPU accepts the legacy

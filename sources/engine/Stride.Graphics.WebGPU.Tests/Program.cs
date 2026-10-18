@@ -3,6 +3,18 @@
 using Stride.Graphics;
 using Stride.Core.Mathematics;
 
+if (args.Length == 2 && args[0] == "--export-wgsl")
+{
+    WgslValidation.Export(args[1]);
+    return;
+}
+if (args.Length == 2 && args[0] == "--wgsl")
+{
+    using var device = GraphicsDevice.New();
+    WgslValidation.Run(device, args[1]);
+    return;
+}
+
 if (args.Contains("--portable"))
 {
     Stride.Graphics.WebGPU.WebGPU.LoadNativeLibrary(Environment.GetEnvironmentVariable("STRIDE_WEBGPU_NATIVE_LIBRARY") ?? throw new Exception("Missing native provider."));
