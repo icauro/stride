@@ -1,4 +1,4 @@
-param()
+param([ValidateSet('ManagedWebGpuProbe', 'SpaceEscape.Browser')][string]$Project = 'ManagedWebGpuProbe')
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'This pinned FreeType port preparation currently targets the Windows WASM toolchain.' }
 $dotnetRoot = Split-Path (Get-Command dotnet).Source
@@ -19,7 +19,7 @@ $script = $script.Replace("final, 'freetype', flags=flags", "final, 'stride-free
 if (-not $script.Contains("'-sWASM_LEGACY_EXCEPTIONS=0'") -or -not $script.Contains("'libstride-freetype-modern-sjlj.a'")) {
     throw 'FreeType port preparation failed to apply its audited exception-mode/cache changes.'
 }
-$output = Join-Path $PSScriptRoot 'ManagedWebGpuProbe/obj/freetype'
+$output = Join-Path $PSScriptRoot "$Project/obj/freetype"
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 [IO.File]::WriteAllText((Join-Path $output 'stride-freetype.port.py'), $script)
 Write-Output 'Prepared project-private FreeType 2.13.3 port with modern Wasm EH and separate cache names.'

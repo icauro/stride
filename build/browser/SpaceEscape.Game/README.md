@@ -16,3 +16,8 @@ This is a library, not a runnable browser game. A browser executable, prepared
 sample asset database and complete WGSL effect cache must be integrated before
 Space Escape can run. `ManagedWebGpuProbe` currently tests the browser engine
 foundation with separate fixtures; it does not run Space Escape.
+
+The experimental executable and current validation limitations are documented in
+[`../SpaceEscape.Browser/README.md`](../SpaceEscape.Browser/README.md). The same
+library builds as a desktop host assembly when `StridePlatforms=Windows`, allowing
+the asset compiler to load original script types without loading browser assemblies.

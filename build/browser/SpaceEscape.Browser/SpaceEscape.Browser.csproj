@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+    <WasmBuildNative>true</WasmBuildNative>
+    <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false --use-port=obj/freetype/stride-freetype.port.py</EmccExtraLDFlags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SpaceEscape.Game/SpaceEscape.Game.csproj" />
+    <Content Include="../Shared/browser-input.js" Link="wwwroot/browser-input.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Shared/FreeType-LICENSE.txt" Link="wwwroot/FreeType-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../CWebGpuProbe/wwwroot/THIRD-PARTY-NOTICES.txt" Link="wwwroot/THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="obj/content/web/**/*" Link="wwwroot/content/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckBrowserInputs" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py')" Text="Run PrepareEmdawn.ps1 -Project SpaceEscape.Browser." />
+    <Error Condition="!Exists('obj/freetype/stride-freetype.port.py')" Text="Run PrepareFreeType.ps1 -Project SpaceEscape.Browser." />
+    <Error Condition="!Exists('obj/content/web/manifest.json')" Text="Run PrepareSpaceEscapeContent.ps1 -Naga path/to/naga-29.0.0." />
+  </Target>
+  <Target Name="RegisterStaticModules" BeforeTargets="_GenerateManagedToNative">
+    <ItemGroup>
+      <_WasmPInvokeModules Include="wgpu_native" />
+      <_WasmPInvokeModules Include="freetype" />
+    </ItemGroup>
+  </Target>
+</Project>
