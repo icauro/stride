@@ -1,0 +1,11 @@
+{
+  "name": "stride-browser-validation",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "smoke": "node validate-smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

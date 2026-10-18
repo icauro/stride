@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+  </PropertyGroup>
+</Project>
