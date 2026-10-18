@@ -7,10 +7,63 @@ using Stride.Core.Storage;
 using Stride.Engine;
 using Stride.Engine.Design;
 using Stride.Games;
+using Stride.Graphics;
 using Stride.Rendering.Compositing;
 using System.Diagnostics;
 using Stride.Shaders;
 using Stride.Core.Serialization;
+using Stride.Shaders.Compiler;
+using Stride.Rendering;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
+if (args.Length == 4 && args[0] == "--replay-effects")
+{
+    var assemblyPath = Path.GetFullPath(args[3]);
+    Assembly? ResolveSample(object? sender, ResolveEventArgs request)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(assemblyPath)!, new AssemblyName(request.Name).Name + ".dll");
+        return File.Exists(path) ? Assembly.LoadFrom(path) : null;
+    }
+    AppDomain.CurrentDomain.AssemblyResolve += ResolveSample;
+    try
+    {
+        RuntimeHelpers.RunModuleConstructor(Assembly.LoadFrom(assemblyPath).ManifestModule.ModuleHandle);
+        using var mount = new FileSystemProvider("/browser-replay", Path.GetFullPath(args[1]));
+        using var database = new ObjectDatabase("/browser-replay", "index");
+        using var provider = new DatabaseFileProvider(database);
+        using var compiler = new EffectCompiler(provider) { ValidateSpirv = true };
+        compiler.SourceDirectories.Add("shaders");
+        using var requests = JsonDocument.Parse(File.ReadAllBytes(args[2]));
+        foreach (var request in requests.RootElement.EnumerateArray())
+        {
+            using var bytes = new MemoryStream(Convert.FromBase64String(request.GetProperty("payload").GetString()!));
+            var reader = new BinarySerializationReader(bytes);
+            if (reader.ReadInt32() != 1) throw new InvalidDataException("Unknown browser effect request version.");
+            var mixin = reader.Read<ShaderMixinSource>();
+            var parameters = reader.Read<EffectCompilerParameters>();
+            var compilerParameters = reader.Read<CompilerParameters>();
+            compilerParameters.EffectParameters = parameters;
+            var recordedHash = reader.Read<ObjectId>();
+            if (bytes.Position != bytes.Length || recordedHash.ToString() != request.GetProperty("hash").GetString() ||
+                ShaderMixinObjectId.Compute(mixin, parameters) != recordedHash || parameters.Platform != GraphicsPlatform.WebGPU)
+                throw new InvalidDataException("Recorded effect hash/platform does not match the exact deserialized request.");
+            var result = compiler.Compile(mixin, parameters, compilerParameters, recordedHash).WaitForResult();
+            if (result.CompilationLog.HasErrors || result.Bytecode == null)
+                throw new InvalidDataException(string.Join(Environment.NewLine, result.CompilationLog.Messages.Select(message => message.Text)));
+            using var output = new MemoryStream();
+            result.Bytecode.WriteTo(output);
+            new BinarySerializationWriter(output).Write((int)EffectBytecodeCacheLoadSource.StartupCache);
+            output.Position = 0;
+            var id = result.Bytecode.ComputeId();
+            database.Write(output, id, true);
+            database.ContentIndexMap["__shaders_bytecode__/" + recordedHash] = id;
+            Console.WriteLine($"Replayed {recordedHash}: {mixin.Name}, {parameters.Profile}, debug={parameters.Debug}, optimization={parameters.OptimizationLevel}, stages={result.Bytecode.Stages.Length}.");
+        }
+    }
+    finally { AppDomain.CurrentDomain.AssemblyResolve -= ResolveSample; }
+    return;
+}
 
 if (args.Length == 5 && args[0] == "--webgpu-cache")
 {
@@ -26,7 +79,7 @@ if (args.Length == 5 && args[0] == "--webgpu-cache")
     using var sourceDb = new ObjectDatabase("/browser-source", "index");
     using var outputDb = new ObjectDatabase("/browser-output", "index", loadDefaultBundle: false);
     var index = sourceDb.ContentIndexMap.GetMergedIdMap().ToDictionary();
-    var objectIds = sourceDb.EnumerateObjects().ToHashSet();
+    var objectIds = sourceDb.EnumerateObjects().Concat(index.Values).ToHashSet();
     foreach (var id in objectIds)
     {
         using var stream = sourceDb.OpenStream(id);

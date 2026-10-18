@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$Naga)
+param([Parameter(Mandatory)][string]$Naga, [string]$EffectRequests)
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'Space Escape content preparation currently requires Windows desktop asset tools.' }
 $checkout = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -12,6 +12,7 @@ $cache = Join-Path $sample 'obj/content/cache'
 $stagingParent = [IO.Path]::GetFullPath((Join-Path $sample 'obj/content'))
 $staging = Join-Path $stagingParent ('browser-' + [Guid]::NewGuid().ToString('N'))
 $web = Join-Path $PSScriptRoot 'SpaceEscape.Browser/obj/content/web'
+if (-not $EffectRequests) { $EffectRequests = Join-Path $PSScriptRoot 'SpaceEscape.Browser/effect-requests.json' }
 Push-Location $checkout
 try {
     $properties = @('-p:StridePlatforms=Windows', '-p:StridePlatform=Windows', '-p:StrideGraphicsApi=WebGPU', '-p:StrideGraphicsApis=WebGPU', '-p:StrideGraphicsApiDependentBuildAll=false', '-p:StrideSkipAutoPack=true', '-p:StrideAssemblyProcessorFramework=net10.0')
@@ -26,6 +27,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Browser content packager build failed.' }
     & dotnet build "$shaderPackager/ShaderPackageTool.csproj" -m:1 -c Release --nologo -v:minimal @properties
     if ($LASTEXITCODE -ne 0) { throw 'Offline WGSL packager build failed.' }
+    if ($EffectRequests) {
+        $requestsPath = (Resolve-Path -LiteralPath $EffectRequests).Path
+        & dotnet "$packager/bin/Release/net10.0/ContentPackageTool.dll" --replay-effects "$native/db" $requestsPath "$sample/bin/Release/net10.0/SpaceEscape.Game.dll"
+        if ($LASTEXITCODE -ne 0) { throw 'Exact browser effect request replay failed.' }
+    }
     & dotnet "$packager/bin/Release/net10.0/ContentPackageTool.dll" --webgpu-cache "$native/db" $staging $nagaPath "$shaderPackager/bin/Release/net10.0/ShaderPackageTool.dll"
     if ($LASTEXITCODE -ne 0) { throw 'Sample WGSL cache preparation failed.' }
     & dotnet "$packager/bin/Release/net10.0/ContentPackageTool.dll" $staging $web
