@@ -112,7 +112,7 @@ public static class Profiler
     private static int profileId;
     private static readonly ThreadLocal<ThreadEventCollection> events = new(() => new ThreadEventCollection(), true);
     private static readonly ProfilingEventChannel collectorChannel = ProfilingEventChannel.Create(new UnboundedChannelOptions { SingleReader = true });
-    private static readonly SemaphoreSlim subscriberChannelLock = new(1, 1);
+    private static readonly object subscriberChannelLock = new();
     private static readonly List<Channel<ProfilingEvent>> subscriberChannels = [];
     private static readonly Task collectorTask;
 
@@ -128,15 +128,15 @@ public static class Profiler
         {
             await foreach (var item in collectorChannel.Reader.ReadAllAsync())
             {
-                await subscriberChannelLock.WaitAsync();
-                try
+                lock (subscriberChannelLock)
                 {
                     foreach (var subscriber in subscriberChannels)
                     {
-                        await subscriber.Writer.WriteAsync(item);
+                        // Subscriber channels are unbounded. No asynchronous
+                        // wait is required while holding the subscription gate.
+                        subscriber.Writer.TryWrite(item);
                     }
                 }
-                finally { subscriberChannelLock.Release(); }
             }
         });
     }
@@ -148,12 +148,10 @@ public static class Profiler
     public static ChannelReader<ProfilingEvent> Subscribe()
     {
         var channel = Channel.CreateUnbounded<ProfilingEvent>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
-        subscriberChannelLock.Wait();
-        try
+        lock (subscriberChannelLock)
         {
             subscriberChannels.Add(channel);
         }
-        finally { subscriberChannelLock.Release(); }
         return channel;
     }
 
@@ -163,8 +161,7 @@ public static class Profiler
     /// <param name="eventReader">The reader previously returned by <see cref="Subscribe"/></param>
     public static void Unsubscribe(ChannelReader<ProfilingEvent> eventReader)
     {
-        subscriberChannelLock.Wait();
-        try
+        lock (subscriberChannelLock)
         {
             var channel = subscriberChannels.Find((c) => c.Reader == eventReader);
             if (channel != null)
@@ -173,7 +170,6 @@ public static class Profiler
                 channel.Writer.Complete();
             }
         }
-        finally { subscriberChannelLock.Release(); }
     }
 
     /// <summary>
