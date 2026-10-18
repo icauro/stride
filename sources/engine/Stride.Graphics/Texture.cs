@@ -836,6 +836,13 @@ namespace Stride.Graphics
         {
             var mipWidth = CalculateMipSize(Width, mipLevel);
 
+            if (Format.IsCompressed)
+            {
+                Image.ComputePitch(Format, mipWidth, CalculateMipSize(Height, mipLevel), out var packedRow, out _, out _, out _);
+                if (packedRow % sizeof(TData) != 0)
+                    throw new ArgumentException("The compressed row size is not divisible by the data element size.");
+                return packedRow / sizeof(TData);
+            }
             var rowStride = mipWidth * Format.SizeInBytes;
             var dataStrideInBytes = mipWidth * sizeof(TData);
 
@@ -870,8 +877,15 @@ namespace Stride.Graphics
         ///   The ratio between the two must be an integer, or else there would be remaining bytes.
         /// </exception>
         /// <seealso cref="CalculateWidth{TData}(int)"/>
-        public int CalculatePixelDataCount<TData>(int mipLevel = 0) where TData : unmanaged
+        public unsafe int CalculatePixelDataCount<TData>(int mipLevel = 0) where TData : unmanaged
         {
+            if (Format.IsCompressed)
+            {
+                var bytes = GetMipMapDescription(mipLevel).MipmapSize;
+                if (bytes % sizeof(TData) != 0)
+                    throw new ArgumentException("The compressed mip data size is not divisible by the destination element size.");
+                return bytes / sizeof(TData);
+            }
             return CalculateWidth<TData>(mipLevel)
                  * CalculateMipSize(Height, mipLevel)
                  * CalculateMipSize(Depth, mipLevel);
@@ -1231,7 +1245,7 @@ namespace Stride.Graphics
 
             int destLengthInBytes = toData.Length * sizeof(T);
 
-            if (destLengthInBytes > mipMapSize)
+            if (destLengthInBytes < mipMapSize)
                 throw new ArgumentException($"The length of the destination buffer ({destLengthInBytes} bytes) is not compatible with " +
                     $"the expected largestSize ({mipMapSize} bytes) : Width * Height * Depth * sizeof(Format) largestSize in bytes");
 
@@ -2032,7 +2046,9 @@ namespace Stride.Graphics
         /// <returns>The slice pitch of the <paramref name="mipLevel"/>, in bytes.</returns>
         internal int ComputeSlicePitch(int mipLevel)
         {
-            return ComputeRowPitch(mipLevel) * CalculateMipSize(Height, mipLevel);
+            var height = CalculateMipSize(Height, mipLevel);
+            var rows = Format.IsCompressed ? (height + Format.BlockHeight - 1) / Format.BlockHeight : height;
+            return ComputeRowPitch(mipLevel) * rows;
         }
 
         /// <summary>
@@ -2043,9 +2059,9 @@ namespace Stride.Graphics
         /// <returns>The row pitch of the <paramref name="mipLevel"/>, in bytes.</returns>
         internal int ComputeRowPitch(int mipLevel)
         {
-            // Round up to 256
-            // TODO: Stale comment?
-            return ((CalculateMipSize(Width, mipLevel) * TexturePixelSize) + TextureRowPitchAlignment - 1) / TextureRowPitchAlignment * TextureRowPitchAlignment;
+            var width = CalculateMipSize(Width, mipLevel);
+            var bytes = Format.IsCompressed ? ((width + Format.BlockWidth - 1) / Format.BlockWidth) * Format.BlockSize : width * TexturePixelSize;
+            return (bytes + TextureRowPitchAlignment - 1) / TextureRowPitchAlignment * TextureRowPitchAlignment;
         }
 
         /// <summary>
