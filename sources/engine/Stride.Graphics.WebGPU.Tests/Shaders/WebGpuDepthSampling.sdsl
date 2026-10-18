@@ -1,0 +1,18 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuDepthSampling : SpriteBase
+{
+    Texture2D DepthMap;
+    Texture2D ColorMap;
+    SamplerState DepthSampler;
+    float ReadDepth(Texture2D map, SamplerState samplerState, float2 uv)
+    {
+        return map.SampleLevel(samplerState, uv, 0).x;
+    }
+    stage override float4 Shading()
+    {
+        float sampled = ReadDepth(DepthMap, DepthSampler, streams.TexCoord);
+        float loaded = DepthMap.Load(int3(1, 1, 0)).x;
+        return float4(sampled, loaded, ColorMap.SampleLevel(DepthSampler, streams.TexCoord, 0).x, 1);
+    }
+};

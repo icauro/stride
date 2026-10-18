@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EngineValidation</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Stride.Graphics/Stride.Graphics.csproj" />
+    <ProjectReference Include="../../shaders/Stride.Shaders.Compilers/Stride.Shaders.Compilers.csproj" />
+    <Content Include="Shaders/*.sdsl" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Rendering/Rendering/ComputeEffect/LambertianPrefiltering/LambertianPrefilteringSHNoComputePass1.sdsl" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Rendering/Rendering/ComputeEffect/LambertianPrefiltering/LambertianPrefilteringSHNoComputePass2.sdsl" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Rendering/Rendering/Utils/Math.sdsl" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Rendering/Rendering/Images/SphericalHarmonics/SphericalHarmonicsBase.sdsl" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Rendering/Rendering/Images/LightStreak/LightStreakShader.sdsl;../Stride.Rendering/Rendering/Images/ImageEffectShader.sdsl" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Stride.Graphics/**/*.sdsl" Exclude="**/obj/**;**/bin/**" Link="Shaders/Engine/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

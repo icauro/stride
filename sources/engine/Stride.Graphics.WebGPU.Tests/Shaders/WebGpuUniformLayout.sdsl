@@ -1,0 +1,17 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuUniformLayout : SpriteBase
+{
+    cbuffer Test
+    {
+        float Bias;
+        float2 Coordinates;
+        float3 Tint;
+        float AfterVector;
+        float2 Basis[2];
+    }
+    stage override float4 Shading()
+    {
+        return float4(Coordinates, (AfterVector + Bias) * Tint.r, Basis[1].y);
+    }
+};

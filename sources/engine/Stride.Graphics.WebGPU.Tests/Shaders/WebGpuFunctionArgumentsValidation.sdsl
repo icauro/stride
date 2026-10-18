@@ -1,0 +1,24 @@
+shader WebGpuFunctionArgumentsValidation : SpriteBase
+{
+    float Exposure(float luminance)
+    {
+        return 0.03f / max(luminance, 0.0001f);
+    }
+
+    float3 Apply(float3 color, float luminance)
+    {
+        float exposure = Exposure(luminance);
+        return float3(exposure, luminance, color.r);
+    }
+
+    float Luma(float3 color)
+    {
+        return dot(color, float3(0.25f, 0.5f, 0.25f));
+    }
+
+    override stage float4 Shading()
+    {
+        float3 result = Apply(float3(1, 0, 0), 0.0002f);
+        return float4(result.xy, Luma(float3(1, 2, 3)), result.z);
+    }
+};

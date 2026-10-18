@@ -1,0 +1,14 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuCompute
+{
+    stage stream uint3 DispatchThreadId : SV_DispatchThreadID;
+    RWStructuredBuffer<uint> Values;
+
+    [numthreads(8, 1, 1)]
+    void CSMain()
+    {
+        uint i = streams.DispatchThreadId.x;
+        Values[i] = i * 3 + 7;
+    }
+};

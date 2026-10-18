@@ -1,0 +1,13 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuDepthComparison : SpriteBase
+{
+    Texture2D<float> DepthMap;
+    SamplerComparisonState DepthSampler;
+    stage override float4 Shading()
+    {
+        float nearer = DepthMap.SampleCmpLevelZero(DepthSampler, streams.TexCoord, 0.125);
+        float farther = DepthMap.SampleCmpLevelZero(DepthSampler, streams.TexCoord, 0.75);
+        return float4(nearer, farther, 0, 1);
+    }
+};

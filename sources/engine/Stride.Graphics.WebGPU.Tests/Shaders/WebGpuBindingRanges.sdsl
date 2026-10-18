@@ -1,0 +1,14 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuBindingRanges
+{
+    StructuredBuffer<uint> Input;
+    RWStructuredBuffer<uint> Values;
+    [numthreads(1, 1, 1)]
+    void CSMain()
+    {
+        uint count, stride;
+        Input.GetDimensions(count, stride);
+        Values[Input[0]] = count;
+    }
+};

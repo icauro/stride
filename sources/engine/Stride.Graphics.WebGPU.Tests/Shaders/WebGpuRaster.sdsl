@@ -1,0 +1,27 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuRaster : ShaderBase
+{
+    stage stream float2 Position : POSITION;
+
+    cbuffer PerDraw
+    {
+        float4 Tint;
+        float Depth;
+        float Scale;
+        float2 Offset;
+        float InstanceSpacing;
+    }
+
+    stage override void VSMain()
+    {
+        float2 position = streams.Position * Scale + Offset;
+        position.x += streams.InstanceID * InstanceSpacing;
+        streams.ShadingPosition = float4(position, Depth, 1);
+    }
+
+    stage override void PSMain()
+    {
+        streams.ColorTarget = Tint;
+    }
+};

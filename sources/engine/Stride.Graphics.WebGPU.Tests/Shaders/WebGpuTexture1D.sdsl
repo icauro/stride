@@ -1,0 +1,16 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuTexture1D : SpriteBase
+{
+    Texture1D<float4> Input;
+    Texture2D<float4> Other;
+    SamplerState PointSampler;
+    stage override float4 Shading()
+    {
+        uint width, levels;
+        Input.GetDimensions(1, width, levels);
+        float sampled = Input.SampleLevel(PointSampler, 0.5, 1).r;
+        float loaded = Input.Load(int2(0, 2)).g;
+        return float4(sampled, loaded, width / 4.0, Other.Load(int3(0, 0, 0)).a);
+    }
+};

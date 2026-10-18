@@ -1,0 +1,7 @@
+shader WebGpuNullTextureValidation : SpriteBase
+{
+    stage override float4 Shading()
+    {
+        return Texture1.Sample(LinearSampler, streams.TexCoord);
+    }
+};

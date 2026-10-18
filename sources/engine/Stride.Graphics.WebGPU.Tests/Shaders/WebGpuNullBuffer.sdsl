@@ -1,0 +1,14 @@
+// Copyright (c) .NET Foundation and Contributors.
+// Distributed under the MIT license. See LICENSE.md in the project root.
+shader WebGpuNullBuffer
+{
+    stage stream uint3 DispatchThreadId : SV_DispatchThreadID;
+    Buffer<uint> Input;
+    RWStructuredBuffer<uint> Output;
+    [numthreads(8, 1, 1)]
+    void CSMain()
+    {
+        uint i = streams.DispatchThreadId.x;
+        Output[i] = Input.Load(i * 3) + 5;
+    }
+};

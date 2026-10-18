@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>BindingsValidation</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <DefineConstants>$(DefineConstants);STRIDE_GRAPHICS_API_WEBGPU</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../core/Stride.Core/Stride.Core.csproj" />
+    <Compile Include="../Stride.Foundation/Graphics/PixelFormat.cs" Link="Backend/PixelFormat.cs" />
+    <ProjectReference Include="../Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
+    <Compile Include="../Stride.Graphics/WebGPU/WebGpuDeviceContext*.cs" Link="Backend/%(Filename)%(Extension)" />
+    <Compile Include="../Stride.Graphics/WebGPU/WebGpuShaderBytecode*.cs" Link="Backend/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
