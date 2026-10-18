@@ -1,14 +1,19 @@
 import { dotnet } from './_framework/dotnet.js';
+import { attachBrowserInput } from './browser-input.js';
 
 const result = globalThis.smokeResult = { status: 'running', transport: 'generated-csharp', frames: [] };
 const output = document.getElementById('result');
 const noAdapter = new URLSearchParams(location.search).has('no-adapter');
-const verifyCanvas = new URLSearchParams(location.search).has('verify-canvas');
+const verifyCanvas = !new URLSearchParams(location.search).has('run-tests');
 let continueCanvas;
 const canvasGate = new Promise(resolve => { continueCanvas = resolve; });
 globalThis.continueAfterCanvasChecks = () => continueCanvas();
+document.getElementById('run-checks').addEventListener('click', () => continueCanvas());
 try {
     const runtime = await dotnet.create();
+    const config = runtime.getConfig();
+    const managed = (await runtime.getAssemblyExports(config.mainAssemblyName)).BrowserInputCheck;
+    let detachInput;
     runtime.setModuleImports('managed-gpu-probe', {
         noAdapter: () => noAdapter,
         resizeCanvas(selector, width, height) {
@@ -16,7 +21,10 @@ try {
             canvas.width = width;
             canvas.height = height;
         },
-        canvasReady: () => { result.canvasReady = true; },
+        canvasReady: () => {
+            result.canvasReady = true;
+            output.textContent = 'Rendering checks are visible. Space Escape integration is still in progress.';
+        },
         waitForCanvasChecks: () => verifyCanvas ? canvasGate : Promise.resolve(),
         effectBaseUrl: () => new URL('./effects/', document.baseURI).href,
         reportEffects: (pixels, values) => {
@@ -29,6 +37,17 @@ try {
         contentBaseUrl: () => new URL('./content/', document.baseURI).href,
         reportAssets: () => { result.contentDatabaseVerified = true; result.contentAssets = 3; },
         reportManagedError: error => { result.managedError = error; },
+        inputRequested: () => new URLSearchParams(location.search).has('verify-canvas'),
+        attachInputAndWait: () => new Promise(resolve => {
+            detachInput = attachBrowserInput(document.getElementById('input-canvas'), {
+                key: managed.Key, move: managed.Move, button: managed.Button, wheel: managed.Wheel,
+                pointer: managed.Pointer, surface: managed.Surface, pause: managed.Pause, cancelMouse: managed.CancelMouse
+            });
+            globalThis.inputProbe = managed;
+            globalThis.finishInputChecks = resolve;
+            result.inputReady = true;
+        }),
+        detachInput: () => { detachInput?.(); globalThis.inputProbe = null; result.inputDetached = true; },
         reportEngineDevice: (clearFrames, verifiedPixels) => {
             result.engineDeviceVerified = true;
             result.engineClearFrames = clearFrames;

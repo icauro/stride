@@ -196,6 +196,26 @@ and the presenter while the device is alive, then awaits real GPU completion
 before device teardown. Closed windows ignore pending host resize/focus updates.
 Native window close and synchronous disposal behavior remain unchanged.
 
+Browser InputManager now creates InputSourceBrowser. The host sends physical key
+codes, normalized mouse positions/buttons, wheel ticks, and touch/pen pointer
+events to it; the existing input devices, event routing and frame update consume
+them. Shared/browser-input.js attaches these canvas DOM listeners and returns a
+cleanup function. Blur/hidden-document events release held input. Pointer capture
+keeps drags working outside the canvas; touch cancellation and sparse browser
+pointer IDs use compact internal IDs. The adapter restores canvas attributes and
+removes listeners when detached. Text/IME, gamepads, cursor warping and async
+pointer lock are not implemented by this initial adapter; unsupported key codes
+return false so the host can retain normal browser behavior.
+
+The managed browser validator drives actual DOM keyboard and mouse events and
+dispatches touch PointerEvents with large IDs. It checks pressed/held/released
+states, normalized coordinates, touch cancellation, blur releasing all devices,
+and listener/attribute cleanup on both initial load and reload. These checks are
+enabled with ?verify-canvas. The default visible preview holds canvas rendering
+at its inspection gate and clearly identifies itself as a validation preview;
+Space Escape is not available there yet. Finish validation checks releases the
+gate and runs the remaining finite checks, after which presenters are disposed.
+
 The integrated tests cover async context cancellation, GraphicsDevice, basic
 offline shader assets, canvas presentation and GameBase lifecycle. The original
 ManagedFrame diagnostic remains a single-in-flight reference with no device-loss

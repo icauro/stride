@@ -94,6 +94,46 @@ async function main() {
             else await page.reload();
             let canvasScreenshots;
             if (managedWebgpu) {
+                await page.waitForFunction(() => globalThis.smokeResult?.inputReady || globalThis.smokeResult?.status === 'failed', null, { timeout: 60000 });
+                assert.notEqual((await page.evaluate(() => globalThis.smokeResult)).status, 'failed');
+                const inputCanvas = page.locator('#input-canvas');
+                await inputCanvas.click({ position: { x: 65, y: 126 } });
+                await page.keyboard.down('ArrowLeft');
+                const bounds = await inputCanvas.boundingBox();
+                await page.mouse.move(bounds.x + 65, bounds.y + 126);
+                await page.mouse.down();
+                let input = await page.evaluate(() => {
+                    const input = globalThis.inputProbe;
+                    input.Step();
+                    return { down: input.Down(), pressed: input.Pressed(), mouse: input.MouseDown(), x: input.MouseX(), y: input.MouseY() };
+                });
+                assert.equal(input.down, true);
+                assert.equal(input.pressed, true);
+                assert.equal(input.mouse, true);
+                assert.ok(Math.abs(input.x - .25) < .001 && Math.abs(input.y - .5) < .001);
+                assert.equal(await page.evaluate(() => { const input = globalThis.inputProbe; input.Step(); return input.Pressed(); }), false);
+                await page.dispatchEvent('#input-canvas', 'pointerdown', { pointerId: 2147483640, pointerType: 'touch', clientX: bounds.x + 20, clientY: bounds.y + 20 });
+                assert.equal(await page.evaluate(() => { const input = globalThis.inputProbe; input.Step(); return input.Touches(); }), 1);
+                await page.dispatchEvent('#input-canvas', 'pointercancel', { pointerId: 2147483640, pointerType: 'touch', clientX: bounds.x + 20, clientY: bounds.y + 20 });
+                assert.equal(await page.evaluate(() => { const input = globalThis.inputProbe; input.Step(); return input.Touches(); }), 0);
+                await page.dispatchEvent('#input-canvas', 'pointerdown', { pointerId: 2147483639, pointerType: 'touch', clientX: bounds.x + 30, clientY: bounds.y + 30 });
+                input = await page.evaluate(() => {
+                    document.getElementById('input-canvas').blur();
+                    const input = globalThis.inputProbe;
+                    input.Step();
+                    return { down: input.Down(), released: input.Released(), mouse: input.MouseDown(), touches: input.Touches() };
+                });
+                assert.deepEqual(input, { down: false, released: true, mouse: false, touches: 0 });
+                await page.keyboard.up('ArrowLeft');
+                await page.mouse.up();
+                await page.evaluate(() => globalThis.finishInputChecks());
+                await page.waitForFunction(() => globalThis.smokeResult?.inputDetached);
+                assert.equal(await page.evaluate(() => {
+                    const event = new KeyboardEvent('keydown', { code: 'ArrowLeft', bubbles: true, cancelable: true });
+                    const canvas = document.getElementById('input-canvas');
+                    canvas.dispatchEvent(event);
+                    return event.defaultPrevented || canvas.hasAttribute('tabindex') || canvas.style.touchAction !== '';
+                }), false, 'Input adapter must restore the canvas and detach listeners');
                 await page.waitForFunction(() => globalThis.smokeResult?.canvasReady || globalThis.smokeResult?.status === 'failed', null, { timeout: 60000 });
                 const pending = await page.evaluate(() => globalThis.smokeResult);
                 assert.notEqual(pending.status, 'failed', JSON.stringify(pending));
@@ -147,7 +187,7 @@ async function main() {
                 assert.equal(result.sum, 42);
             }
             assert.equal(await page.locator('#result').getAttribute('data-status'), 'passed');
-            runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots } : {}) });
+            runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots, inputDomVerified: true } : {}) });
         }
         if (managedWebgpu) assert.equal(missingContentResponses, 2, 'Missing-content negative case must receive one real HTTP404 per load');
         assert.deepEqual(errors, [], 'Browser errors occurred');

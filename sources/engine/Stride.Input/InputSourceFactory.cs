@@ -20,6 +20,10 @@ namespace Stride.Input
         {
             switch (context.ContextType)
             {
+#if STRIDE_PLATFORM_BROWSER
+                case AppContextType.Browser:
+                    return new InputSourceBrowser();
+#endif
 #if STRIDE_UI_SDL
                 case AppContextType.DesktopSDL:
                     if (GameContextFactory.SDLBackendEnabled)

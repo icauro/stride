@@ -3,16 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stride generated C# WebGPU bindings probe</title>
-  <style>h1 { margin:16px 0; line-height:40px; } canvas { vertical-align:top; }</style>
+  <title>Stride WebGPU browser preview</title>
+  <style>h1 { margin:16px 0; line-height:40px; } p { margin:8px 0; line-height:24px; } canvas { vertical-align:top; }</style>
 </head>
 <body>
-  <h1>Generated C# WebGPU bindings probe</h1>
+  <h1>Stride WebGPU browser preview</h1>
+  <p><strong>Space Escape is not running in this preview yet.</strong></p>
+  <p>These canvases show rendering checks. Browser game integration is still in progress.</p>
   <canvas id="canvas" width="65" height="63" style="width:260px;height:252px;image-rendering:pixelated"></canvas>
   <canvas id="engine-gamma" width="65" height="63" style="width:260px;height:252px;image-rendering:pixelated"></canvas>
   <canvas id="engine-linear" width="65" height="63" style="width:260px;height:252px;image-rendering:pixelated"></canvas>
   <pre id="result" data-status="running">Starting .NET and Emdawnwebgpu…</pre>
+  <button id="run-checks" type="button">Finish validation checks</button>
   <canvas id="game-loop" width="65" height="63" style="width:260px;height:252px;image-rendering:pixelated"></canvas>
+  <canvas id="input-canvas" width="65" height="63" style="width:260px;height:252px"></canvas>
   <p><a href="./THIRD-PARTY-NOTICES.txt">Third-party notices</a></p>
   <script type="module" src="./main.js"></script>
 </body>

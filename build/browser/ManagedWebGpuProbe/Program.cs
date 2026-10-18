@@ -36,6 +36,7 @@ public static partial class Program
         if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
         await BrowserAssetCheck.RunAsync(ContentBaseUrl());
         ReportAssets();
+        await BrowserInputCheck.RunAsync();
         await BrowserContextCheck.RunAsync(EffectBaseUrl());
         await BrowserGameLoopCheck.RunAsync();
         ReportGameLoop();
