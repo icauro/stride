@@ -1,0 +1,85 @@
+name: Test Windows (WebGPU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-type:
+        description: Build
+        type: choice
+        default: Debug
+        options: [Debug, Release]
+      lane:
+        description: Existing regression suite lane
+        type: choice
+        default: GPU
+        options: [Smoke, Resources, GPU, Graphics, Engine, Physics, UI, Particles, All]
+      test-filter:
+        description: Optional dotnet test filter (overrides smoke selection)
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      build-type:
+        type: string
+        default: Debug
+      lane:
+        type: string
+        default: GPU
+      test-filter:
+        type: string
+        default: ''
+
+jobs:
+  regression:
+    name: WebGPU / ${{ matrix.backend }} / ${{ inputs.lane || 'GPU' }}
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [Vulkan, D3D12]
+    env:
+      STRIDE_GRAPHICS_SOFTWARE_RENDERING: '1'
+      STRIDE_TESTS_GPU: '0'
+      STRIDE_WEBGPU_BACKEND: ${{ matrix.backend }}
+      STRIDE_CRASH_MODE: save
+      STRIDE_MAX_PARALLELISM: '8'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github
+      - uses: ./.github/actions/stride-checkout
+        with:
+          ref: ${{ github.ref }}
+          exclude: samples
+      - name: Set up software Vulkan
+        if: matrix.backend == 'Vulkan'
+        uses: ./.github/actions/setup-vulkan-windows
+      - name: Download pinned wgpu-native
+        shell: pwsh
+        run: |
+          $native = ./build/wgpu/DownloadNative.ps1 -OutputDirectory "$env:RUNNER_TEMP/wgpu"
+          "STRIDE_WEBGPU_NATIVE_LIBRARY=$native" >> $env:GITHUB_ENV
+      - name: Run existing tests
+        shell: pwsh
+        env:
+          TEST_FILTER: ${{ inputs.test-filter }}
+        run: |
+          ./build/wgpu/RunTests.ps1 -NativeLibrary $env:STRIDE_WEBGPU_NATIVE_LIBRARY `
+            -Lane '${{ inputs.lane || 'GPU' }}' -Backend '${{ matrix.backend }}' `
+            -Configuration '${{ inputs.build-type || 'Debug' }}' `
+            -Software -Filter $env:TEST_FILTER -ResultsDirectory "$env:GITHUB_WORKSPACE/TestResults/WebGPU"
+      - name: Publish lane summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summary = 'TestResults/WebGPU/summary.md'
+          if (Test-Path $summary) { Get-Content $summary >> $env:GITHUB_STEP_SUMMARY }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: webgpu-${{ matrix.backend }}-${{ inputs.lane || 'GPU' }}
+          path: |
+            TestResults/WebGPU/
+            tests/local/
+          if-no-files-found: warn

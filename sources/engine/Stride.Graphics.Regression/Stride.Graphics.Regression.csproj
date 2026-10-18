@@ -45,7 +45,7 @@
          exe instead of the OS one, for reproducible captures across CI/dev. GeneratePathProperty is needed
          because this native package uses a build/native/ layout that NuGet doesn't auto-import into C# projects. -->
     <PackageReference Include="Microsoft.Direct3D.WARP" GeneratePathProperty="true"
-                      Condition="'$(StrideGraphicsApi)' == 'Direct3D11' Or '$(StrideGraphicsApi)' == 'Direct3D12'" />
+                      Condition="'$(StrideGraphicsApi)' == 'Direct3D11' Or '$(StrideGraphicsApi)' == 'Direct3D12' Or '$(StrideGraphicsApi)' == 'WebGPU'" />
     <Content Include="$(PkgMicrosoft_Direct3D_WARP)\build\native\bin\x64\d3d10warp.dll"
              Condition="'$(PkgMicrosoft_Direct3D_WARP)' != ''"
              Link="d3d10warp.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />

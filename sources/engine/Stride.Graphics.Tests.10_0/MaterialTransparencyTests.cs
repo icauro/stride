@@ -261,6 +261,11 @@ public class MaterialTransparencyTests : GameTestBase
             VoxelVolumeSize = 20.0f,
             AproximateVoxelSize = 0.5f,
             Attributes = { new VoxelAttributeEmissionOpacity() },
+            // WebGPU has no geometry stage. Exercise the existing equivalent
+            // three-axis voxelizer while retaining every lighting/alpha assertion.
+            VoxelizationMethod = GraphicsDevice.Platform == GraphicsPlatform.WebGPU
+                ? new VoxelizationMethodTriAxis { MultisampleCount = MultisampleCount.X4 }
+                : new VoxelizationMethodDominantAxis(),
         };
         scene.Entities.Add(new Entity("VoxelVolume") { volume });
         scene.Entities.Add(new Entity("VoxelLight")

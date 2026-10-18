@@ -55,6 +55,8 @@ namespace Stride.Graphics.Regression
             result.DeviceName = "Direct3D";
     #elif STRIDE_GRAPHICS_API_VULKAN
             result.DeviceName = "Vulkan";
+    #elif STRIDE_GRAPHICS_API_WEBGPU
+            result.DeviceName = "WebGPU";
     #endif
 #elif STRIDE_PLATFORM_ANDROID
             result.Platform = "Android";
@@ -92,6 +94,8 @@ namespace Stride.Graphics.Regression
             {
                 case TestPlatform.WindowsDx:
                     return "Windows_Direct3D11";
+                case TestPlatform.WindowsWebGPU:
+                    return "Windows_WebGPU";
                 case TestPlatform.Android:
                     return "Android";
                 case TestPlatform.Ios:
@@ -113,6 +117,8 @@ namespace Stride.Graphics.Regression
             return TestPlatform.WindowsDx;
 #elif STRIDE_GRAPHICS_API_VULKAN
             return TestPlatform.WindowsVulkan;
+#elif STRIDE_GRAPHICS_API_WEBGPU
+            return TestPlatform.WindowsWebGPU;
 #endif
 
         }
@@ -172,6 +178,7 @@ namespace Stride.Graphics.Regression
         WindowsDx,
         WindowsVulkan,
         Android,
-        Ios
+        Ios,
+        WindowsWebGPU
     }
 }

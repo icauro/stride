@@ -29,17 +29,29 @@ internal static class Module
         if (gpu != "1")
         {
             Environment.SetEnvironmentVariable("STRIDE_GRAPHICS_SOFTWARE_RENDERING", "1");
+#if STRIDE_GRAPHICS_API_WEBGPU && STRIDE_PLATFORM_DESKTOP
+            // testhost lives outside the test output directory. The asset compiler
+            // also scans this assembly from bytes (Location is empty), without
+            // running tests; do not try to load a test native from its host folder.
+            var regressionDirectory = System.IO.Path.GetDirectoryName(typeof(Module).Assembly.Location);
+            if (OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("STRIDE_WEBGPU_BACKEND") == "D3D12"
+                && !string.IsNullOrEmpty(regressionDirectory))
+                System.Runtime.InteropServices.NativeLibrary.Load(System.IO.Path.Combine(regressionDirectory, "d3d10warp.dll"));
+#endif
 
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("STRIDE_MAX_PARALLELISM")))
                 Environment.SetEnvironmentVariable("STRIDE_MAX_PARALLELISM", "8");
 
-#if STRIDE_GRAPHICS_API_VULKAN && STRIDE_PLATFORM_DESKTOP
-            ConfigureLavapipe();
+#if (STRIDE_GRAPHICS_API_VULKAN || STRIDE_GRAPHICS_API_WEBGPU) && STRIDE_PLATFORM_DESKTOP
+#if STRIDE_GRAPHICS_API_WEBGPU
+            if (Environment.GetEnvironmentVariable("STRIDE_WEBGPU_BACKEND") == "Vulkan")
+#endif
+                ConfigureLavapipe();
 #endif
         }
     }
 
-#if STRIDE_GRAPHICS_API_VULKAN && STRIDE_PLATFORM_DESKTOP
+#if (STRIDE_GRAPHICS_API_VULKAN || STRIDE_GRAPHICS_API_WEBGPU) && STRIDE_PLATFORM_DESKTOP
     // Isolated so the JIT only loads Stride.Dependencies.Lavapipe (whose ModuleInitializer
     // sets VK_DRIVER_FILES) when this method actually runs. Inlining it into Initialize() would
     // resolve the Lavapipe type ref at Initialize's JIT time and load the assembly on the GPU

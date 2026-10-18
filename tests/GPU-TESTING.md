@@ -150,3 +150,75 @@ public class MyTests : GameTestBase { }
 ```
 
 Prefer fixing the root cause over suppressing errors.
+
+## WebGPU lanes (Windows x64)
+
+WebGPU reuses the existing xUnit regression projects through
+`build/wgpu/RunTests.ps1`. Each selected suite builds once and runs separately
+through wgpu-native Vulkan and D3D12. These are experimental lanes; failures are
+reported normally and do not change the other API lanes.
+
+| Lane | Existing tests selected |
+| --- | --- |
+| Smoke | Mipmap count, 2D texture upload/readback, 2D array upload/readback |
+| Resources | Texture creation/mips/arrays/UAV/3D plus device-loss simulation |
+| GPU | Exactly the suites listed in build/Stride.Tests.Game.GPU.slnf, the standard GPU CI selection |
+| Graphics | Graphics.Tests, Graphics.Tests.10_0, Graphics.Tests.11_0 |
+| Engine | Engine.Tests |
+| Physics | Physics.Tests |
+| UI | UI.Tests |
+| Particles | Particles.Tests |
+| All | GPU plus Particles.Tests |
+
+Run from the checkout with an explicit result directory. Keep local reports
+outside the checkout when working in an isolated workspace:
+
+```powershell
+./build/wgpu/RunTests.ps1 `
+  -NativeLibrary C:/deps/wgpu_native.dll `
+  -Lane Smoke -ResultsDirectory ../artifacts/webgpu-smoke
+
+./build/wgpu/RunTests.ps1 `
+  -NativeLibrary C:/deps/wgpu_native.dll `
+  -Lane Resources -Backend Vulkan -SkipBuild `
+  -ResultsDirectory ../artifacts/webgpu-resources
+```
+
+Use `DownloadNative.ps1 -OutputDirectory <cache>` to obtain the hash-verified,
+pinned native release. `-Filter` accepts the usual `dotnet test` expression and
+overrides the default Smoke/Resources selection. `-SkipBuild` requires matching
+WebGPU binaries already built for the requested configuration. Runs are serial
+within a checkout because test assets and output assemblies are shared.
+`-Suite Stride.Physics.Tests` narrows a lane to a named member suite for a focused
+retry; names outside that lane are rejected. `GPU` is kept in sync with the
+standard GPU solution filter rather than maintaining a separate project list.
+
+Hardware is the local default. `-Software` requests a native fallback adapter:
+Vulkan uses the existing Lavapipe setup, D3D12 uses native WARP. If a fallback is
+unavailable the lane fails; it does not silently pass on hardware. The D3D12
+lane preloads the same pinned WARP package used by direct-D3D regression tests.
+No cross-machine bitwise determinism is claimed.
+
+Results include `selection.json` (requested coverage/configuration), `summary.md`, per-test `results.json`/`results.csv`, build logs,
+TRX files and test logs. Each invocation writes test logs into a unique run
+subdirectory so stale TRX files cannot turn an aborted run into a pass. Skipped
+tests remain `NotExecuted`. A failed test containing `NotSupportedException` is
+labelled `Unsupported` and still fails the lane. Other test errors, native
+crashes/missing TRX, no matching tests and build failures remain failures. The
+summary lists the first 100 non-passing results; JSON/CSV retain all results.
+Hang detection is enabled at two minutes of test inactivity.
+VSTest diagnostics, normal-verbosity test events and crash minidumps are captured
+too. An aborted TRX remains a runner failure even when it contains failed tests;
+it does not establish that the rest of the suite ran.
+
+Image comparisons retain the existing tolerances and gold fallback rules. No
+new reference images are generated or promoted. Screenshot paths distinguish
+`Windows.WebGPU-Vulkan` and `Windows.WebGPU-D3D12`, including when both use the
+same physical GPU. Missing gold is a test failure, not a rendering success.
+
+The manual/reusable **Test Windows (WebGPU)** workflow defaults to the full GPU
+lane, accepts Debug/Release configuration, and runs the selected lane on
+both native backends with software rendering, fail-fast disabled and separate
+uploaded artifacts. It publishes the same Markdown summary in GitHub Actions.
+It does not add the experimental backend to the default PR gate. Editor UI
+automation and browser WebGPU are outside these lanes.

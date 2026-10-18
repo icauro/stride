@@ -998,7 +998,13 @@ namespace Stride.Graphics.Regression
                 _ => throw new NotImplementedException($"Platform {Platform.Type} is not supported for image regression tests")
             };
 
-            return Path.Combine($"{platformName}.{GraphicsDevice.Platform}", NormalizeDeviceBucket(GraphicsDevice.Adapter));
+            var apiName = GraphicsDevice.Platform.ToString();
+#if STRIDE_GRAPHICS_API_WEBGPU
+            // One Stride API can run through different native backends on the same GPU.
+            // Keep their screenshots and comparison sidecars from overwriting each other.
+            apiName += "-" + (Environment.GetEnvironmentVariable("STRIDE_WEBGPU_BACKEND") ?? "Auto");
+#endif
+            return Path.Combine($"{platformName}.{apiName}", NormalizeDeviceBucket(GraphicsDevice.Adapter));
         }
 
         // Stable, vendor-independent bucket name. Avoids Lavapipe's "llvmpipe (LLVM x.y.z, N bits)"

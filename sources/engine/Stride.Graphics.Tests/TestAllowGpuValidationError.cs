@@ -22,6 +22,7 @@ public class TestAllowGpuValidationError : GraphicTestGameBase
     [AllowGpuValidationError(GraphicsPlatform.Direct3D11, AllowedMessage)]
     [AllowGpuValidationError(GraphicsPlatform.Direct3D12, AllowedMessage)]
     [AllowGpuValidationError(GraphicsPlatform.Vulkan, AllowedMessage)]
+    [AllowGpuValidationError(GraphicsPlatform.WebGPU, AllowedMessage)]
     public void AllowedErrorIsIgnoredThroughPerformTest()
     {
         PerformTest(_ => ReportValidationError(AllowedMessage));
@@ -34,6 +35,7 @@ public class TestAllowGpuValidationError : GraphicTestGameBase
     [AllowGpuValidationError(GraphicsPlatform.Direct3D11, AllowedMessage)]
     [AllowGpuValidationError(GraphicsPlatform.Direct3D12, AllowedMessage)]
     [AllowGpuValidationError(GraphicsPlatform.Vulkan, AllowedMessage)]
+    [AllowGpuValidationError(GraphicsPlatform.WebGPU, AllowedMessage)]
     public void OtherErrorStillFailsThroughPerformTest()
     {
         var exception = Assert.ThrowsAny<XunitException>(() => PerformTest(_ => ReportValidationError("Unexpected validation error raised by the test")));
