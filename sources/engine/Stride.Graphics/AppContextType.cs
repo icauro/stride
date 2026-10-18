@@ -84,4 +84,7 @@ public enum AppContextType
     ///   Used for automated testing with software renderers (e.g. Lavapipe).
     /// </summary>
     Headless,
+
+    /// <summary>The game runs in an HTML canvas, driven by browser frames.</summary>
+    Browser,
 }

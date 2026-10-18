@@ -430,7 +430,9 @@ namespace Stride.Games
             if (gameContext == null)
             {
                 AppContextType c;
-                if (OperatingSystem.IsWindows() && GameContextFactory.WinFormsBackendEnabled)
+                if (OperatingSystem.IsBrowser())
+                    c = AppContextType.Browser;
+                else if (OperatingSystem.IsWindows() && GameContextFactory.WinFormsBackendEnabled)
                     c = AppContextType.DesktopWinForms;
                 else if (OperatingSystem.IsAndroid())
                     c = AppContextType.Android;

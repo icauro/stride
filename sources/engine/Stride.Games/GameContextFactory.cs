@@ -63,6 +63,11 @@ namespace Stride.Games
                 case AppContextType.Headless:
                     res = new GameContextHeadless(requestedWidth, requestedHeight);
                     break;
+                case AppContextType.Browser:
+#if STRIDE_PLATFORM_BROWSER
+                    res = new GameContextBrowser("#canvas", requestedWidth, requestedHeight);
+#endif
+                    break;
             }
 
             if (res == null)
