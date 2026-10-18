@@ -2,18 +2,16 @@
 // Distributed under the MIT license. See LICENSE.md in the project root.
 #if STRIDE_GRAPHICS_API_WEBGPU
 using System;
-using System.Runtime.InteropServices;
 using Stride.Graphics.WebGPU;
 using Api = Stride.Graphics.WebGPU.WebGPU;
 namespace Stride.Graphics;
 
-public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
+public sealed unsafe partial class SwapChainGraphicsPresenter : GraphicsPresenter
 {
     private WGPUSurface surface;
     private WGPUSurfaceConfiguration configuration;
     private Texture backBuffer;
     private bool configured;
-    private nint window;
     private WGPURenderPipeline blitPipeline;
     private WGPUBindGroupLayout blitLayout;
     private WGPUTextureFormat blitFormat;
@@ -35,8 +33,7 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
 
     protected override void ProcessPresentationParameters()
     {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("WebGPU window presentation currently supports Windows HWND surfaces.");
-        if (Description.DeviceWindowHandle == null || Description.DeviceWindowHandle.Handle == 0) throw new ArgumentException("A native window handle is required.");
+        ValidateSurfaceWindow();
         if (Description.IsFullScreen || Description.MultisampleCount != MultisampleCount.None) throw new NotSupportedException("WebGPU presentation requires a windowed, single-sample back buffer.");
         if (Description.BackBufferWidth <= 0 || Description.BackBufferHeight <= 0) throw new ArgumentOutOfRangeException(nameof(Description), "Initial back-buffer dimensions must be positive.");
     }
@@ -44,12 +41,7 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
     public override void OnRecreated()
     {
         if (surface.Handle != 0) throw new InvalidOperationException("The WebGPU surface is already initialized.");
-        window = Description.DeviceWindowHandle.Handle;
-        var source = WGPUSurfaceSourceWindowsHWND.CreateDefault();
-        source.hwnd = (void*)window;
-        source.hinstance = (void*)GetModuleHandleW(null);
-        var descriptor = WGPUSurfaceDescriptor.CreateDefault(); descriptor.nextInChain = &source.chain;
-        surface = Api.wgpuInstanceCreateSurface(GraphicsDevice.WebGpuContext.Instance, &descriptor);
+        surface = CreateWindowSurface();
         if (surface.Handle == 0) throw new InvalidOperationException("WebGPU could not create the window surface.");
         Configure();
         ReplaceBackBuffer(Description.BackBufferWidth, Description.BackBufferHeight, Description.BackBufferFormat);
@@ -66,37 +58,51 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
                 throw new NotSupportedException("The selected WebGPU adapter cannot present to this window.");
             var formats = new ReadOnlySpan<WGPUTextureFormat>(capabilities.formats, checked((int)capabilities.formatCount));
             var selectedFormat = Description.BackBufferFormat;
+            var surfaceFormat = WebGpuConvert.TextureFormat(selectedFormat);
             if (!formats.Contains(WebGpuConvert.TextureFormat(selectedFormat)))
             {
                 selectedFormat = Description.BackBufferFormat.IsSRgb ? PixelFormat.B8G8R8A8_UNorm_SRgb : PixelFormat.B8G8R8A8_UNorm;
-                if (!formats.Contains(WebGpuConvert.TextureFormat(selectedFormat))) throw new NotSupportedException("The WebGPU surface does not support the requested color format.");
+                if (!formats.Contains(WebGpuConvert.TextureFormat(selectedFormat)))
+                {
+                    // Canvas surfaces expose UNorm formats, with an explicit
+                    // sRGB view for correct decode/encode during the final blit.
+                    if (!Description.BackBufferFormat.IsSRgb) throw new NotSupportedException("The WebGPU surface does not support the requested color format.");
+                    if (formats.Contains(WGPUTextureFormat.BGRA8Unorm)) selectedFormat = PixelFormat.B8G8R8A8_UNorm_SRgb;
+                    else if (formats.Contains(WGPUTextureFormat.RGBA8Unorm)) selectedFormat = PixelFormat.R8G8B8A8_UNorm_SRgb;
+                    else throw new NotSupportedException("The WebGPU surface does not support an sRGB-compatible color view.");
+                }
+                surfaceFormat = WebGpuConvert.TextureFormat(selectedFormat);
+                if (!formats.Contains(surfaceFormat))
+                    surfaceFormat = selectedFormat == PixelFormat.B8G8R8A8_UNorm_SRgb ? WGPUTextureFormat.BGRA8Unorm : WGPUTextureFormat.RGBA8Unorm;
             }
             var modes = new ReadOnlySpan<WGPUPresentMode>(capabilities.presentModes, checked((int)capabilities.presentModeCount));
             var mode = Description.PresentationInterval == PresentInterval.Immediate && modes.Contains(WGPUPresentMode.Immediate) ? WGPUPresentMode.Immediate : WGPUPresentMode.Fifo;
             if (Description.PresentationInterval > PresentInterval.One) throw new NotSupportedException("WebGPU presentation intervals above one are not supported.");
             configuration = WGPUSurfaceConfiguration.CreateDefault();
             configuration.device = context.Device;
-            configuration.format = WebGpuConvert.TextureFormat(selectedFormat);
+            configuration.format = surfaceFormat;
             configuration.usage = WGPUTextureUsage.RenderAttachment;
             configuration.width = (uint)Description.BackBufferWidth;
             configuration.height = (uint)Description.BackBufferHeight;
             configuration.presentMode = mode;
             if (capabilities.alphaModeCount > 0) configuration.alphaMode = capabilities.alphaModes[0];
             var config = configuration;
+            var viewFormat = WebGpuConvert.TextureFormat(selectedFormat);
+            // The descriptor pointer is valid only for this call, never cached.
+            if (viewFormat != surfaceFormat) { config.viewFormatCount = 1; config.viewFormats = &viewFormat; }
             Api.wgpuSurfaceConfigure(surface, &config);
             context.ThrowIfFailed();
             configured = true;
             configuredInterval = Description.PresentationInterval;
             Description.BackBufferFormat = selectedFormat;
-            CreateBlitPipeline(configuration.format);
+            CreateBlitPipeline(viewFormat);
         }
         finally { Api.wgpuSurfaceCapabilitiesFreeMembers(capabilities); }
     }
 
     internal override bool CanPresentFrame()
     {
-        if (surface.Handle == 0 || Description.BackBufferWidth <= 0 || Description.BackBufferHeight <= 0 || IsIconic(window)) return false;
-        return GetClientRect(window, out var rect) && rect.Right > rect.Left && rect.Bottom > rect.Top;
+        return surface.Handle != 0 && Description.BackBufferWidth > 0 && Description.BackBufferHeight > 0 && WindowCanPresent();
     }
 
     public override void Present()
@@ -119,7 +125,7 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
                 throw new InvalidOperationException($"WebGPU could not acquire the surface image: {acquired.status}.");
             // Reconfigure once after a resize or surface invalidation; never spin
             // indefinitely while the window is minimized or changing size.
-            GraphicsDevice.WaitForGpuIdle();
+            PrepareSurfaceChange();
             Configure();
         }
         WGPUCommandEncoder encoder = default;
@@ -131,7 +137,8 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
             if (acquired.texture.Handle == 0) throw new InvalidOperationException("WebGPU acquired an empty surface image.");
             var encoderDescriptor = WGPUCommandEncoderDescriptor.CreateDefault();
             encoder = Api.wgpuDeviceCreateCommandEncoder(context.Device, &encoderDescriptor);
-            surfaceView = Api.wgpuTextureCreateView(acquired.texture, null);
+            var view = WGPUTextureViewDescriptor.CreateDefault(); view.format = blitFormat;
+            surfaceView = Api.wgpuTextureCreateView(acquired.texture, &view);
             var binding = WGPUBindGroupEntry.CreateDefault(); binding.binding = 0; binding.textureView = backBuffer.NativeView;
             var groupDescriptor = WGPUBindGroupDescriptor.CreateDefault(); groupDescriptor.layout = blitLayout; groupDescriptor.entryCount = 1; groupDescriptor.entries = &binding;
             group = Api.wgpuDeviceCreateBindGroup(context.Device, &groupDescriptor);
@@ -147,7 +154,7 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
             buffer = Api.wgpuCommandEncoderFinish(encoder, &bufferDescriptor);
             context.ThrowIfFailed();
             Api.wgpuQueueSubmit(context.Queue, 1, &buffer);
-            if (Api.wgpuSurfacePresent(surface) != WGPUStatus.Success) throw new InvalidOperationException("WebGPU surface presentation failed.");
+            FinishWindowFrame();
             context.ThrowIfFailed();
         }
         finally
@@ -163,7 +170,7 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
 
     protected override void ResizeBackBuffer(int width, int height, PixelFormat format)
     {
-        GraphicsDevice.WaitForGpuIdle();
+        PrepareSurfaceChange();
         if (configured) Api.wgpuSurfaceUnconfigure(surface);
         configured = false;
         if (width <= 0 || height <= 0) return;
@@ -255,9 +262,10 @@ public sealed unsafe class SwapChainGraphicsPresenter : GraphicsPresenter
         base.OnDestroyed(immediately);
     }
 
-    [StructLayout(LayoutKind.Sequential)] private struct ClientRect { public int Left, Top, Right, Bottom; }
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string module);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsIconic(nint window);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out ClientRect rect);
+    private partial void ValidateSurfaceWindow();
+    private partial WGPUSurface CreateWindowSurface();
+    private partial bool WindowCanPresent();
+    private partial void FinishWindowFrame();
+    private partial void PrepareSurfaceChange();
 }
 #endif
