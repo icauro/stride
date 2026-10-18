@@ -29,6 +29,8 @@ public static partial class Program
         catch (PlatformNotSupportedException) { rejected = true; }
         if (!rejected) throw new InvalidOperationException("Native loader unexpectedly accepted browser use.");
         await BrowserContextCheck.RunAsync(EffectBaseUrl());
+        await BrowserGameLoopCheck.RunAsync();
+        ReportGameLoop();
         ReportContext();
         ReportEngineDevice(3, 17 * 9 * 3);
         ReportEffects(4, 64);
@@ -44,4 +46,5 @@ public static partial class Program
     [JSImport("reportEngineDevice", "managed-gpu-probe")] private static partial void ReportEngineDevice(int clearFrames, int verifiedPixels);
     [JSImport("effectBaseUrl", "managed-gpu-probe")] private static partial string EffectBaseUrl();
     [JSImport("reportEffects", "managed-gpu-probe")] private static partial void ReportEffects(int pixels, int values);
+    [JSImport("reportGameLoop", "managed-gpu-probe")] private static partial void ReportGameLoop();
 }

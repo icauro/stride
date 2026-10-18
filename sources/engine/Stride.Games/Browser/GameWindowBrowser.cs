@@ -45,7 +45,6 @@ internal sealed class GameWindowBrowser : GameWindow<string>
     private void Advance()
     {
         if (ended) return;
-        if (Exiting) { End(); return; }
         if (inFrame) throw new InvalidOperationException("Browser frames cannot overlap.");
         inFrame = true;
         try { RunCallback?.Invoke(); }
@@ -57,6 +56,9 @@ internal sealed class GameWindowBrowser : GameWindow<string>
     {
         if (ended) return;
         ended = true;
+        // Host callbacks may continue until its next animation-frame turn.
+        // Ignore resize/focus updates while asynchronous device shutdown yields.
+        context.UpdateWindow = null;
         try { OnClosing(this, EventArgs.Empty); }
         finally { ExitCallback?.Invoke(); }
     }

@@ -117,6 +117,8 @@ async function main() {
                     assert.equal(result.nativeLoaderRejected, true);
                     assert.equal(result.sharedContextVerified, true);
                     assert.equal(result.engineDeviceVerified, true);
+                    assert.equal(result.gameLoopVerified, true);
+                    assert.equal(result.gameLoopCycles, 2);
                     assert.equal(result.engineClearFrames, 3);
                     assert.equal(result.engineVerifiedPixels, 17 * 9 * 3);
                     assert.equal(result.wgslEffectsVerified, true);

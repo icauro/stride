@@ -25,6 +25,7 @@ try {
             result.wgslComputeValues = values;
         },
         reportContext: () => { result.sharedContextVerified = true; },
+        reportGameLoop: () => { result.gameLoopVerified = true; result.gameLoopCycles = 2; },
         reportEngineDevice: (clearFrames, verifiedPixels) => {
             result.engineDeviceVerified = true;
             result.engineClearFrames = clearFrames;

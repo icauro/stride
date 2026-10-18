@@ -37,7 +37,7 @@ namespace Stride.Games
     /// <summary>
     /// The game.
     /// </summary>
-    public abstract class GameBase : ComponentBase, IGame
+    public abstract partial class GameBase : ComponentBase, IGame
     {
         #region Fields
 
@@ -47,6 +47,7 @@ namespace Stride.Games
         private bool isEndRunRequired;
         private bool suppressDraw;
         private bool beginDrawOk;
+        private bool gameSystemsDisposed;
 
         private readonly TimeSpan maximumElapsedTime;
         private TimeSpan accumulatedElapsedGameTime;
@@ -376,7 +377,8 @@ namespace Stride.Games
                     // Drain pending GPU work before the window is destroyed: a queued flip-model
                     // Present can only complete while its window is alive, and the device is
                     // destroyed after the window on the exit path.
-                    Window.Closing += (_, _) => GraphicsDevice?.WaitForGpuIdle();
+                    if (!OperatingSystem.IsBrowser())
+                        Window.Closing += (_, _) => GraphicsDevice?.WaitForGpuIdle();
 
                     // Bind Graphics Context enabling initialize to use GL API eg. SetData to texture ...etc
                     BeginDraw();
@@ -516,7 +518,9 @@ namespace Stride.Games
                 // If this instance is not active, sleep for an inactive sleep time
                 if (!IsActive)
                 {
-                    Thread.Sleep(InactiveSleepTime);
+                    // The browser host schedules the next frame. Blocking here
+                    // prevents input, GPU callbacks and visibility changes.
+                    if (!OperatingSystem.IsBrowser()) Thread.Sleep(InactiveSleepTime);
                     return;
                 }
 
@@ -746,16 +750,7 @@ namespace Stride.Games
                     Window.OnPause();
                 }
 
-                var array = new IGameSystemBase[GameSystems.Count];
-                GameSystems.CopyTo(array, 0);
-                for (int i = 0; i < array.Length; i++)
-                {
-                    var disposable = array[i] as IDisposable;
-                    if (disposable != null)
-                    {
-                        disposable.Dispose();
-                    }
-                }
+                DisposeGameSystems();
 
                 // Reset graphics context
                 GraphicsContext = null;
@@ -773,6 +768,16 @@ namespace Stride.Games
                     gamePlatform.Release();
                 }
             }
+        }
+
+        private void DisposeGameSystems()
+        {
+            if (gameSystemsDisposed) return;
+            var array = new IGameSystemBase[GameSystems.Count];
+            GameSystems.CopyTo(array, 0);
+            foreach (var system in array)
+                (system as IDisposable)?.Dispose();
+            gameSystemsDisposed = true;
         }
 
         /// <summary>

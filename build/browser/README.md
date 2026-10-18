@@ -151,11 +151,26 @@ review against the pinned headers. Native-only calls, incompatible multi-draw
 signatures and the browser-aborting surfacePresent call are excluded. This is a
 fixture allowlist, not a compile-time ban on those methods for every future host.
 
+BrowserGameLoopCheck also runs GameBase with the real graphics manager, canvas
+presenter and command list. Two startup/shutdown cycles per page verify presented
+frame counts, all65x63 back-buffer pixels, inactive-frame yielding, exit between
+frames, active asynchronous disposal, reentrant disposal and exactly-once system
+and lifecycle teardown. Its test assembly uses the same friend-assembly pattern
+as the existing no-assets engine tests. This covers the game foundation without
+claiming that an asset-backed scene or Space Escape already runs.
+
+Browser hosts must stop scheduling frames and await `game.DisposeAsync()` on the
+browser thread. It ends the run, deactivates the window, releases game systems
+and the presenter while the device is alive, then awaits real GPU completion
+before device teardown. Closed windows ignore pending host resize/focus updates.
+Native window close and synchronous disposal behavior remain unchanged.
+
 The integrated tests cover async context cancellation, GraphicsDevice, basic
-offline shader assets and canvas presentation. The original ManagedFrame diagnostic
-remains a single-in-flight reference with no device-loss recovery. Full game
-lifecycle, the complete shader permutation set and the game content host remain
-open. Native Vulkan/D3D12 behavior and DLL loading use the same binding assembly.
+offline shader assets, canvas presentation and GameBase lifecycle. The original
+ManagedFrame diagnostic remains a single-in-flight reference with no device-loss
+recovery. Full asset-backed Game initialization, the complete shader permutation
+set, input and the game content host remain open. Native Vulkan/D3D12 behavior
+and DLL loading use the same binding assembly.
 
 ## C API transport probe (diagnostic reference)
 
