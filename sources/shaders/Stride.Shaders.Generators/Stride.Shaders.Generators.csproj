@@ -2,6 +2,9 @@
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
+    <!-- Browser builds run under the pinned .NET 11 compiler host and reference
+         its net11 parser/runtime assemblies; this analyzer never ships to WASM. -->
+    <TargetFramework Condition="'$(StridePlatforms)' == 'Browser'">net11.0</TargetFramework>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>

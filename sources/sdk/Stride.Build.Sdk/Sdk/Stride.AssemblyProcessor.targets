@@ -175,6 +175,9 @@
            library that runs no platform-specific code paths. -->
       <_StrideAssemblyProcessorPlatform>$(StridePlatform)</_StrideAssemblyProcessorPlatform>
       <_StrideAssemblyProcessorPlatform Condition="'$(StridePlatform)' == 'Game'">Shared</_StrideAssemblyProcessorPlatform>
+      <!-- Browser uses platform-neutral IL processing; shipped host tools predate
+           its runtime enum and only iOS needs specialized processor behavior. -->
+      <_StrideAssemblyProcessorPlatform Condition="'$(StridePlatform)' == 'Browser'">Shared</_StrideAssemblyProcessorPlatform>
       <StrideAssemblyProcessorOptions>$(StrideAssemblyProcessorOptions) --platform=$(_StrideAssemblyProcessorPlatform)</StrideAssemblyProcessorOptions>
 
       <!-- Target assembly (last positional argument) -->

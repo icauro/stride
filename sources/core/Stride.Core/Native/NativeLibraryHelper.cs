@@ -52,6 +52,7 @@ public static partial class NativeLibraryHelper
         PlatformType.Linux or PlatformType.Android => ".so",
         PlatformType.macOS => ".dylib",
         PlatformType.iOS => ".a",
+        PlatformType.Browser => ".a",
 
         _ => throw new PlatformNotSupportedException()
     };
@@ -64,6 +65,7 @@ public static partial class NativeLibraryHelper
         PlatformType.macOS => "osx",
         PlatformType.Android => "android",
         PlatformType.iOS => "ios",
+        PlatformType.Browser => "browser",
 
         _ => throw new PlatformNotSupportedException()
     };
@@ -75,6 +77,7 @@ public static partial class NativeLibraryHelper
         Architecture.X64 => "x64",
         Architecture.Arm => "arm",
         Architecture.Arm64 => "arm64",
+        Architecture.Wasm => "wasm",
 
         _ => throw new PlatformNotSupportedException()
     };

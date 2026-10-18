@@ -27,6 +27,8 @@
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkiOS)' ">iOS</StridePlatform>
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkmacOS)' ">macOS</StridePlatform>
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkUWP)' ">UWP</StridePlatform>
+    <StridePlatform Condition="'$(RuntimeIdentifier)' == 'browser-wasm' Or ('$(StrideTargetFramework)' == '$(StrideFrameworkBrowser)' And $(_StridePlatforms.Contains(';Browser;')))">Browser</StridePlatform>
+    <StridePlatformDeps Condition="'$(StridePlatform)' == 'Browser'">browser-wasm</StridePlatformDeps>
   </PropertyGroup>
 
 </Project>

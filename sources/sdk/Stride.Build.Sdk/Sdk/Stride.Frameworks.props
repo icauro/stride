@@ -3,6 +3,7 @@
   <!-- Define default frameworks for each target -->
   <PropertyGroup>
     <StrideFramework>net10.0</StrideFramework>
+    <StrideFrameworkBrowser>net11.0</StrideFrameworkBrowser>
     <StrideFrameworkAndroid>net10.0-android</StrideFrameworkAndroid>
     <StrideFrameworkiOS>net10.0-ios</StrideFrameworkiOS>
     <StrideFrameworkUWP>uap10.0.16299</StrideFrameworkUWP>

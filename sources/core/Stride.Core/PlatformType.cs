@@ -60,5 +60,8 @@ public enum PlatformType
     /// <summary>
     ///   The macOS operating system for Apple desktop and laptop computers.
     /// </summary>
-    macOS
+    macOS,
+
+    /// <summary>The browser WebAssembly environment.</summary>
+    Browser
 }

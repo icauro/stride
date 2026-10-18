@@ -170,7 +170,10 @@ public static class PlatformFolders
 
     private static string GetApplicationBinaryDirectory()
     {
-#if STRIDE_PLATFORM_ANDROID
+#if STRIDE_PLATFORM_BROWSER
+        // Browser hosts populate this virtual filesystem before loading assets.
+        return AppContext.BaseDirectory;
+#elif STRIDE_PLATFORM_ANDROID
         return GetApplicationExecutableDirectory();
 #elif STRIDE_PLATFORM_DESKTOP
         return Path.GetDirectoryName(AppContext.BaseDirectory)!;

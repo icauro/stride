@@ -21,7 +21,8 @@ public static class Platform
     /// The current running <see cref="PlatformType"/>.
     /// </summary>
     public static readonly PlatformType Type
-        = OperatingSystem.IsWindows() ? PlatformType.Windows
+        = OperatingSystem.IsBrowser() ? PlatformType.Browser
+        : OperatingSystem.IsWindows() ? PlatformType.Windows
         : OperatingSystem.IsLinux()  ? PlatformType.Linux
         : OperatingSystem.IsMacOS() ? PlatformType.macOS
         : OperatingSystem.IsAndroid() ? PlatformType.Android

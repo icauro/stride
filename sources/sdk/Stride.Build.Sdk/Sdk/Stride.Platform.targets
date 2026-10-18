@@ -15,8 +15,11 @@
   <!-- ================================================================ -->
   <!-- Platform Defines - Desktop Frameworks -->
   <!-- ================================================================ -->
-  <PropertyGroup Condition=" '$(StrideTargetFramework)' == '$(StrideFramework)' Or '$(StrideTargetFramework)' == '$(StrideFrameworkWindows)' ">
+  <PropertyGroup Condition="('$(StrideTargetFramework)' == '$(StrideFramework)' Or '$(StrideTargetFramework)' == '$(StrideFrameworkWindows)') And '$(StridePlatform)' != 'Browser'">
     <StridePlatformDefines>STRIDE_PLATFORM_DESKTOP</StridePlatformDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(StridePlatform)' == 'Browser'">
+    <StridePlatformDefines>STRIDE_PLATFORM_BROWSER</StridePlatformDefines>
   </PropertyGroup>
 
   <!-- ================================================================ -->
@@ -43,7 +46,7 @@
   <!-- ================================================================ -->
   <!-- .NET Runtime Defines -->
   <!-- ================================================================ -->
-  <PropertyGroup Condition="$(TargetFramework.StartsWith('net10'))">
+  <PropertyGroup Condition="$(TargetFramework.StartsWith('net10')) Or $(TargetFramework.StartsWith('net11'))">
     <StrideNETRuntimeDefines>STRIDE_RUNTIME_CORECLR</StrideNETRuntimeDefines>
   </PropertyGroup>
 

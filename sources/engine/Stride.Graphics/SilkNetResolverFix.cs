@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
+#if !STRIDE_PLATFORM_BROWSER
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -67,3 +68,4 @@ internal static class SilkNetResolverFix
         return Enumerable.Empty<string>();
     };
 }
+#endif

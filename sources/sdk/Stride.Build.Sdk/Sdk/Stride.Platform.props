@@ -31,6 +31,7 @@
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkUWP)' ">UWP</StridePlatform>
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkAndroid)' ">Android</StridePlatform>
     <StridePlatform Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkiOS)' ">iOS</StridePlatform>
+    <StridePlatform Condition="'$(RuntimeIdentifier)' == 'browser-wasm' Or '$(StridePlatformOriginal)' == 'Browser' Or '$(StridePlatforms)' == 'Browser' Or ('$(StrideTargetFramework)' == '$(StrideFrameworkBrowser)' And $(StridePlatforms.Contains('Browser')))">Browser</StridePlatform>
     <StridePlatform Condition=" '$(StridePlatform)' == '' And '$([MSBuild]::IsOSPlatform(Linux))' ">Linux</StridePlatform>
     <StridePlatform Condition=" '$(StridePlatform)' == '' And '$([MSBuild]::IsOSPlatform(OSX))' ">macOS</StridePlatform>
     <StridePlatform Condition=" '$(StridePlatform)' == '' ">Windows</StridePlatform>
@@ -43,6 +44,7 @@
     <StridePlatformDeps Condition=" '$(StrideTargetFramework)' == '$(StrideFramework)' Or '$(StrideTargetFramework)' == '$(StrideFrameworkWindows)' Or '$(StrideTargetFramework)' == '$(StrideFrameworkmacOS)' Or '$(StrideTargetFramework)' == '$(StrideFrameworkiOS)' ">dotnet</StridePlatformDeps>
     <StridePlatformDeps Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkUWP)' ">UWP</StridePlatformDeps>
     <StridePlatformDeps Condition=" '$(StrideTargetFramework)' == '$(StrideFrameworkAndroid)' ">Android</StridePlatformDeps>
+    <StridePlatformDeps Condition="'$(StridePlatform)' == 'Browser'">browser-wasm</StridePlatformDeps>
   </PropertyGroup>
 
   <!-- ================================================================ -->
@@ -58,6 +60,8 @@
     <_StrideRepoRoot>$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildThisFileDirectory)', 'crowdin.yml'))</_StrideRepoRoot>
     <_StrideLocalProps Condition="'$(_StrideRepoRoot)' != ''">$(_StrideRepoRoot)\build\Stride.Local.props</_StrideLocalProps>
     <_StrideLocalPropsTemplate>$(MSBuildThisFileDirectory)Stride.Local.props.template</_StrideLocalPropsTemplate>
+    <!-- Establish explicit browser selection before local host defaults apply. -->
+    <StridePlatforms Condition="'$(StridePlatforms)' == '' And '$(StridePlatform)' == 'Browser'">Browser</StridePlatforms>
   </PropertyGroup>
 
   <Import Project="$(_StrideLocalProps)" Condition="'$(_StrideLocalProps)' != '' And Exists('$(_StrideLocalProps)')" />
@@ -107,18 +111,25 @@
     <!-- desktop-native variants, included only when that platform is active -->
     <_StrideRuntimeWindowsFramework Condition="$(_StridePlatforms.Contains(';Windows;'))">;$(StrideFrameworkWindows)</_StrideRuntimeWindowsFramework>
     <_StrideRuntimeMacOSFramework Condition="$(_StridePlatforms.Contains(';macOS;'))">;$(StrideFrameworkmacOS)</_StrideRuntimeMacOSFramework>
+    <_StrideRuntimeBrowserFramework Condition="$(_StridePlatforms.Contains(';Browser;'))">;$(StrideFrameworkBrowser)</_StrideRuntimeBrowserFramework>
 
     <!-- base only: most runtime assemblies -->
-    <StrideRuntimeTargetFrameworks>$(StrideFramework)$(_StrideRuntimeMobileFrameworks)</StrideRuntimeTargetFrameworks>
+    <StrideRuntimeTargetFrameworks>$(StrideFramework)$(_StrideRuntimeMobileFrameworks)$(_StrideRuntimeBrowserFramework)</StrideRuntimeTargetFrameworks>
     <!-- + Windows desktop (e.g. raw input) -->
-    <StrideRuntimeTargetFrameworksWindows>$(StrideFramework)$(_StrideRuntimeWindowsFramework)$(_StrideRuntimeMobileFrameworks)</StrideRuntimeTargetFrameworksWindows>
+    <StrideRuntimeTargetFrameworksWindows>$(StrideFramework)$(_StrideRuntimeWindowsFramework)$(_StrideRuntimeMobileFrameworks)$(_StrideRuntimeBrowserFramework)</StrideRuntimeTargetFrameworksWindows>
     <!-- + macOS desktop (e.g. AVFoundation / Metal) -->
-    <StrideRuntimeTargetFrameworksMacOS>$(StrideFramework)$(_StrideRuntimeMacOSFramework)$(_StrideRuntimeMobileFrameworks)</StrideRuntimeTargetFrameworksMacOS>
+    <StrideRuntimeTargetFrameworksMacOS>$(StrideFramework)$(_StrideRuntimeMacOSFramework)$(_StrideRuntimeMobileFrameworks)$(_StrideRuntimeBrowserFramework)</StrideRuntimeTargetFrameworksMacOS>
+    <StrideRuntimeTargetFrameworks Condition="'$(_StridePlatforms)' == ';Browser;'">$(StrideFrameworkBrowser)</StrideRuntimeTargetFrameworks>
+    <StrideRuntimeTargetFrameworksWindows Condition="'$(_StridePlatforms)' == ';Browser;'">$(StrideFrameworkBrowser)</StrideRuntimeTargetFrameworksWindows>
+    <StrideRuntimeTargetFrameworksMacOS Condition="'$(_StridePlatforms)' == ';Browser;'">$(StrideFrameworkBrowser)</StrideRuntimeTargetFrameworksMacOS>
   </PropertyGroup>
 
   <!-- ================================================================ -->
   <!-- Graphics API Defaults per Platform -->
   <!-- ================================================================ -->
+  <PropertyGroup Condition="'$(StridePlatform)' == 'Browser'">
+    <StrideGraphicsApis Condition="'$(StrideGraphicsApis)' == ''">WebGPU</StrideGraphicsApis>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(StridePlatform)' == 'Windows'">
     <StrideGraphicsApis Condition="'$(StrideGraphicsApis)' == ''">Direct3D11</StrideGraphicsApis>
   </PropertyGroup>
