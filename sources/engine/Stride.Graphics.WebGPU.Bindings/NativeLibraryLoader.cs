@@ -15,6 +15,9 @@ public static unsafe partial class WebGPU
 
     static WebGPU()
     {
+        // Browser hosts register statically linked, ABI-compatible core imports.
+        // NativeLibrary's dynamic DLL resolver is only meaningful on native hosts.
+        if (OperatingSystem.IsBrowser()) return;
         NativeLibrary.SetDllImportResolver(typeof(WebGPU).Assembly, (name, _, _) =>
         {
             if (name != LibraryName) return 0;
@@ -27,6 +30,8 @@ public static unsafe partial class WebGPU
     /// <remarks>The library stays loaded for the process lifetime because native callbacks and objects may outlive individual calls.</remarks>
     public static void LoadNativeLibrary(string path)
     {
+        if (OperatingSystem.IsBrowser())
+            throw new PlatformNotSupportedException("Browser WebGPU uses statically linked core imports, not a native DLL.");
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!Path.IsPathFullyQualified(path)) throw new ArgumentException("An absolute native library path is required.", nameof(path));
         path = Path.GetFullPath(path);
