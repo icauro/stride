@@ -5,6 +5,7 @@ using Stride.Engine;
 using Stride.Games;
 using Stride.Graphics;
 using Stride.Input;
+using Stride.Core.Diagnostics;
 
 [SupportedOSPlatform("browser")]
 public static partial class Program
@@ -12,7 +13,10 @@ public static partial class Program
     private static Game? game;
     private static GameContextBrowser? context;
     private static InputSourceBrowser Source => (InputSourceBrowser)game!.Input.Sources.Single();
-    public static void Main() { }
+    public static void Main()
+    {
+        GlobalLogger.GlobalMessageLogged += message => ReportLog($"[{message.Module}]: {message.Type}: {message.Text}", (int)message.Type);
+    }
 
     [JSExport]
     public static async Task Start(string manifestUrl, int width, int height)
@@ -35,6 +39,7 @@ public static partial class Program
         catch (Exception error) { ReportError(error.ToString()); throw; }
     }
     [JSImport("managedError", "space-escape")] private static partial void ReportError(string error);
+    [JSImport("log", "space-escape")] private static partial void ReportLog(string message, int level);
     [JSExport] public static int Entities() => game?.SceneSystem.SceneInstance?.RootScene?.Entities.Count ?? 0;
     [JSExport] public static bool Key(string code, bool down) => Source.SubmitKey(code, down);
     [JSExport] public static void Move(float x, float y) => Source.SubmitMouseMove(x, y);

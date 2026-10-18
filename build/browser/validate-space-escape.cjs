@@ -25,8 +25,12 @@ async function main() {
         browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE });
         const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
         const errors = [];
+        const messages = [];
         page.on('pageerror', error => errors.push(String(error)));
-        page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+        page.on('console', message => {
+            messages.push(message.text());
+            if (message.type() === 'error') errors.push(message.text());
+        });
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
         await page.waitForFunction(() => ['running', 'failed'].includes(globalThis.spaceEscapeResult?.status), { timeout: 120000 });
         let result = await page.evaluate(() => globalThis.spaceEscapeResult);
@@ -39,10 +43,18 @@ async function main() {
         assert.equal(result.status, 'running', 'Space Escape frame loop failed');
         assert.ok(result.frames >= 60);
         assert.ok(result.entities > 0, 'The sample scene has not replaced the splash screen');
+        const settledFrame = result.frames + 60;
+        await page.waitForFunction(target => globalThis.spaceEscapeResult.status === 'failed' || globalThis.spaceEscapeResult.frames >= target,
+            settledFrame, { timeout: 30000 });
+        result = await page.evaluate(() => globalThis.spaceEscapeResult);
+        console.log(JSON.stringify({ result, errors, messages: messages.slice(-50) }, null, 2));
+        assert.equal(result.status, 'running');
         const png = PNG.sync.read(await page.locator('#game').screenshot());
+        if (process.env.BROWSER_CAPTURE_PATH) await page.locator('#game').screenshot({ path: process.env.BROWSER_CAPTURE_PATH });
         let nonBlack = 0;
         for (let i = 0; i < png.data.length; i += 4)
             if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 24) nonBlack++;
+        console.log(JSON.stringify({ nonBlack, total: png.width * png.height }));
         assert.ok(nonBlack > png.width * png.height / 10, 'Actual game canvas is mostly black');
         // This is a startup/rendering gate. Gameplay/button/lane assertions follow
         // once actual sample frames pass; do not interpret this as full completion.

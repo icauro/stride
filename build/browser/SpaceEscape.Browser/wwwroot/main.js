@@ -15,7 +15,10 @@ const fail = error => {
 };
 try {
     const runtime = await dotnet.create();
-    runtime.setModuleImports('space-escape', { managedError: error => { result.managedError = error; } });
+    runtime.setModuleImports('space-escape', {
+        managedError: error => { result.managedError = error; },
+        log: (message, level) => { if (level >= 4) console.error(message); else console.log(message); }
+    });
     const config = runtime.getConfig();
     managed = (await runtime.getAssemblyExports(config.mainAssemblyName)).Program;
     await runtime.runMain();
