@@ -6,7 +6,10 @@ const { chromium } = require('playwright');
 
 // Serve only the publish tree on loopback. A fresh browser context exercises the
 // actual WASM download/runtime, with no dependency on a developer's browser tabs.
-const root = path.resolve(__dirname, 'Smoke/bin/Release/net11.0/publish/wwwroot');
+const webgpu = process.argv.includes('--webgpu');
+const root = process.env.BROWSER_PUBLISH_ROOT
+    ? path.resolve(process.env.BROWSER_PUBLISH_ROOT)
+    : path.resolve(__dirname, `${webgpu ? 'WebGpuProbe' : 'Smoke'}/bin/Release/net11.0/publish/wwwroot`);
 const mime = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
@@ -66,13 +69,32 @@ async function main() {
             await page.waitForFunction(() => ['passed', 'failed'].includes(globalThis.smokeResult?.status), null, { timeout: 60000 });
             const result = await page.evaluate(() => globalThis.smokeResult);
             assert.equal(result.status, 'passed', JSON.stringify(result));
-            assert.match(result.framework, /^\.NET 11\./);
-            assert.equal(result.sum, 42);
+            if (webgpu) {
+                assert.equal(result.managedPixelsVerified, true);
+                assert.equal(result.invalidMapRejected, true);
+                assert.equal(result.disposed, true);
+                assert.equal(result.liveResources, 0);
+                assert.equal(result.frames.length, 3);
+                assert.equal(result.readback.bytesPerRow, 512);
+                assert.equal(result.readback.packedBytes, 65 * 63 * 4);
+            } else {
+                assert.match(result.framework, /^\.NET 11\./);
+                assert.equal(result.sum, 42);
+            }
             assert.equal(await page.locator('#result').getAttribute('data-status'), 'passed');
             runs.push(result);
         }
         assert.deepEqual(errors, [], 'Browser errors occurred');
-        console.log(JSON.stringify({ status: 'passed', browser: browser.version(), runs }, null, 2));
+        let unavailable;
+        if (webgpu) {
+            await page.goto(`${url}?no-adapter`);
+            await page.waitForFunction(() => globalThis.smokeResult?.status === 'failed', null, { timeout: 60000 });
+            unavailable = await page.evaluate(() => globalThis.smokeResult);
+            assert.match(unavailable.error, /Injected adapter unavailable/);
+            assert.equal(unavailable.frames.length, 0);
+            assert.equal(unavailable.managedPixelsVerified, undefined);
+        }
+        console.log(JSON.stringify({ status: 'passed', browser: browser.version(), runs, unavailable }, null, 2));
     } finally {
         try {
             if (browser) await browser.close();

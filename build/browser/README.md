@@ -28,13 +28,49 @@ npm run smoke
 Pop-Location
 ```
 
-Alternatively, set `BROWSER_EXECUTABLE` to an installed Chromium browser's
+## WebGPU transport baseline
+
+```powershell
+dotnet publish build/browser/WebGpuProbe/WebGpuProbe.csproj -c Release
+Push-Location build/browser
+npm run webgpu
+Pop-Location
+```
+
+WebGpuProbe uses direct .NET JavaScript interop to create a browser device, compile
+WGSL, draw a red triangle on blue, present it to a canvas and asynchronously read
+the texture back. C# checks every pixel's color, analytic interior/exterior
+regions and foreground/background counts. Width65 deliberately requires padding:
+GPU rows use512bytes while packed rows use260bytes. Three frames are checked per
+load; the validator repeats after reload. An invalid map request is checked with
+a validation error scope, a rejected JS promise must reach C#, and an injected
+unavailable adapter must fail startup without producing verified frames.
+
+This is a transport baseline, not a Stride backend or a final decision to replace
+the C bindings. Initialization/mapping use promises and C# tasks without blocking
+the browser thread. The proof awaits a JSObject then copies its typed array into
+a managed int array because this SDK does not support Task<int[]> imports. This
+copy expands pixel storage on the managed side; measure a byte/memory-view path
+before production use. Reported frame timings include GPU/readback, marshalling
+and managed verification; they are not rendering benchmarks.
+
+WebGPU must actually be available to the selected browser. No software fallback
+or GPU-enabling flags are silently added. Results record adapter information,
+advertised features, readback layout, pixel counts, cleanup and elapsed times.
+Only default device capabilities are requested; advertised adapter features do
+not imply they were enabled on that device. This test does not establish Stride
+shader-variant, asset-loading or lifecycle compatibility.
+
+## Browser selection and validation
+
+Set `BROWSER_EXECUTABLE` to an installed Chromium browser's
 absolute executable path to avoid downloading another browser. The validator
 serves the published app on an ephemeral loopback port, opens a fresh headless
 browser, asserts runtime version and interop results across two page loads,
 and closes its browser/server. Browser exceptions, console errors, failed network
 requests, unexpected results and timeouts fail validation. It uses no existing
-browser profile or interactive window.
+browser profile or interactive window. `BROWSER_PUBLISH_ROOT` may override the
+served publish wwwroot directory for isolated toolchain experiments.
 
 The result is available in `globalThis.smokeResult` and the page's `#result`
 element. The validator prints JSON with browser/runtime versions and both runs.
