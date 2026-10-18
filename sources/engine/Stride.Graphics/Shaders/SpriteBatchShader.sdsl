@@ -27,7 +27,10 @@ shader SpriteBatchShader<bool TSRgb> : SpriteBase
         // Because we use float input values we should allow certain threshold - lets fix it at 0.1
 
         // Alpha grayscale
-        float4 swizzleColor = (abs(streams.Swizzle - 1) <= 0.1) ? base.Shading().rrrr : base.Shading();
+        // Sample before branching on per-sprite data so implicit derivatives
+        // are evaluated in uniform control flow.
+        float4 sampledColor = base.Shading();
+        float4 swizzleColor = (abs(streams.Swizzle - 1) <= 0.1) ? sampledColor.rrrr : sampledColor;
 
         // Normal maps
         if (abs(streams.Swizzle - 2) <= 0.1)
