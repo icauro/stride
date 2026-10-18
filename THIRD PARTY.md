@@ -9,6 +9,8 @@ Stride uses the following open-source products.
 * [Bullet](http://bulletphysics.org/) (zlib License)
 * [BEPUphysics](https://github.com/bepu/bepuphysics2) (Apache License 2.0)
 * [Silk.NET](https://github.com/dotnet/Silk.NET) (MIT License)
+* [WebGPU native headers](https://github.com/webgpu-native/webgpu-headers) (BSD-3-Clause; experimental bindings, see build/wgpu/NOTICE.md)
+* [wgpu-native](https://github.com/gfx-rs/wgpu-native) (MIT or Apache License 2.0; experimental bindings)
 * [DirectXTex](http://directxtex.codeplex.com) (Ms-PL)
 * [DirectXTk](https://directxtk.codeplex.com/) (Ms-PL)
 * [FreeType](http://www.freetype.org/) (FreeType License)
@@ -50,6 +52,7 @@ Stride uses the following open-source products.
 ### Opensource
 
 * [Assimp](http://assimp.sourceforge.net/) (BSD 3-clause License)
+* [CppAst](https://github.com/xoofx/CppAst.NET) (BSD-2-Clause; WebGPU binding generation)
 * [AsyncEx](https://github.com/StephenCleary/AsyncEx) (MIT License)
 * [AvalonDock](https://github.com/Dirkster99/AvalonDock) (Ms-PL)
 * [DocFX](https://dotnet.github.io/docfx/) (MIT License)

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "CppAst": {
+        "type": "Direct",
+        "requested": "[0.22.0, )",
+        "resolved": "0.22.0",
+        "contentHash": "nWp2UW99fQF0m8WyQrcF/WtRaez/dEn4BXflJL5IIt0PrMU7mY2m9Oa1C3KR/JXm6F+RHgnNXuATEEimvxEnZA==",
+        "dependencies": {
+          "ClangSharp": "18.1.0.4",
+          "Irony": "1.5.3"
+        }
+      },
+      "ClangSharp": {
+        "type": "Transitive",
+        "resolved": "18.1.0.4",
+        "contentHash": "M/0JxDRiNF/ddzSIoBnanY1TDOuKJYGBlko200XFNEWi9mOwr74eNC53pavNlctiTlHmiltos2dZCDz4XvUt/g==",
+        "dependencies": {
+          "ClangSharp.Interop": "18.1.0.4"
+        }
+      },
+      "ClangSharp.Interop": {
+        "type": "Transitive",
+        "resolved": "18.1.0.4",
+        "contentHash": "Ip0cchW11xtmKlPvdmJMfkEj4X/cdjjYO+xyzhUuoupmOkp79Zs3jkljQS2inXjtIWCUGWuiC0Vr5EL2D3Qifw==",
+        "dependencies": {
+          "libClang": "18.1.3.2",
+          "libClangSharp": "18.1.3.1"
+        }
+      },
+      "Irony": {
+        "type": "Transitive",
+        "resolved": "1.5.3",
+        "contentHash": "wy0LlNq9Bhqy2C9O5burGCJPB9CyWuWf/JHwcnaxnM5wapPEc7uW6MBBzkymrV/pS2UwETK/0nJXzhh5Y6wv4Q=="
+      },
+      "libclang": {
+        "type": "Transitive",
+        "resolved": "18.1.3.2",
+        "contentHash": "ugV1RcbJ50D9QivPWoJ5qF14psjQQqiFmd9bTsUScfpcGUEJBE2qm8eIZzatEZOKUchW3wSHRXryBzTtapibwQ=="
+      },
+      "libClangSharp": {
+        "type": "Transitive",
+        "resolved": "18.1.3.1",
+        "contentHash": "HjHcNOxPFYvWk2vgqbLjmRW63b6ZQw2UgwlOAAb4XGWnLmOLDipoV2nWTA3T0orE4dleWw7lemGKhZwtvmFKQw=="
+      }
+    },
+    "net10.0/win-x64": {
+      "libclang": {
+        "type": "Transitive",
+        "resolved": "18.1.3.2",
+        "contentHash": "ugV1RcbJ50D9QivPWoJ5qF14psjQQqiFmd9bTsUScfpcGUEJBE2qm8eIZzatEZOKUchW3wSHRXryBzTtapibwQ==",
+        "dependencies": {
+          "libclang.runtime.win-x64": "18.1.3.2"
+        }
+      },
+      "libclang.runtime.win-x64": {
+        "type": "Transitive",
+        "resolved": "18.1.3.2",
+        "contentHash": "L8bgxTUASasstvQdjpSdOQEjpLtXKpZFSmV4iRNtC3+hyCt87KvOR1v8F5V+sPasdihLkN3160KmtpcAdcUm1A=="
+      },
+      "libClangSharp": {
+        "type": "Transitive",
+        "resolved": "18.1.3.1",
+        "contentHash": "HjHcNOxPFYvWk2vgqbLjmRW63b6ZQw2UgwlOAAb4XGWnLmOLDipoV2nWTA3T0orE4dleWw7lemGKhZwtvmFKQw==",
+        "dependencies": {
+          "libClangSharp.runtime.win-x64": "18.1.3.1"
+        }
+      },
+      "libClangSharp.runtime.win-x64": {
+        "type": "Transitive",
+        "resolved": "18.1.3.1",
+        "contentHash": "Uu9w/jthpuC7uDFKYmkdmU/LIVJAlht5a6QFLzkUxdET7Szo5h/sMezU2oRE7P2ufIyFnPl5KYyFV1z0jGAedQ=="
+      }
+    }
+  }
+}

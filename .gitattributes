@@ -102,3 +102,7 @@ deps/FFmpeg/*/ffmpeg filter=lfs diff=lfs merge=lfs -text
 
 # sprite studio
 *.ssae filter=lfs diff=lfs merge=lfs -text
+
+# Preserve hash-pinned WebGPU C inputs and deterministic generated output.
+build/wgpu/headers/*.h -text -whitespace
+sources/engine/Stride.Graphics.WebGPU.Bindings/Generated/*.g.cs text eol=lf
