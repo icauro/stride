@@ -355,12 +355,22 @@ internal sealed unsafe partial class WebGpuDeviceContext : IDisposable
             request.Complete(true, status == WGPUMapAsyncStatus.Success ? null : $"WebGPU mapping failed ({status}): {Text(message)}");
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void OnError(WGPUDevice* device, WGPUErrorType type, WGPUStringView message, void* user1, void* user2)
+    private static void OnError(WGPUDevice* device, WGPUErrorType type, WGPUStringView message, void* user1, void* user2) => HandleError(device, type, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnErrorBrowser(WGPUDevice* device, WGPUErrorType type, WGPUStringView* message, void* user1, void* user2) => HandleError(device, type, *message, user1, user2);
+
+    private static void HandleError(WGPUDevice* device, WGPUErrorType type, WGPUStringView message, void* user1, void* user2)
     {
         if (Devices.TryGetValue((nint)user1, out var state)) state.Errors.Enqueue($"WebGPU {type}: {Text(message)}");
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void OnDeviceLost(WGPUDevice* device, WGPUDeviceLostReason reason, WGPUStringView message, void* user1, void* user2)
+    private static void OnDeviceLost(WGPUDevice* device, WGPUDeviceLostReason reason, WGPUStringView message, void* user1, void* user2) => HandleDeviceLost(device, reason, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnDeviceLostBrowser(WGPUDevice* device, WGPUDeviceLostReason reason, WGPUStringView* message, void* user1, void* user2) => HandleDeviceLost(device, reason, *message, user1, user2);
+
+    private static void HandleDeviceLost(WGPUDevice* device, WGPUDeviceLostReason reason, WGPUStringView message, void* user1, void* user2)
     {
         if (Devices.TryGetValue((nint)user1, out var state))
         { state.LostMessage = $"{reason}: {Text(message)}"; Volatile.Write(ref state.Lost, 1); }

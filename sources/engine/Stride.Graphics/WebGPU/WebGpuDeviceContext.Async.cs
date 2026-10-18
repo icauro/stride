@@ -121,11 +121,17 @@ internal sealed partial class WebGpuDeviceContext
 
     private unsafe void RequestPortableAdapter(nint requestToken, WGPUBackendType backend)
     {
+        // wasm32 C lowers a by-value WGPUStringView to a pointer. Mono's reverse
+        // P/Invoke wrapper otherwise treats the pointer's stack slot as the
+        // struct itself. Explicit browser entry points dereference it once;
+        // the generated header signatures and native entry points stay intact.
         var options = WGPURequestAdapterOptions.CreateDefault();
         options.backendType = backend;
         var callback = WGPURequestAdapterCallbackInfo.CreateDefault();
         callback.mode = WGPUCallbackMode.AllowSpontaneous;
-        callback.callback = &OnAsyncAdapter;
+        callback.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPURequestAdapterStatus, WGPUAdapter, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPURequestAdapterStatus, WGPUAdapter, WGPUStringView*, void*, void*, void>)&OnAsyncAdapterBrowser
+            : &OnAsyncAdapter;
         callback.userdata1 = (void*)requestToken;
         Api.wgpuInstanceRequestAdapter(Instance, &options, callback);
     }
@@ -168,13 +174,19 @@ internal sealed partial class WebGpuDeviceContext
         }
         descriptor.requiredFeatures = features;
         descriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode.AllowSpontaneous;
-        descriptor.deviceLostCallbackInfo.callback = &OnDeviceLost;
+        descriptor.deviceLostCallbackInfo.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPUDevice*, WGPUDeviceLostReason, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPUDevice*, WGPUDeviceLostReason, WGPUStringView*, void*, void*, void>)&OnDeviceLostBrowser
+            : &OnDeviceLost;
         descriptor.deviceLostCallbackInfo.userdata1 = (void*)token;
-        descriptor.uncapturedErrorCallbackInfo.callback = &OnError;
+        descriptor.uncapturedErrorCallbackInfo.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPUDevice*, WGPUErrorType, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPUDevice*, WGPUErrorType, WGPUStringView*, void*, void*, void>)&OnErrorBrowser
+            : &OnError;
         descriptor.uncapturedErrorCallbackInfo.userdata1 = (void*)token;
         var callback = WGPURequestDeviceCallbackInfo.CreateDefault();
         callback.mode = WGPUCallbackMode.AllowSpontaneous;
-        callback.callback = &OnAsyncDevice;
+        callback.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPURequestDeviceStatus, WGPUDevice, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPURequestDeviceStatus, WGPUDevice, WGPUStringView*, void*, void*, void>)&OnAsyncDeviceBrowser
+            : &OnAsyncDevice;
         callback.userdata1 = (void*)requestToken;
         Api.wgpuAdapterRequestDevice(Adapter, &descriptor, callback);
     }
@@ -199,7 +211,9 @@ internal sealed partial class WebGpuDeviceContext
     {
         var callback = WGPUQueueWorkDoneCallbackInfo.CreateDefault();
         callback.mode = WGPUCallbackMode.AllowSpontaneous;
-        callback.callback = &OnAsyncQueue;
+        callback.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPUQueueWorkDoneStatus, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPUQueueWorkDoneStatus, WGPUStringView*, void*, void*, void>)&OnAsyncQueueBrowser
+            : &OnAsyncQueue;
         callback.userdata1 = (void*)requestToken;
         Api.wgpuQueueOnSubmittedWorkDone(Queue, callback);
     }
@@ -208,7 +222,9 @@ internal sealed partial class WebGpuDeviceContext
     {
         var callback = WGPUBufferMapCallbackInfo.CreateDefault();
         callback.mode = WGPUCallbackMode.AllowSpontaneous;
-        callback.callback = &OnAsyncMap;
+        callback.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView*, void*, void*, void>)&OnAsyncMapBrowser
+            : &OnAsyncMap;
         callback.userdata1 = (void*)requestToken;
         Api.wgpuBufferMapAsync(buffer, WGPUMapMode.Read, 0, (nuint)length, callback);
     }
@@ -229,27 +245,47 @@ internal sealed partial class WebGpuDeviceContext
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnAsyncAdapter(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void* user1, void* user2)
+    private static unsafe void OnAsyncAdapter(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void* user1, void* user2) => HandleAsyncAdapter(status, adapter, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void OnAsyncAdapterBrowser(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView* message, void* user1, void* user2) => HandleAsyncAdapter(status, adapter, *message, user1, user2);
+
+    private static unsafe void HandleAsyncAdapter(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void* user1, void* user2)
     {
         if (AsyncAdapters.TryRemove((nint)user1, out var request))
             request.Complete(adapter, status == WGPURequestAdapterStatus.Success && adapter.Handle != 0 ? null : $"WebGPU adapter request failed ({status}): {Text(message)}");
         else if (adapter.Handle != 0) ReleaseAdapter(adapter);
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnAsyncDevice(WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message, void* user1, void* user2)
+    private static unsafe void OnAsyncDevice(WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message, void* user1, void* user2) => HandleAsyncDevice(status, device, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void OnAsyncDeviceBrowser(WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView* message, void* user1, void* user2) => HandleAsyncDevice(status, device, *message, user1, user2);
+
+    private static unsafe void HandleAsyncDevice(WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView message, void* user1, void* user2)
     {
         if (AsyncDevices.TryRemove((nint)user1, out var request))
             request.Complete(device, status == WGPURequestDeviceStatus.Success && device.Handle != 0 ? null : $"WebGPU device request failed ({status}): {Text(message)}");
         else if (device.Handle != 0) ReleaseDevice(device);
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnAsyncQueue(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* user1, void* user2)
+    private static unsafe void OnAsyncQueue(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* user1, void* user2) => HandleAsyncQueue(status, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void OnAsyncQueueBrowser(WGPUQueueWorkDoneStatus status, WGPUStringView* message, void* user1, void* user2) => HandleAsyncQueue(status, *message, user1, user2);
+
+    private static unsafe void HandleAsyncQueue(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* user1, void* user2)
     {
         if (AsyncQueues.TryRemove((nint)user1, out var request))
             request.Complete(true, status == WGPUQueueWorkDoneStatus.Success ? null : $"WebGPU queue completion failed ({status}): {Text(message)}");
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static unsafe void OnAsyncMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2)
+    private static unsafe void OnAsyncMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2) => HandleAsyncMap(status, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe void OnAsyncMapBrowser(WGPUMapAsyncStatus status, WGPUStringView* message, void* user1, void* user2) => HandleAsyncMap(status, *message, user1, user2);
+
+    private static unsafe void HandleAsyncMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2)
     {
         if (AsyncMaps.TryRemove((nint)user1, out var request))
             request.Complete(true, status == WGPUMapAsyncStatus.Success ? null : $"WebGPU mapping failed ({status}): {Text(message)}");

@@ -38,7 +38,9 @@ internal sealed unsafe partial class WebGpuDeviceContext
                 pendingReadCallbacks[request.Token] = request;
                 var callback = WGPUBufferMapCallbackInfo.CreateDefault();
                 callback.mode = OperatingSystem.IsBrowser() ? WGPUCallbackMode.AllowSpontaneous : WGPUCallbackMode.AllowProcessEvents;
-                callback.callback = &OnReadMap;
+                callback.callback = OperatingSystem.IsBrowser()
+            ? (delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView, void*, void*, void>)(delegate* unmanaged[Cdecl]<WGPUMapAsyncStatus, WGPUStringView*, void*, void*, void>)&OnReadMapBrowser
+            : &OnReadMap;
                 callback.userdata1 = (void*)request.Token;
                 Api.wgpuBufferMapAsync(buffer, WGPUMapMode.Read, 0, (nuint)length, callback);
             }
@@ -75,7 +77,12 @@ internal sealed unsafe partial class WebGpuDeviceContext
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    private static void OnReadMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2)
+    private static void OnReadMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2) => HandleReadMap(status, message, user1, user2);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void OnReadMapBrowser(WGPUMapAsyncStatus status, WGPUStringView* message, void* user1, void* user2) => HandleReadMap(status, *message, user1, user2);
+
+    private static void HandleReadMap(WGPUMapAsyncStatus status, WGPUStringView message, void* user1, void* user2)
     {
         if (pendingReadCallbacks.TryRemove((nint)user1, out var request)) Volatile.Write(ref request.Status, (int)status);
     }
