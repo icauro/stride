@@ -37,6 +37,7 @@ try {
         contentBaseUrl: () => new URL('./content/', document.baseURI).href,
         reportAssets: () => { result.contentDatabaseVerified = true; result.contentAssets = 3; },
         reportManagedError: error => { result.managedError = error; },
+        reportGameStartup: () => { result.fullGameStartupVerified = true; },
         inputRequested: () => new URLSearchParams(location.search).has('verify-canvas'),
         attachInputAndWait: () => new Promise(resolve => {
             detachInput = attachBrowserInput(document.getElementById('input-canvas'), {

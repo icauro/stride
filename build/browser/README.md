@@ -73,6 +73,7 @@ shader-variant, asset-loading or lifecycle compatibility.
 
 ```powershell
 pwsh -NoProfile -File build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe
+pwsh -NoProfile -File build/browser/PrepareFreeType.ps1
 cargo install naga-cli --version 29.0.0 --locked --root build/wgpu/ShaderPackageTool/obj/naga
 pwsh -NoProfile -File build/browser/PrepareEngineShaders.ps1 -Naga build/wgpu/ShaderPackageTool/obj/naga/bin/naga.exe
 pwsh -NoProfile -File build/browser/PrepareContent.ps1
@@ -99,7 +100,7 @@ clears through Stride CommandList, Texture.Copy and nonblocking GetData. Every
 pixel must match before async device disposal. It verifies factory disposal of an
 unused prepared device. It requires `sharedContextVerified` and
 `engineDeviceVerified` across load and reload. The published import table now
-contains85 audited core functions;
+contains89 audited core functions;
 native polling, timestamp-period queries and surfacePresent must remain absent.
 This verifies context/GraphicsDevice startup and clears, not a running game.
 Space Escape still needs its complete effect/variant set, input, runtime
@@ -177,7 +178,7 @@ Invalid-map validation/retry, DLL-loader rejection and unavailable-adapter start
 are checked alongside the shared triangle pixel assertions and reload.
 
 The validator also checks the generated pinvoke-table.h against core-imports.json:
-exactly85 imports whose signatures match both audited headers. Any change requires
+exactly89 imports whose signatures match both audited headers. Any change requires
 review against the pinned headers. Native-only calls, incompatible multi-draw
 signatures and the browser-aborting surfacePresent call are excluded. This is a
 fixture allowlist, not a compile-time ban on those methods for every future host.
@@ -189,6 +190,39 @@ frames, active asynchronous disposal, reentrant disposal and exactly-once system
 and lifecycle teardown. Its test assembly uses the same friend-assembly pattern
 as the existing no-assets engine tests. This covers the game foundation without
 claiming that an asset-backed scene or Space Escape already runs.
+
+BrowserGameStartupCheck additionally initializes the actual Engine.Game with its
+normal systems and packaged GameSettings, runs three browser frames, checks the
+namespaced scene entity, and awaits shutdown. FreeType2.13.3 is statically linked
+from the pinned Emscripten6.0.2 SDK port (VER-2-13-3, archive SHA512
+ce413487c24e689631d705f53b64725256f89fffe9aade7cf07bbd785a9cd49eb6b8d2297a55554f3fee0a50b17e8af78f505cdab565768afab833794f968c2f).
+FontManager uses the existing C# FreeType bindings and generates glyphs on the
+browser thread; no native DLL load or worker-thread wait is used there. The
+fixture loads the repository's Liberation Mono font, pregenerates glyphs and
+checks charmap lookup and 16px text metrics (Hello=50px wide), including with the
+normal asynchronous font option selected. FreeType and font licenses accompany
+the output. Hydrate sources/data/tests/Fonts/LiberationMono-Regular.ttf with Git
+LFS before publishing a checkout created with LFS smudging disabled.
+
+PrepareFreeType.ps1 hash-checks the exact pinned Windows SDK port and generates
+a private copy under obj/freetype. It explicitly forwards modern Wasm exception
+handling to compilation and uses separate library/cache names. The SDK's original
+port omits that setting, which can mix legacy EH in FreeType with modern EH in
+.NET and fail WebAssembly validation. The installed SDK and its cache are not
+modified. The generated port still fetches the original SHA512-verified FreeType
+archive. The browser validator explicitly runs WebAssembly.validate on the final
+runtime module, in addition to executing startup and glyph checks.
+
+The profiler's unbounded subscriber channels use a short synchronous lock and
+TryWrite, without a blocking semaphore or an await inside the subscription gate.
+The browser check subscribes, receives an emitted event asynchronously and
+unsubscribes before game shutdown. Full Game initialization requires four more
+matching-header core imports for indexed draws/index buffers and query methods.
+Importing the timestamp method does not enable encoder timestamps: the portable
+device still disables them and QueryPool rejects unsupported creation.
+This startup test does not render the scene or text: the fixture compositor has
+no render features. Space Escape still needs its complete assets, effects and
+runtime subsystem coverage before it can be shown or played.
 
 Browser hosts must stop scheduling frames and await `game.DisposeAsync()` on the
 browser thread. It ends the run, deactivates the window, releases game systems

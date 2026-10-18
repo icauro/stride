@@ -7,7 +7,7 @@
     <WasmEnableHotReload>false</WasmEnableHotReload>
     <WasmBuildNative>true</WasmBuildNative>
     <DefineConstants>$(DefineConstants);STRIDE_GRAPHICS_API_WEBGPU</DefineConstants>
-    <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false</EmccExtraLDFlags>
+    <EmccExtraLDFlags>$(EmccExtraLDFlags) --use-port=obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py:cpp_bindings=false --use-port=obj/freetype/stride-freetype.port.py</EmccExtraLDFlags>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../sources/engine/Stride.Graphics.WebGPU.Bindings/Stride.Graphics.WebGPU.Bindings.csproj" />
@@ -16,6 +16,9 @@
     <ProjectReference Include="../../../sources/engine/Stride.Engine/Stride.Engine.csproj" AdditionalProperties="StridePlatforms=Browser;StrideSkipAutoPack=true;StrideAssemblyProcessorFramework=net10.0" />
     <Compile Include="../Shared/TrianglePixels.cs" Link="TrianglePixels.cs" />
     <Content Include="../Shared/browser-input.js" Link="wwwroot/browser-input.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Shared/FreeType-LICENSE.txt" Link="wwwroot/FreeType-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../../sources/data/tests/Fonts/LiberationMono-Regular.ttf" Link="wwwroot/fonts/LiberationMono-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../../sources/data/tests/Fonts/LICENSE.txt" Link="wwwroot/fonts/LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- Compile the same internal context sources as the native validation lane. -->
     <Compile Include="../../../sources/engine/Stride.Graphics/WebGPU/WebGpuDeviceContext*.cs" Link="Backend/%(Filename)%(Extension)" />
     <Content Include="../CWebGpuProbe/wwwroot/THIRD-PARTY-NOTICES.txt" Link="wwwroot/THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
@@ -24,6 +27,7 @@
   </ItemGroup>
   <Target Name="CheckEmdawnInputs" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('obj/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py')" Text="Run build/browser/PrepareEmdawn.ps1 -Project ManagedWebGpuProbe before building." />
+    <Error Condition="!Exists('obj/freetype/stride-freetype.port.py')" Text="Run build/browser/PrepareFreeType.ps1 before publishing." />
     <Error Condition="!Exists('obj/effects/portable/WebGpuValidation.effect') Or !Exists('obj/effects/portable/WebGpuCompute.effect')" Text="Run build/browser/PrepareEngineShaders.ps1 -Naga path/to/naga-29.0.0 before publishing." />
     <Error Condition="!Exists('obj/content/web/manifest.json')" Text="Run build/browser/PrepareContent.ps1 before publishing." />
   </Target>
@@ -33,6 +37,7 @@
   <Target Name="RegisterWebGpuStaticModule" BeforeTargets="_GenerateManagedToNative">
     <ItemGroup>
       <_WasmPInvokeModules Include="wgpu_native" />
+      <_WasmPInvokeModules Include="freetype" />
     </ItemGroup>
   </Target>
 </Project>

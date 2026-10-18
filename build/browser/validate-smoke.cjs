@@ -92,10 +92,21 @@ async function main() {
         for (let run = 0; run < 2; run++) {
             if (run === 0) await page.goto(managedWebgpu ? `${url}?verify-canvas` : url);
             else await page.reload();
-            let canvasScreenshots;
+            let canvasScreenshots, wasmValidation;
             if (managedWebgpu) {
                 await page.waitForFunction(() => globalThis.smokeResult?.inputReady || globalThis.smokeResult?.status === 'failed', null, { timeout: 60000 });
-                assert.notEqual((await page.evaluate(() => globalThis.smokeResult)).status, 'failed');
+                const initial = await page.evaluate(() => globalThis.smokeResult);
+                assert.notEqual(initial.status, 'failed', JSON.stringify(initial));
+                wasmValidation = await page.evaluate(async () => {
+                    // Incremental publishes can retain obsolete fingerprinted
+                    // files. Validate the exact module this page downloaded.
+                    const modules = [...new Set(performance.getEntriesByType('resource').filter(entry => /\/dotnet\.native(?:\.[\w-]+)?\.wasm$/.test(new URL(entry.name).pathname)).map(entry => entry.name))];
+                    if (modules.length !== 1) throw new Error(`Expected one downloaded native WASM module, found ${modules.length}`);
+                    const response = await fetch(modules[0]);
+                    if (!response.ok) throw new Error('Cannot read WASM for full validation');
+                    return { url: modules[0], valid: WebAssembly.validate(await response.arrayBuffer()) };
+                });
+                assert.equal(wasmValidation.valid, true, `Full WASM validation must reject mixed legacy/modern exception modes even with lazy browser compilation: ${wasmValidation.url}`);
                 const inputCanvas = page.locator('#input-canvas');
                 await inputCanvas.click({ position: { x: 65, y: 126 } });
                 await page.keyboard.down('ArrowLeft');
@@ -167,6 +178,7 @@ async function main() {
                     assert.equal(result.engineDeviceVerified, true);
                     assert.equal(result.gameLoopVerified, true);
                     assert.equal(result.gameLoopCycles, 2);
+                    assert.equal(result.fullGameStartupVerified, true);
                     assert.equal(result.contentDatabaseVerified, true);
                     assert.equal(result.contentAssets, 3);
                     assert.equal(result.engineClearFrames, 3);
@@ -187,7 +199,7 @@ async function main() {
                 assert.equal(result.sum, 42);
             }
             assert.equal(await page.locator('#result').getAttribute('data-status'), 'passed');
-            runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots, inputDomVerified: true } : {}) });
+            runs.push({ ...result, ...(canvasScreenshots ? { canvasScreenshots, inputDomVerified: true, wasmValidation } : {}) });
         }
         if (managedWebgpu) assert.equal(missingContentResponses, 2, 'Missing-content negative case must receive one real HTTP404 per load');
         assert.deepEqual(errors, [], 'Browser errors occurred');

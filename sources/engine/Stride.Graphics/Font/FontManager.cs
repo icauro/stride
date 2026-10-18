@@ -43,7 +43,7 @@ namespace Stride.Graphics.Font
         /// <summary>
         /// The <see cref="AutoResetEvent"/> used to signal the bitmap build thread that a build operation is requested.
         /// </summary>
-        private readonly AutoResetEvent bitmapBuildSignal = new AutoResetEvent(false);
+        private readonly AutoResetEvent bitmapBuildSignal = OperatingSystem.IsBrowser() ? null : new AutoResetEvent(false);
 
         /// <summary>
         /// The thread in charge of building the characters bitmaps
@@ -87,7 +87,7 @@ namespace Stride.Graphics.Font
             contentManager = new ContentManager(fileProviderService);
 
             // Preload proper freetype native library (depending on CPU type).
-            NativeLibraryHelper.PreloadLibrary("freetype", typeof(FontManager));
+            if (!OperatingSystem.IsBrowser()) NativeLibraryHelper.PreloadLibrary("freetype", typeof(FontManager));
 
             // Initialize FreeType library
             int err = FreeTypeNative.FT_Init_FreeType(out freetypeLibrary);
@@ -95,8 +95,11 @@ namespace Stride.Graphics.Font
                 throw new InvalidOperationException($"Failed to initialize FreeType library (error {err})");
 
             // launch the thumbnail builder thread
-            bitmapBuilderThread = new Thread(SafeAction.Wrap(BuildBitmapThread)) { IsBackground = true, Name = "Bitmap Builder thread" };
-            bitmapBuilderThread.Start();
+            if (!OperatingSystem.IsBrowser())
+            {
+                bitmapBuilderThread = new Thread(SafeAction.Wrap(BuildBitmapThread)) { IsBackground = true, Name = "Bitmap Builder thread" };
+                bitmapBuilderThread.Start();
+            }
         }
 
         /// <summary>
@@ -111,7 +114,7 @@ namespace Stride.Graphics.Font
             // Hold dataStructuresLock so we never render the same glyph concurrently with the
             // builder thread (whichever takes the lock first renders it, the other skips), which
             // keeps ResetGlyph from clobbering freshly written glyph data.
-            if (synchronously)
+            if (synchronously || OperatingSystem.IsBrowser())
             {
                 lock (dataStructuresLock)
                 {
@@ -280,8 +283,11 @@ namespace Stride.Graphics.Font
         {
             // terminate the build thread
             bitmapShouldEndThread = true;
-            bitmapBuildSignal.Set();
-            bitmapBuilderThread.Join();
+            if (bitmapBuilderThread is not null)
+            {
+                bitmapBuildSignal.Set();
+                bitmapBuilderThread.Join();
+            }
 
             // free and clear the list of generated bitmaps
             foreach (var character in generatedBitmaps)

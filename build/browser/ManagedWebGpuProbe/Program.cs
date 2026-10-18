@@ -39,6 +39,8 @@ public static partial class Program
         await BrowserInputCheck.RunAsync();
         await BrowserContextCheck.RunAsync(EffectBaseUrl());
         await BrowserGameLoopCheck.RunAsync();
+        await BrowserGameStartupCheck.RunAsync(new Uri(new Uri(ContentBaseUrl()), "../fonts/LiberationMono-Regular.ttf").AbsoluteUri);
+        ReportGameStartup();
         ReportGameLoop();
         ReportContext();
         ReportEngineDevice(3, 17 * 9 * 3);
@@ -59,4 +61,5 @@ public static partial class Program
     [JSImport("contentBaseUrl", "managed-gpu-probe")] private static partial string ContentBaseUrl();
     [JSImport("reportAssets", "managed-gpu-probe")] private static partial void ReportAssets();
     [JSImport("reportManagedError", "managed-gpu-probe")] private static partial void ReportManagedError(string error);
+    [JSImport("reportGameStartup", "managed-gpu-probe")] private static partial void ReportGameStartup();
 }
