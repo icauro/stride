@@ -1,9 +1,10 @@
 # Space Escape browser host
 
-Experimental source-backed port of the original sample. The first browser run
-currently reaches the splash render path; the end-to-end validator is expected
-to expose remaining renderer, asset and effect-cache gaps. A successful publish
-is not proof of playable gameplay.
+Experimental source-backed port of the original sample. Browser startup loads
+seven scene entities after the splash. The first scene frames currently fail:
+the recorded material cache lacks a runtime variant, and Chrome rejects the
+built-in sprite shader's non-uniform texture sampling. The end-to-end validator
+reports these failures. A successful publish is not proof of playable gameplay.
 
 Run from the checkout root with the pinned .NET SDK/workload installed and required
 Space Escape/engine/native-tool LFS inputs hydrated:
