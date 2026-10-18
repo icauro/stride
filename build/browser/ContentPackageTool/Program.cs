@@ -8,6 +8,115 @@ using Stride.Engine;
 using Stride.Engine.Design;
 using Stride.Games;
 using Stride.Rendering.Compositing;
+using System.Diagnostics;
+using Stride.Shaders;
+using Stride.Core.Serialization;
+
+if (args.Length == 5 && args[0] == "--webgpu-cache")
+{
+    // Convert a separate browser database. Never mutate desktop assets/cache keys.
+    var sourceRoot = Path.GetFullPath(args[1]);
+    var outputRoot = Path.GetFullPath(args[2]);
+    if (Directory.Exists(outputRoot)) throw new IOException("Browser database output must be new.");
+    var naga = Path.GetFullPath(args[3]);
+    var converter = Path.GetFullPath(args[4]);
+    Directory.CreateDirectory(outputRoot);
+    using var sourceMount = new FileSystemProvider("/browser-source", sourceRoot);
+    using var outputMount = new FileSystemProvider("/browser-output", outputRoot);
+    using var sourceDb = new ObjectDatabase("/browser-source", "index");
+    using var outputDb = new ObjectDatabase("/browser-output", "index", loadDefaultBundle: false);
+    var index = sourceDb.ContentIndexMap.GetMergedIdMap().ToDictionary();
+    var objectIds = sourceDb.EnumerateObjects().ToHashSet();
+    foreach (var id in objectIds)
+    {
+        using var stream = sourceDb.OpenStream(id);
+        using var unpacked = UnpackChunk(stream);
+        outputDb.Write(unpacked, id, true);
+    }
+    var effects = index.Where(pair => pair.Key.StartsWith("__shaders_bytecode__/", StringComparison.Ordinal)).ToArray();
+    if (effects.Length == 0) throw new InvalidDataException("Sample database contains no precompiled effects.");
+    var temporary = Directory.CreateTempSubdirectory("stride-browser-effects-");
+    try
+    {
+        var convertedIds = new Dictionary<ObjectId, ObjectId>();
+        foreach (var pair in effects)
+        {
+            if (!convertedIds.TryGetValue(pair.Value, out var newId))
+            {
+                using var sourceStream = sourceDb.OpenStream(pair.Value);
+                var effect = EffectBytecode.FromStream(sourceStream);
+                Console.WriteLine($"Preparing {pair.Key}: {effect.Stages.Length} stage(s).");
+                if (effect.Stages.Length == 0) throw new InvalidDataException("Cached effect has no executable shader stages.");
+                // Preserve the cache source marker following the bytecode record.
+                using var trailer = new MemoryStream();
+                sourceStream.CopyTo(trailer);
+                var input = Path.Combine(temporary.FullName, "input.effect");
+                var output = Path.Combine(temporary.FullName, "output.effect");
+                using (var stream = File.Create(input)) effect.WriteTo(stream);
+                var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true };
+                foreach (var argument in new[] { converter, naga, input, output }) start.ArgumentList.Add(argument);
+                using var process = Process.Start(start) ?? throw new IOException("Cannot start shader converter.");
+                process.WaitForExit();
+                if (process.ExitCode != 0) throw new InvalidDataException($"WGSL conversion failed for {pair.Key} ({pair.Value}).");
+                using var converted = File.OpenRead(output);
+                var portable = EffectBytecode.FromStream(converted);
+                if (portable.Stages.Any(stage => !WebGpuShaderPackage.IsPackage(stage.Data)))
+                    throw new InvalidDataException("Converter returned a stage without a WGSL package.");
+                using var bytes = new MemoryStream();
+                portable.WriteTo(bytes);
+                trailer.Position = 0;
+                trailer.CopyTo(bytes);
+                newId = ObjectId.FromBytes(bytes.ToArray());
+                bytes.Position = 0;
+                outputDb.Write(bytes, newId, true);
+                objectIds.Add(newId);
+                convertedIds.Add(pair.Value, newId);
+            }
+            index[pair.Key] = newId;
+        }
+        outputDb.CreateBundle(objectIds.ToArray(), "default", outputDb.BundleBackend,
+            new HashSet<ObjectId>(), index, [], useIncrementalBundle: false);
+        foreach (var alias in Directory.GetFiles(sourceRoot, "*.aliases").Concat(
+            File.Exists(Path.Combine(sourceRoot, "aliases")) ? new[] { Path.Combine(sourceRoot, "aliases") } : []))
+            File.Copy(alias, Path.Combine(outputRoot, Path.GetFileName(alias)));
+        Console.WriteLine($"Prepared browser cache: {effects.Length} keys, {convertedIds.Count} unique effects, {objectIds.Count} objects.");
+    }
+    finally { temporary.Delete(recursive: true); }
+    return;
+}
+
+static MemoryStream UnpackChunk(Stream source)
+{
+    // Bundle storage moves references before the object for streaming. CreateBundle
+    // expects loose-object order; restore that order before bundling a second time.
+    using var input = new MemoryStream();
+    source.CopyTo(input);
+    input.Position = 0;
+    var header = ChunkHeader.Read(new BinarySerializationReader(input));
+    var output = new MemoryStream();
+    if (header == null || header.OffsetToReferences >= header.OffsetToObject)
+    {
+        input.Position = 0;
+        input.CopyTo(output);
+    }
+    else
+    {
+        var references = new byte[checked(header.OffsetToObject - header.OffsetToReferences)];
+        input.Position = header.OffsetToReferences;
+        input.ReadExactly(references);
+        header.Write(new BinarySerializationWriter(output));
+        var objectOffset = output.Position;
+        input.Position = header.OffsetToObject;
+        input.CopyTo(output);
+        header.OffsetToReferences = checked((int)output.Position);
+        output.Write(references);
+        header.OffsetToObject = checked((int)objectOffset);
+        output.Position = 0;
+        header.Write(new BinarySerializationWriter(output));
+    }
+    output.Position = 0;
+    return output;
+}
 
 if (args.Length == 2 && args[0] == "--fixture")
 {
