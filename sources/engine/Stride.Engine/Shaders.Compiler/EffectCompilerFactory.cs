@@ -34,7 +34,7 @@ namespace Stride.Shaders.Compiler
         {
             EffectCompilerBase compiler = null;
 
-            if ((effectCompilationMode & EffectCompilationMode.Local) != 0)
+            if (!OperatingSystem.IsBrowser() && (effectCompilationMode & EffectCompilationMode.Local) != 0)
             {
                 // Local allowed and available, let's use that
                 compiler = new EffectCompiler(fileProvider)
@@ -48,7 +48,7 @@ namespace Stride.Shaders.Compiler
 
             // Nothing to do remotely
             bool needRemoteCompiler = (compiler == null && (effectCompilationMode & EffectCompilationMode.Remote) != 0);
-            if ((needRemoteCompiler || recordEffectRequested) && RemoteEffectCompilerEnabled)
+            if (!OperatingSystem.IsBrowser() && (needRemoteCompiler || recordEffectRequested) && RemoteEffectCompilerEnabled)
             {
                 // Create the object that handles the connection
                 var shaderCompilerTarget = new RemoteEffectCompilerClient(packageName);
