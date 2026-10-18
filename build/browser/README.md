@@ -91,6 +91,18 @@ Emdawn's own C++/JavaScript implementation remains a dependency. Only the canvas
 extension struct is declared locally, from the pinned browser header; common
 types, defaults, function signatures and callbacks use the shared bindings.
 
+After publishing ManagedWebGpuProbe, run `node build/browser/validate-gpu-errors.cjs`
+for the isolated GPU failure lane. It checks real invalid-WGSL diagnostics with a
+Unicode label, an aborted map and explicit device destruction across three loads.
+Only the uniquely marked injected shader diagnostic is accepted in the console;
+unrelated browser errors fail the lane. This verifies notification, not automatic
+device-loss recovery. Set `BROWSER_EXECUTABLE` as for the other browser validators.
+
+The pinned Mono wasm32 reverse-P/Invoke generator mishandles by-value string-view
+aggregates. Production context callbacks select explicit pointer entry points
+for that ABI and copy UTF-8 before returning; native callback signatures remain
+unchanged. Recheck this adaptation when changing the runtime or architecture.
+
 The same lane compiles the production `WebGpuDeviceContext` sources used by native
 validation. It checks portable async adapter/device creation, negotiated limits,
 exact buffer readback and reuse, queue completion, cancellation followed by retry,

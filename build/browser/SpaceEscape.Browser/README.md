@@ -42,6 +42,9 @@ pass that file as `-EffectRequests` to the content preparer. Review and update
 the versioned requests when the sample's permutations change. Built-in sprite/UI/
 font effects are compiled separately from current SDSL under ignored `obj/` paths.
 DOM text/IME input remains unimplemented; this sample uses labels and buttons.
-GPU error callback text has an outstanding WASM aggregate-marshalling issue
-observed during earlier invalid-shader diagnostics; normal sample runs report
-no GPU errors. That error-reporting path needs a separate focused regression.
+GPU callbacks use explicit wasm32 indirect string-view arguments with the pinned
+Mono runtime. A focused regression verifies full Unicode shader diagnostics,
+aborted-map messages and device-loss notification across reloads:
+`node build/browser/validate-gpu-errors.cjs` (publish ManagedWebGpuProbe first,
+using the instructions in the parent browser README). Notification is covered;
+automatic recovery after device loss remains unimplemented.
